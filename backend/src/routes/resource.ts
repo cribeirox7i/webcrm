@@ -1,0 +1,201 @@
+import { Router, Request, Response, NextFunction } from "express";
+import { db } from "../db";
+import { catalog, quoteIdent } from "../catalog";
+import { enforceMenuPermission } from "../permissaoResource";
+
+const DEFAULT_LIMIT = 1000;
+const MAX_LIMIT = 20000; // as telas do CRM chegam a carregar 15-20 mil linhas de uma vez
+
+// Colunas que nenhuma rota genérica (POST/PUT) pode escrever, mesmo autenticado --
+// só as rotas dedicadas (routes/auth.ts, routes/usuarios.ts) sabem gravar isso direito
+// (hash de senha, token de convite). Sem isso, um PUT genérico em /api/usuarios
+// conseguiria sobrescrever a senha de outro usuário direto.
+const PROTECTED_COLUMNS: Record<string, string[]> = {
+  usuarios: ["user_senha_hash", "user_deve_trocar_senha", "user_convite_token", "user_convite_expira_em"],
+};
+
+function isWritable(resource: string, column: string): boolean {
+  return !(PROTECTED_COLUMNS[resource] ?? []).includes(column);
+}
+
+// Colunas que nunca voltam numa resposta JSON, mesmo pra quem tem permissão de leitura --
+// hash de senha e token de convite são credenciais, não dado de cadastro.
+const REDACTED_COLUMNS: Record<string, string[]> = {
+  usuarios: ["user_senha_hash", "user_convite_token"],
+};
+
+export function redactRow<T extends Record<string, unknown>>(resource: string, row: T): T {
+  const hide = REDACTED_COLUMNS[resource];
+  if (!hide) return row;
+  const copy = { ...row };
+  for (const col of hide) delete copy[col];
+  return copy;
+}
+
+function redactRows<T extends Record<string, unknown>>(resource: string, rows: T[]): T[] {
+  return REDACTED_COLUMNS[resource] ? rows.map((r) => redactRow(resource, r)) : rows;
+}
+
+function getResourceOr404(req: Request, res: Response) {
+  const info = catalog.get(req.params.resource);
+  if (!info) {
+    res.status(404).json({ error: `recurso desconhecido: ${req.params.resource}` });
+    return null;
+  }
+  return info;
+}
+
+export const resourceRouter = Router();
+
+// GET /api/:resource -- lista paginada, com filtro opcional por coluna=valor
+resourceRouter.get("/:resource", enforceMenuPermission("perm_leitura", "resource"), (req, res) => {
+  const info = getResourceOr404(req, res);
+  if (!info) return;
+
+  const limit = Math.min(Number(req.query.limit) || DEFAULT_LIMIT, MAX_LIMIT);
+  const offset = Math.max(Number(req.query.offset) || 0, 0);
+
+  const filterEntries = Object.entries(req.query).filter(
+    ([key]) => !["limit", "offset"].includes(key) && info.columns.includes(key)
+  );
+
+  const whereSql = filterEntries.length
+    ? "WHERE " + filterEntries.map(([key]) => `${quoteIdent(key)} = ?`).join(" AND ")
+    : "";
+  const params = filterEntries.map(([, value]) => value as string);
+
+  const rows = db
+    .prepare(
+      `SELECT * FROM ${quoteIdent(info.name)} ${whereSql} LIMIT ? OFFSET ?`
+    )
+    .all(...params, limit, offset) as Record<string, unknown>[];
+
+  const totalRow = db
+    .prepare(`SELECT COUNT(*) AS n FROM ${quoteIdent(info.name)} ${whereSql}`)
+    .get(...params) as { n: number };
+
+  res.json({ data: redactRows(info.name, rows), total: totalRow.n, limit, offset });
+});
+
+// GET /api/:resource/:id -- só pra tabelas com PK
+resourceRouter.get("/:resource/:id", enforceMenuPermission("perm_leitura", "resource"), (req, res) => {
+  const info = getResourceOr404(req, res);
+  if (!info) return;
+  if (!info.pk) {
+    res.status(400).json({ error: `${info.name} é uma view, sem PK -- use GET /:resource com filtro` });
+    return;
+  }
+
+  const row = db
+    .prepare(`SELECT * FROM ${quoteIdent(info.name)} WHERE ${quoteIdent(info.pk)} = ?`)
+    .get(req.params.id);
+
+  if (!row) {
+    res.status(404).json({ error: "registro não encontrado" });
+    return;
+  }
+  res.json(redactRow(info.name, row as Record<string, unknown>));
+});
+
+// POST /api/:resource -- insere (só tabelas)
+resourceRouter.post("/:resource", enforceMenuPermission("perm_insercao", "resource"), (req, res) => {
+  const info = getResourceOr404(req, res);
+  if (!info) return;
+  if (info.kind !== "table") {
+    res.status(400).json({ error: `${info.name} é uma view, somente leitura` });
+    return;
+  }
+
+  const entries = Object.entries(req.body ?? {}).filter(
+    ([key]) => info.columns.includes(key) && isWritable(info.name, key)
+  );
+  if (!entries.length) {
+    res.status(400).json({ error: "corpo vazio ou sem colunas válidas" });
+    return;
+  }
+
+  const cols = entries.map(([key]) => quoteIdent(key)).join(", ");
+  const placeholders = entries.map(() => "?").join(", ");
+  const values = entries.map(([, value]) => value as string | number | null);
+
+  try {
+    const result = db
+      .prepare(`INSERT INTO ${quoteIdent(info.name)} (${cols}) VALUES (${placeholders})`)
+      .run(...values);
+
+    const insertedId = info.pk ? result.lastInsertRowid : null;
+    const row = insertedId
+      ? db.prepare(`SELECT * FROM ${quoteIdent(info.name)} WHERE rowid = ?`).get(insertedId)
+      : null;
+
+    res.status(201).json(row ? redactRow(info.name, row as Record<string, unknown>) : { ok: true });
+  } catch (err) {
+    res.status(400).json({ error: (err as Error).message });
+  }
+});
+
+// PUT /api/:resource/:id -- atualiza (só tabelas)
+resourceRouter.put("/:resource/:id", enforceMenuPermission("perm_edicao", "resource"), (req, res) => {
+  const info = getResourceOr404(req, res);
+  if (!info) return;
+  if (info.kind !== "table") {
+    res.status(400).json({ error: `${info.name} é uma view, somente leitura` });
+    return;
+  }
+  if (!info.pk) {
+    res.status(400).json({ error: `${info.name} não tem PK definida` });
+    return;
+  }
+
+  const entries = Object.entries(req.body ?? {}).filter(
+    ([key]) => info.columns.includes(key) && key !== info.pk && isWritable(info.name, key)
+  );
+  if (!entries.length) {
+    res.status(400).json({ error: "corpo vazio ou sem colunas válidas" });
+    return;
+  }
+
+  const setSql = entries.map(([key]) => `${quoteIdent(key)} = ?`).join(", ");
+  const values = entries.map(([, value]) => value as string | number | null);
+
+  try {
+    const result = db
+      .prepare(`UPDATE ${quoteIdent(info.name)} SET ${setSql} WHERE ${quoteIdent(info.pk)} = ?`)
+      .run(...values, req.params.id);
+
+    if (result.changes === 0) {
+      res.status(404).json({ error: "registro não encontrado" });
+      return;
+    }
+    const row = db
+      .prepare(`SELECT * FROM ${quoteIdent(info.name)} WHERE ${quoteIdent(info.pk)} = ?`)
+      .get(req.params.id);
+    res.json(redactRow(info.name, row as Record<string, unknown>));
+  } catch (err) {
+    res.status(400).json({ error: (err as Error).message });
+  }
+});
+
+// DELETE /api/:resource/:id -- remove (só tabelas)
+resourceRouter.delete("/:resource/:id", enforceMenuPermission("perm_exclusao", "resource"), (req, res) => {
+  const info = getResourceOr404(req, res);
+  if (!info) return;
+  if (info.kind !== "table") {
+    res.status(400).json({ error: `${info.name} é uma view, somente leitura` });
+    return;
+  }
+  if (!info.pk) {
+    res.status(400).json({ error: `${info.name} não tem PK definida` });
+    return;
+  }
+
+  const result = db
+    .prepare(`DELETE FROM ${quoteIdent(info.name)} WHERE ${quoteIdent(info.pk)} = ?`)
+    .run(req.params.id);
+
+  if (result.changes === 0) {
+    res.status(404).json({ error: "registro não encontrado" });
+    return;
+  }
+  res.status(204).send();
+});

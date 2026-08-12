@@ -1,0 +1,33 @@
+# Unit systemd para supervisionar o backend na VM (Compute Engine e2-micro).
+# Instalar: copiar para /etc/systemd/system/webcrm-backend.service na VM, ajustar os
+# caminhos/usuário abaixo se necessário, depois:
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now webcrm-backend
+# Ver logs: journalctl -u webcrm-backend -f
+#
+# Resolve o problema já documentado no STATUS.md ("processos node zumbis" / backend caindo
+# sem reiniciar): Restart=always garante que o processo volta sozinho, e por ser um serviço
+# único gerenciado pelo systemd não há risco de múltiplas instâncias disputando a porta/o
+# arquivo SQLite (o que já causou queda e "travamento" em sessões de desenvolvimento).
+
+[Unit]
+Description=WebCRM backend (Express + SQLite)
+After=network.target
+
+[Service]
+Type=simple
+User=webcrm
+WorkingDirectory=/opt/webcrm/backend
+EnvironmentFile=/etc/webcrm/backend.env
+ExecStart=/usr/bin/node dist/server.js
+Restart=always
+RestartSec=3
+
+# Superfície de leitura restrita: o processo só precisa ler/escrever seu próprio diretório
+# de dados, nunca o resto do disco.
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/opt/webcrm/backend/data
+
+[Install]
+WantedBy=multi-user.target

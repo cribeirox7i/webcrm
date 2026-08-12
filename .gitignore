@@ -1,0 +1,22 @@
+# Dependências e build (gerados por npm install/build em cada máquina)
+**/node_modules
+backend/dist
+frontend/dist
+
+# Dados e segredos -- nunca commitar
+backend/data/*.sqlite
+backend/data/*.sqlite-shm
+backend/data/*.sqlite-wal
+backend/.env
+backend/server.log
+frontend/.env.production.local
+
+# Config local de preview desta máquina (caminhos e PIN de dev específicos daqui)
+.claude/
+
+# Editor/SO
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+Thumbs.db
