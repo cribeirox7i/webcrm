@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db } from "../db";
+import { query, withTransaction } from "../db";
 import { hashPassword, verifyPassword } from "../authCrypto";
 import { createSession, deleteSession, requireUserAuth } from "../mainAuth";
 import { gerarEEnviarConvite, MIN_SENHA_LEN } from "../convite";
@@ -21,31 +21,27 @@ function nowIso(): string {
 }
 
 // POST /api/auth/login -- e-mail + senha do usuário (nada a ver com o PIN mestre do /admin)
-authRouter.post("/login", loginRateLimiter, (req, res) => {
+authRouter.post("/login", loginRateLimiter, async (req, res) => {
   const { email, senha } = (req.body ?? {}) as { email?: unknown; senha?: unknown };
   if (typeof email !== "string" || typeof senha !== "string") {
     res.status(400).json({ error: "e-mail e senha são obrigatórios" });
     return;
   }
 
-  // COLLATE NOCASE: e-mail não diferencia maiúscula/minúscula na prática (o domínio nunca
-  // diferencia, e nenhum provedor real trata a parte local como case-sensitive). Sem isso,
-  // digitar "Fulano@empresa.com" quando o cadastro tem "fulano@empresa.com" caía no mesmo
-  // 401 de senha errada -- e como a mensagem é genérica ("e-mail ou senha inválidos", de
-  // propósito, pra não revelar quais e-mails existem), parecia que a senha recém-trocada
-  // não tinha sido salva. Bug real reportado pelo usuário em 2026-08-11.
-  const usuario = db
-    .prepare(
-      "SELECT user_id, user_nome, user_mail, user_status, user_senha_hash, user_deve_trocar_senha FROM usuarios WHERE user_mail = ? COLLATE NOCASE"
-    )
-    .get(email.trim()) as UsuarioRow | undefined;
+  // user_mail é `citext` no Postgres (comparação já case-insensitive nativamente) --
+  // substitui o `COLLATE NOCASE` que existia na versão SQLite. Ver schema.pg.sql.
+  const { rows } = await query<UsuarioRow>(
+    "SELECT user_id, user_nome, user_mail, user_status, user_senha_hash, user_deve_trocar_senha FROM usuarios WHERE user_mail = $1",
+    [email.trim()]
+  );
+  const usuario = rows[0];
 
   if (!usuario || usuario.user_status !== "ATIVO" || !verifyPassword(senha, usuario.user_senha_hash)) {
     res.status(401).json({ error: "e-mail ou senha inválidos" });
     return;
   }
 
-  const { token, expiraEm } = createSession(usuario.user_id);
+  const { token, expiraEm } = await createSession(usuario.user_id);
   res.json({
     token,
     expiraEm,
@@ -55,10 +51,10 @@ authRouter.post("/login", loginRateLimiter, (req, res) => {
 });
 
 // POST /api/auth/logout
-authRouter.post("/logout", requireUserAuth, (req, res) => {
+authRouter.post("/logout", requireUserAuth, async (req, res) => {
   const auth = req.header("authorization") ?? "";
   const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
-  if (token) deleteSession(token);
+  if (token) await deleteSession(token);
   res.status(204).send();
 });
 
@@ -74,46 +70,47 @@ authRouter.get("/me", requireUserAuth, (req, res) => {
 // GET /api/auth/minhas-permissoes -- self-service (não exige PIN de admin, só sessão
 // própria) pra Sidebar saber quais menus esconder. Menu sem nenhuma das 4 flags marcadas
 // simplesmente não aparece aqui (o front trata "ausente" = oculto).
-authRouter.get("/minhas-permissoes", requireUserAuth, (req, res) => {
-  const rows = db
-    .prepare(
-      "SELECT menu_key, perm_leitura, perm_insercao, perm_edicao, perm_exclusao FROM usuarios_permissoes_menu WHERE user_id = ?"
-    )
-    .all(req.usuario!.user_id);
+authRouter.get("/minhas-permissoes", requireUserAuth, async (req, res) => {
+  const { rows } = await query(
+    "SELECT menu_key, perm_leitura, perm_insercao, perm_edicao, perm_exclusao FROM usuarios_permissoes_menu WHERE user_id = $1",
+    [req.usuario!.user_id]
+  );
   res.json(rows);
 });
 
 // POST /api/auth/trocar-senha -- exige a sessão atual (mesmo com troca pendente)
-authRouter.post("/trocar-senha", requireUserAuth, (req, res) => {
+authRouter.post("/trocar-senha", requireUserAuth, async (req, res) => {
   const { senhaAtual, novaSenha } = (req.body ?? {}) as { senhaAtual?: unknown; novaSenha?: unknown };
   if (typeof senhaAtual !== "string" || typeof novaSenha !== "string" || novaSenha.length < MIN_SENHA_LEN) {
     res.status(400).json({ error: `senha atual e nova senha (mín. ${MIN_SENHA_LEN} caracteres) são obrigatórias` });
     return;
   }
 
-  const row = db.prepare("SELECT user_senha_hash FROM usuarios WHERE user_id = ?").get(req.usuario!.user_id) as
-    | { user_senha_hash: string | null }
-    | undefined;
-  if (!row || !verifyPassword(senhaAtual, row.user_senha_hash)) {
+  const { rows } = await query<{ user_senha_hash: string | null }>(
+    "SELECT user_senha_hash FROM usuarios WHERE user_id = $1",
+    [req.usuario!.user_id]
+  );
+  if (!rows[0] || !verifyPassword(senhaAtual, rows[0].user_senha_hash)) {
     res.status(401).json({ error: "senha atual incorreta" });
     return;
   }
 
-  db.prepare("UPDATE usuarios SET user_senha_hash = ?, user_deve_trocar_senha = 0 WHERE user_id = ?").run(
-    hashPassword(novaSenha),
-    req.usuario!.user_id
-  );
-
   // Revoga qualquer OUTRA sessão aberta desse usuário (ex.: um token antigo que tenha
-  // vazado) -- só o reset feito pelo admin (PUT /api/usuarios/:id/senha) fazia isso antes;
-  // trocar a própria senha devia ter a mesma garantia. Mantém a sessão ATUAL viva (não
-  // desloga a pessoa na hora que ela mesma acabou de trocar a senha).
+  // vazado) -- mantém a sessão ATUAL viva. Atômico (BEGIN/COMMIT): sem isso, se o UPDATE
+  // da senha for bem-sucedido mas o DELETE das sessões falhar, um token vazado continuaria
+  // válido mesmo com a senha já trocada.
   const authHeader = req.header("authorization") ?? "";
   const tokenAtual = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
-  db.prepare("DELETE FROM usuario_sessoes WHERE user_id = ? AND sessao_token != ?").run(
-    req.usuario!.user_id,
-    tokenAtual
-  );
+  await withTransaction(async (client) => {
+    await client.query("UPDATE usuarios SET user_senha_hash = $1, user_deve_trocar_senha = 0 WHERE user_id = $2", [
+      hashPassword(novaSenha),
+      req.usuario!.user_id,
+    ]);
+    await client.query("DELETE FROM usuario_sessoes WHERE user_id = $1 AND sessao_token != $2", [
+      req.usuario!.user_id,
+      tokenAtual,
+    ]);
+  });
 
   res.status(204).send();
 });
@@ -128,25 +125,25 @@ authRouter.post("/esqueci-senha", esqueciSenhaRateLimiter, async (req, res) => {
     return;
   }
 
-  // mesma regra de caixa do login (ver comentário em POST /login) -- senão "Esqueci minha
-  // senha" com o e-mail digitado em outra caixa não acha o usuário e, como a resposta é
-  // sempre genérica, o link simplesmente nunca chega e não há erro visível.
-  const usuario = db
-    .prepare("SELECT user_id, user_nome, user_mail FROM usuarios WHERE user_mail = ? COLLATE NOCASE AND user_status = 'ATIVO'")
-    .get(email.trim()) as { user_id: number; user_nome: string; user_mail: string } | undefined;
+  const { rows } = await query<{ user_id: number; user_nome: string; user_mail: string }>(
+    "SELECT user_id, user_nome, user_mail FROM usuarios WHERE user_mail = $1 AND user_status = 'ATIVO'",
+    [email.trim()]
+  );
 
-  if (usuario) {
-    await gerarEEnviarConvite(usuario).catch(() => {}); // best-effort -- não deixa a falha de e-mail vazar pra resposta
+  if (rows[0]) {
+    await gerarEEnviarConvite(rows[0]).catch(() => {}); // best-effort -- não deixa a falha de e-mail vazar pra resposta
   }
 
   res.json({ ok: true });
 });
 
 // GET /api/auth/convite/:token -- valida o link de convite antes de mostrar a tela "definir senha"
-authRouter.get("/convite/:token", (req, res) => {
-  const row = db
-    .prepare("SELECT user_nome, user_mail, user_convite_expira_em FROM usuarios WHERE user_convite_token = ?")
-    .get(req.params.token) as { user_nome: string; user_mail: string; user_convite_expira_em: string } | undefined;
+authRouter.get("/convite/:token", async (req, res) => {
+  const { rows } = await query<{ user_nome: string; user_mail: string; user_convite_expira_em: string }>(
+    "SELECT user_nome, user_mail, user_convite_expira_em FROM usuarios WHERE user_convite_token = $1",
+    [req.params.token]
+  );
+  const row = rows[0];
 
   if (!row || row.user_convite_expira_em < nowIso()) {
     res.status(404).json({ error: "convite inválido ou expirado" });
@@ -156,18 +153,24 @@ authRouter.get("/convite/:token", (req, res) => {
 });
 
 // POST /api/auth/convite/:token/definir-senha -- define a senha real e já loga o usuário
-authRouter.post("/convite/:token/definir-senha", (req, res) => {
+authRouter.post("/convite/:token/definir-senha", async (req, res) => {
   const { novaSenha } = (req.body ?? {}) as { novaSenha?: unknown };
   if (typeof novaSenha !== "string" || novaSenha.length < MIN_SENHA_LEN) {
     res.status(400).json({ error: `senha (mín. ${MIN_SENHA_LEN} caracteres) é obrigatória` });
     return;
   }
 
-  const row = db
-    .prepare("SELECT user_id, user_nome, user_mail, user_status, user_convite_expira_em FROM usuarios WHERE user_convite_token = ?")
-    .get(req.params.token) as
-    | { user_id: number; user_nome: string; user_mail: string; user_status: string | null; user_convite_expira_em: string }
-    | undefined;
+  const { rows } = await query<{
+    user_id: number;
+    user_nome: string;
+    user_mail: string;
+    user_status: string | null;
+    user_convite_expira_em: string;
+  }>(
+    "SELECT user_id, user_nome, user_mail, user_status, user_convite_expira_em FROM usuarios WHERE user_convite_token = $1",
+    [req.params.token]
+  );
+  const row = rows[0];
 
   if (!row || row.user_convite_expira_em < nowIso()) {
     res.status(404).json({ error: "convite inválido ou expirado" });
@@ -178,11 +181,12 @@ authRouter.post("/convite/:token/definir-senha", (req, res) => {
     return;
   }
 
-  db.prepare(
-    "UPDATE usuarios SET user_senha_hash = ?, user_deve_trocar_senha = 0, user_convite_token = NULL, user_convite_expira_em = NULL WHERE user_id = ?"
-  ).run(hashPassword(novaSenha), row.user_id);
+  await query(
+    "UPDATE usuarios SET user_senha_hash = $1, user_deve_trocar_senha = 0, user_convite_token = NULL, user_convite_expira_em = NULL WHERE user_id = $2",
+    [hashPassword(novaSenha), row.user_id]
+  );
 
-  const { token, expiraEm } = createSession(row.user_id);
+  const { token, expiraEm } = await createSession(row.user_id);
   res.json({
     token,
     expiraEm,

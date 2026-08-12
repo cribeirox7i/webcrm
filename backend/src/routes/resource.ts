@@ -1,6 +1,6 @@
-import { Router, Request, Response, NextFunction } from "express";
-import { db } from "../db";
-import { catalog, quoteIdent } from "../catalog";
+import { Router, Request, Response } from "express";
+import { query } from "../db";
+import { catalog, quoteIdent, ensureCatalogLoaded } from "../catalog";
 import { enforceMenuPermission } from "../permissaoResource";
 
 const DEFAULT_LIMIT = 1000;
@@ -48,7 +48,8 @@ function getResourceOr404(req: Request, res: Response) {
 export const resourceRouter = Router();
 
 // GET /api/:resource -- lista paginada, com filtro opcional por coluna=valor
-resourceRouter.get("/:resource", enforceMenuPermission("perm_leitura", "resource"), (req, res) => {
+resourceRouter.get("/:resource", enforceMenuPermission("perm_leitura", "resource"), async (req, res) => {
+  await ensureCatalogLoaded();
   const info = getResourceOr404(req, res);
   if (!info) return;
 
@@ -60,25 +61,26 @@ resourceRouter.get("/:resource", enforceMenuPermission("perm_leitura", "resource
   );
 
   const whereSql = filterEntries.length
-    ? "WHERE " + filterEntries.map(([key]) => `${quoteIdent(key)} = ?`).join(" AND ")
+    ? "WHERE " + filterEntries.map(([key], i) => `${quoteIdent(key)} = $${i + 1}`).join(" AND ")
     : "";
-  const params = filterEntries.map(([, value]) => value as string);
+  const baseParams = filterEntries.map(([, value]) => value as string);
 
-  const rows = db
-    .prepare(
-      `SELECT * FROM ${quoteIdent(info.name)} ${whereSql} LIMIT ? OFFSET ?`
-    )
-    .all(...params, limit, offset) as Record<string, unknown>[];
+  const { rows } = await query(
+    `SELECT * FROM ${quoteIdent(info.name)} ${whereSql} LIMIT $${baseParams.length + 1} OFFSET $${baseParams.length + 2}`,
+    [...baseParams, limit, offset]
+  );
 
-  const totalRow = db
-    .prepare(`SELECT COUNT(*) AS n FROM ${quoteIdent(info.name)} ${whereSql}`)
-    .get(...params) as { n: number };
+  const { rows: totalRows } = await query<{ n: number }>(
+    `SELECT COUNT(*)::int AS n FROM ${quoteIdent(info.name)} ${whereSql}`,
+    baseParams
+  );
 
-  res.json({ data: redactRows(info.name, rows), total: totalRow.n, limit, offset });
+  res.json({ data: redactRows(info.name, rows as Record<string, unknown>[]), total: totalRows[0].n, limit, offset });
 });
 
 // GET /api/:resource/:id -- só pra tabelas com PK
-resourceRouter.get("/:resource/:id", enforceMenuPermission("perm_leitura", "resource"), (req, res) => {
+resourceRouter.get("/:resource/:id", enforceMenuPermission("perm_leitura", "resource"), async (req, res) => {
+  await ensureCatalogLoaded();
   const info = getResourceOr404(req, res);
   if (!info) return;
   if (!info.pk) {
@@ -86,19 +88,21 @@ resourceRouter.get("/:resource/:id", enforceMenuPermission("perm_leitura", "reso
     return;
   }
 
-  const row = db
-    .prepare(`SELECT * FROM ${quoteIdent(info.name)} WHERE ${quoteIdent(info.pk)} = ?`)
-    .get(req.params.id);
+  const { rows } = await query(
+    `SELECT * FROM ${quoteIdent(info.name)} WHERE ${quoteIdent(info.pk)} = $1`,
+    [req.params.id]
+  );
 
-  if (!row) {
+  if (!rows[0]) {
     res.status(404).json({ error: "registro não encontrado" });
     return;
   }
-  res.json(redactRow(info.name, row as Record<string, unknown>));
+  res.json(redactRow(info.name, rows[0] as Record<string, unknown>));
 });
 
 // POST /api/:resource -- insere (só tabelas)
-resourceRouter.post("/:resource", enforceMenuPermission("perm_insercao", "resource"), (req, res) => {
+resourceRouter.post("/:resource", enforceMenuPermission("perm_insercao", "resource"), async (req, res) => {
+  await ensureCatalogLoaded();
   const info = getResourceOr404(req, res);
   if (!info) return;
   if (info.kind !== "table") {
@@ -115,27 +119,23 @@ resourceRouter.post("/:resource", enforceMenuPermission("perm_insercao", "resour
   }
 
   const cols = entries.map(([key]) => quoteIdent(key)).join(", ");
-  const placeholders = entries.map(() => "?").join(", ");
+  const placeholders = entries.map((_, i) => `$${i + 1}`).join(", ");
   const values = entries.map(([, value]) => value as string | number | null);
 
   try {
-    const result = db
-      .prepare(`INSERT INTO ${quoteIdent(info.name)} (${cols}) VALUES (${placeholders})`)
-      .run(...values);
-
-    const insertedId = info.pk ? result.lastInsertRowid : null;
-    const row = insertedId
-      ? db.prepare(`SELECT * FROM ${quoteIdent(info.name)} WHERE rowid = ?`).get(insertedId)
-      : null;
-
-    res.status(201).json(row ? redactRow(info.name, row as Record<string, unknown>) : { ok: true });
+    const { rows } = await query(
+      `INSERT INTO ${quoteIdent(info.name)} (${cols}) VALUES (${placeholders}) RETURNING *`,
+      values
+    );
+    res.status(201).json(rows[0] ? redactRow(info.name, rows[0] as Record<string, unknown>) : { ok: true });
   } catch (err) {
     res.status(400).json({ error: (err as Error).message });
   }
 });
 
 // PUT /api/:resource/:id -- atualiza (só tabelas)
-resourceRouter.put("/:resource/:id", enforceMenuPermission("perm_edicao", "resource"), (req, res) => {
+resourceRouter.put("/:resource/:id", enforceMenuPermission("perm_edicao", "resource"), async (req, res) => {
+  await ensureCatalogLoaded();
   const info = getResourceOr404(req, res);
   if (!info) return;
   if (info.kind !== "table") {
@@ -155,29 +155,28 @@ resourceRouter.put("/:resource/:id", enforceMenuPermission("perm_edicao", "resou
     return;
   }
 
-  const setSql = entries.map(([key]) => `${quoteIdent(key)} = ?`).join(", ");
+  const setSql = entries.map(([key], i) => `${quoteIdent(key)} = $${i + 1}`).join(", ");
   const values = entries.map(([, value]) => value as string | number | null);
 
   try {
-    const result = db
-      .prepare(`UPDATE ${quoteIdent(info.name)} SET ${setSql} WHERE ${quoteIdent(info.pk)} = ?`)
-      .run(...values, req.params.id);
+    const { rows, rowCount } = await query(
+      `UPDATE ${quoteIdent(info.name)} SET ${setSql} WHERE ${quoteIdent(info.pk)} = $${values.length + 1} RETURNING *`,
+      [...values, req.params.id]
+    );
 
-    if (result.changes === 0) {
+    if (rowCount === 0) {
       res.status(404).json({ error: "registro não encontrado" });
       return;
     }
-    const row = db
-      .prepare(`SELECT * FROM ${quoteIdent(info.name)} WHERE ${quoteIdent(info.pk)} = ?`)
-      .get(req.params.id);
-    res.json(redactRow(info.name, row as Record<string, unknown>));
+    res.json(redactRow(info.name, rows[0] as Record<string, unknown>));
   } catch (err) {
     res.status(400).json({ error: (err as Error).message });
   }
 });
 
 // DELETE /api/:resource/:id -- remove (só tabelas)
-resourceRouter.delete("/:resource/:id", enforceMenuPermission("perm_exclusao", "resource"), (req, res) => {
+resourceRouter.delete("/:resource/:id", enforceMenuPermission("perm_exclusao", "resource"), async (req, res) => {
+  await ensureCatalogLoaded();
   const info = getResourceOr404(req, res);
   if (!info) return;
   if (info.kind !== "table") {
@@ -189,11 +188,12 @@ resourceRouter.delete("/:resource/:id", enforceMenuPermission("perm_exclusao", "
     return;
   }
 
-  const result = db
-    .prepare(`DELETE FROM ${quoteIdent(info.name)} WHERE ${quoteIdent(info.pk)} = ?`)
-    .run(req.params.id);
+  const { rowCount } = await query(
+    `DELETE FROM ${quoteIdent(info.name)} WHERE ${quoteIdent(info.pk)} = $1`,
+    [req.params.id]
+  );
 
-  if (result.changes === 0) {
+  if (rowCount === 0) {
     res.status(404).json({ error: "registro não encontrado" });
     return;
   }

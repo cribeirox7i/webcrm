@@ -1,7 +1,7 @@
 import { Router } from "express";
 import multer from "multer";
 import crypto from "node:crypto";
-import { db } from "../db";
+import { query } from "../db";
 import { deleteObject, getSignedDownloadUrl, isStorageConfigured, uploadBuffer } from "../storage";
 import { bloqueado } from "../permissaoResource";
 
@@ -21,7 +21,7 @@ interface PropostaRow {
 // mesma infra de storage (routes/storage.ts), rotas dedicadas por já existir a coluna.
 export const propostaAnexoRouter = Router();
 
-propostaAnexoRouter.post("/propostas/:id/anexo", upload.single("file"), (req, res) => {
+propostaAnexoRouter.post("/propostas/:id/anexo", upload.single("file"), async (req, res) => {
   if (!isStorageConfigured()) {
     res.status(400).json({ error: "Armazenamento de arquivos não configurado (variável GCS_BUCKET ausente no backend)" });
     return;
@@ -31,44 +31,45 @@ propostaAnexoRouter.post("/propostas/:id/anexo", upload.single("file"), (req, re
     res.status(400).json({ error: "arquivo não enviado" });
     return;
   }
-  const proposta = db.prepare("SELECT proposta_id, proposta_anexo FROM propostas WHERE proposta_id = ?").get(
-    req.params.id
-  ) as PropostaRow | undefined;
+  const { rows } = await query<PropostaRow>("SELECT proposta_id, proposta_anexo FROM propostas WHERE proposta_id = $1", [
+    req.params.id,
+  ]);
+  const proposta = rows[0];
   if (!proposta) {
     res.status(404).json({ error: "proposta não encontrada" });
     return;
   }
-  if (bloqueado(req, res, "propostas", "perm_edicao")) return;
+  if (await bloqueado(req, res, "propostas", "perm_edicao")) return;
 
   const objectPath = `propostas/${proposta.proposta_id}/${Date.now()}-${crypto.randomBytes(6).toString("hex")}-${sanitizeFilename(
     file.originalname
   )}`;
 
-  uploadBuffer(objectPath, file.buffer, file.mimetype || "application/octet-stream")
-    .then(async () => {
-      if (proposta.proposta_anexo && !/^https?:\/\//i.test(proposta.proposta_anexo)) {
-        await deleteObject(proposta.proposta_anexo);
-      }
-      db.prepare("UPDATE propostas SET proposta_anexo = ? WHERE proposta_id = ?").run(objectPath, proposta.proposta_id);
-      const row = db.prepare("SELECT * FROM propostas WHERE proposta_id = ?").get(proposta.proposta_id);
-      res.status(200).json(row);
-    })
-    .catch((err) => {
-      res.status(500).json({ error: `falha ao enviar arquivo: ${(err as Error).message}` });
-    });
+  try {
+    await uploadBuffer(objectPath, file.buffer, file.mimetype || "application/octet-stream");
+    if (proposta.proposta_anexo && !/^https?:\/\//i.test(proposta.proposta_anexo)) {
+      await deleteObject(proposta.proposta_anexo);
+    }
+    const { rows: updated } = await query(
+      "UPDATE propostas SET proposta_anexo = $1 WHERE proposta_id = $2 RETURNING *",
+      [objectPath, proposta.proposta_id]
+    );
+    res.status(200).json(updated[0]);
+  } catch (err) {
+    res.status(500).json({ error: `falha ao enviar arquivo: ${(err as Error).message}` });
+  }
 });
 
 propostaAnexoRouter.get("/propostas/:id/anexo/download", async (req, res) => {
-  const proposta = db.prepare("SELECT proposta_id, proposta_anexo FROM propostas WHERE proposta_id = ?").get(
-    req.params.id
-  ) as PropostaRow | undefined;
+  const { rows } = await query<PropostaRow>("SELECT proposta_id, proposta_anexo FROM propostas WHERE proposta_id = $1", [
+    req.params.id,
+  ]);
+  const proposta = rows[0];
   if (!proposta || !proposta.proposta_anexo) {
     res.status(404).json({ error: "anexo não encontrado" });
     return;
   }
-  // Mesmo achado de anexos.ts: rota dedicada sem checagem de permissão nenhuma, diferente
-  // do upload/exclusão ao lado.
-  if (bloqueado(req, res, "propostas", "perm_leitura")) return;
+  if (await bloqueado(req, res, "propostas", "perm_leitura")) return;
 
   if (/^https?:\/\//i.test(proposta.proposta_anexo)) {
     res.json({ url: proposta.proposta_anexo });
@@ -89,18 +90,21 @@ propostaAnexoRouter.get("/propostas/:id/anexo/download", async (req, res) => {
 });
 
 propostaAnexoRouter.delete("/propostas/:id/anexo", async (req, res) => {
-  const proposta = db.prepare("SELECT proposta_id, proposta_anexo FROM propostas WHERE proposta_id = ?").get(
-    req.params.id
-  ) as PropostaRow | undefined;
+  const { rows } = await query<PropostaRow>("SELECT proposta_id, proposta_anexo FROM propostas WHERE proposta_id = $1", [
+    req.params.id,
+  ]);
+  const proposta = rows[0];
   if (!proposta) {
     res.status(404).json({ error: "proposta não encontrada" });
     return;
   }
-  if (bloqueado(req, res, "propostas", "perm_edicao")) return;
+  if (await bloqueado(req, res, "propostas", "perm_edicao")) return;
   if (proposta.proposta_anexo && !/^https?:\/\//i.test(proposta.proposta_anexo)) {
     await deleteObject(proposta.proposta_anexo);
   }
-  db.prepare("UPDATE propostas SET proposta_anexo = NULL WHERE proposta_id = ?").run(proposta.proposta_id);
-  const row = db.prepare("SELECT * FROM propostas WHERE proposta_id = ?").get(proposta.proposta_id);
-  res.json(row);
+  const { rows: updated } = await query(
+    "UPDATE propostas SET proposta_anexo = NULL WHERE proposta_id = $1 RETURNING *",
+    [proposta.proposta_id]
+  );
+  res.json(updated[0]);
 });

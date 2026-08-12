@@ -1,4 +1,4 @@
-import { db } from "./db";
+import { query } from "./db";
 import { generateToken } from "./authCrypto";
 import { enviarConviteEmail } from "./email";
 
@@ -24,11 +24,11 @@ export async function gerarEEnviarConvite(
 ): Promise<{ enviado: boolean; link: string; expiraEm: string }> {
   const token = generateToken();
   const expiraEm = new Date(Date.now() + INVITE_TTL_HORAS * 60 * 60 * 1000).toISOString();
-  db.prepare("UPDATE usuarios SET user_convite_token = ?, user_convite_expira_em = ? WHERE user_id = ?").run(
+  await query("UPDATE usuarios SET user_convite_token = $1, user_convite_expira_em = $2 WHERE user_id = $3", [
     token,
     expiraEm,
-    usuario.user_id
-  );
+    usuario.user_id,
+  ]);
 
   const link = `${FRONTEND_URL}/definir-senha?token=${token}`;
   const { enviado } = await enviarConviteEmail({ nome: usuario.user_nome, email: usuario.user_mail, link });

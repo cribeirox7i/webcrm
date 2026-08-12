@@ -1,7 +1,7 @@
 import { Router } from "express";
 import multer from "multer";
 import crypto from "node:crypto";
-import { db } from "../db";
+import { query } from "../db";
 import { deleteObject, getSignedDownloadUrl, isStorageConfigured, uploadBuffer } from "../storage";
 import { bloqueado } from "../permissaoResource";
 
@@ -25,7 +25,7 @@ interface AnexoRow {
 // caindo no genérico (/api/anexos, /api/anexos/:id); só as 3 rotas abaixo são específicas.
 export const anexosRouter = Router();
 
-anexosRouter.post("/anexos/upload", upload.single("file"), (req, res) => {
+anexosRouter.post("/anexos/upload", upload.single("file"), async (req, res) => {
   if (!isStorageConfigured()) {
     res.status(400).json({ error: "Armazenamento de arquivos não configurado (variável GCS_BUCKET ausente no backend)" });
     return;
@@ -41,7 +41,7 @@ anexosRouter.post("/anexos/upload", upload.single("file"), (req, res) => {
     res.status(400).json({ error: "informe cliente_id ou fornecedor_id" });
     return;
   }
-  if (bloqueado(req, res, clienteId ? "clientes" : "fornecedores", "perm_insercao")) return;
+  if (await bloqueado(req, res, clienteId ? "clientes" : "fornecedores", "perm_insercao")) return;
 
   const entityFolder = clienteId ? `clientes/${clienteId}` : `fornecedores/${fornecedorId}`;
   const objectPath = `anexos/${entityFolder}/${Date.now()}-${crypto.randomBytes(6).toString("hex")}-${sanitizeFilename(
@@ -49,32 +49,26 @@ anexosRouter.post("/anexos/upload", upload.single("file"), (req, res) => {
   )}`;
   const nome = (req.body.anexo_nome as string | undefined)?.trim() || file.originalname;
 
-  uploadBuffer(objectPath, file.buffer, file.mimetype || "application/octet-stream")
-    .then(() => {
-      const result = db
-        .prepare(
-          `INSERT INTO anexos (cliente_id, fornecedor_id, anexo_nome, anexo_data, anexo_arquivo) VALUES (?, ?, ?, ?, ?)`
-        )
-        .run(clienteId, fornecedorId, nome, new Date().toISOString().slice(0, 10), objectPath);
-      const row = db.prepare(`SELECT * FROM anexos WHERE anexo_id = ?`).get(result.lastInsertRowid);
-      res.status(201).json(row);
-    })
-    .catch((err) => {
-      res.status(500).json({ error: `falha ao enviar arquivo: ${(err as Error).message}` });
-    });
+  try {
+    await uploadBuffer(objectPath, file.buffer, file.mimetype || "application/octet-stream");
+    const { rows } = await query(
+      `INSERT INTO anexos (cliente_id, fornecedor_id, anexo_nome, anexo_data, anexo_arquivo) VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+      [clienteId, fornecedorId, nome, new Date().toISOString().slice(0, 10), objectPath]
+    );
+    res.status(201).json(rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: `falha ao enviar arquivo: ${(err as Error).message}` });
+  }
 });
 
 anexosRouter.get("/anexos/:id/download", async (req, res) => {
-  const row = db.prepare(`SELECT * FROM anexos WHERE anexo_id = ?`).get(req.params.id) as AnexoRow | undefined;
+  const { rows } = await query<AnexoRow>(`SELECT * FROM anexos WHERE anexo_id = $1`, [req.params.id]);
+  const row = rows[0];
   if (!row) {
     res.status(404).json({ error: "anexo não encontrado" });
     return;
   }
-  // Achado numa auditoria de segurança (2026-08-11): esta rota é dedicada (bypassa o
-  // GET genérico de resource.ts) e não tinha NENHUMA checagem de permissão -- diferente
-  // do upload/exclusão ao lado, que já chamavam `bloqueado()`. Qualquer sessão de usuário
-  // válida gerava link assinado pra baixar o anexo de qualquer cliente/fornecedor.
-  if (bloqueado(req, res, row.cliente_id ? "clientes" : "fornecedores", "perm_leitura")) return;
+  if (await bloqueado(req, res, row.cliente_id ? "clientes" : "fornecedores", "perm_leitura")) return;
   if (!row.anexo_arquivo) {
     res.status(404).json({ error: "anexo sem arquivo associado" });
     return;
@@ -103,15 +97,16 @@ anexosRouter.get("/anexos/:id/download", async (req, res) => {
 // Sobrescreve o DELETE genérico só pra essa rota (mesmo path/método, mas montada antes
 // do resourceRouter em server.ts) -- precisa apagar o objeto no bucket antes da linha.
 anexosRouter.delete("/anexos/:id", async (req, res) => {
-  const row = db.prepare(`SELECT * FROM anexos WHERE anexo_id = ?`).get(req.params.id) as AnexoRow | undefined;
+  const { rows } = await query<AnexoRow>(`SELECT * FROM anexos WHERE anexo_id = $1`, [req.params.id]);
+  const row = rows[0];
   if (!row) {
     res.status(404).json({ error: "anexo não encontrado" });
     return;
   }
-  if (bloqueado(req, res, row.cliente_id ? "clientes" : "fornecedores", "perm_exclusao")) return;
+  if (await bloqueado(req, res, row.cliente_id ? "clientes" : "fornecedores", "perm_exclusao")) return;
   if (row.anexo_arquivo && !/^https?:\/\//i.test(row.anexo_arquivo)) {
     await deleteObject(row.anexo_arquivo);
   }
-  db.prepare(`DELETE FROM anexos WHERE anexo_id = ?`).run(req.params.id);
+  await query(`DELETE FROM anexos WHERE anexo_id = $1`, [req.params.id]);
   res.status(204).send();
 });
