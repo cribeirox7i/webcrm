@@ -17,7 +17,7 @@ After=network.target
 [Service]
 Type=simple
 User=webcrm
-WorkingDirectory=/opt/webcrm/backend
+WorkingDirectory=/opt/webcrm/app/backend
 EnvironmentFile=/etc/webcrm/backend.env
 ExecStart=/usr/bin/node dist/server.js
 Restart=always
@@ -27,7 +27,7 @@ RestartSec=3
 # de dados, nunca o resto do disco.
 NoNewPrivileges=true
 ProtectSystem=strict
-ReadWritePaths=/opt/webcrm/backend/data
+ReadWritePaths=/opt/webcrm/app/backend/data
 
 [Install]
 WantedBy=multi-user.target
