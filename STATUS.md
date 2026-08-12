@@ -989,3 +989,29 @@ respondendo `{"ok":true}` de fora da VM, confirmando HTTPS/Caddy/systemd funcion
   problema; o disco padrão da VM não é backup).
 - Revisar o backfill de permissão "acesso total" dado aos 12 usuários de teste antes de qualquer
   usuário real ganhar acesso.
+
+## Leva Bloqueio de acesso mobile (2026-08-12, mesmo dia do deploy)
+
+**Achado ao testar o site publicado num navegador de celular**: o WebCRM nunca teve layout
+responsivo (confirmado revendo `index.css` — o único `@media` existente no projeto inteiro era
+pra dark mode; layout do app shell é fixo em desktop por design, ver regra nº1 do
+`DESIGN_SYSTEM.md` sobre nunca rolar a página inteira, pensada pra sidebar+grid de desktop). Em
+tela de celular o app quebra de forma inutilizável. Isso nunca foi pedido nem discutido
+explicitamente — decisão implícita desde o início do projeto, herdada do AppSheet original visto
+sempre em desktop.
+
+**Decisão do usuário**: não construir responsividade agora (fica pra um projeto futuro, se algum
+dia for necessário) — só **bloquear o acesso em telas estreitas** com um aviso, em vez de deixar a
+UI quebrada visível.
+
+**Implementado**: `frontend/index.html` ganhou uma `div#mobile-block` estática (fora da árvore
+React, sempre presente no HTML) com o aviso "O WebCRM foi desenvolvido para uso em computador.
+Acesse por um desktop ou notebook." `frontend/src/index.css` ganhou um `@media (max-width: 767px)`
+que esconde `#root` (a aplicação React inteira) e mostra esse aviso em tela cheia. **Decisão de
+implementação**: ficar fora da árvore React e não depender de nenhuma rota específica foi
+proposital — cobre `/` (app principal), `/admin` e `/definir-senha` de uma vez só, sem duplicar a
+lógica em cada entry point (`App.tsx`, `AdminApp.tsx`, `DefinirSenhaPage.tsx`).
+
+Testado no navegador: 375px (celular) mostra só o aviso, sem nenhum elemento do app visível;
+1280px (desktop) comporta-se normalmente, sem regressão. Build de produção limpo, publicado no
+Firebase Hosting (`firebase deploy --only hosting`).

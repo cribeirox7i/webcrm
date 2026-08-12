@@ -28,6 +28,33 @@
   -webkit-font-smoothing: antialiased;
 }
 
+/* WebCRM não tem layout responsivo -- em telas estreitas (celular) as grids/sidebar quebram
+   de forma inutilizável. Em vez de deixar isso visível, bloqueia o acesso com um aviso. */
+#mobile-block {
+  display: none;
+}
+
+@media (max-width: 767px) {
+  #root {
+    display: none;
+  }
+
+  #mobile-block {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    position: fixed;
+    inset: 0;
+    background: var(--sidebar-bg);
+    color: var(--sidebar-text-active);
+    text-align: center;
+    padding: 2rem;
+    font: 16px/1.5 var(--sans);
+  }
+}
+
 @media (prefers-color-scheme: dark) {
   :root {
     --text: #b7bec8;
