@@ -906,3 +906,86 @@ de build removidas depois (não fazem parte do repo, são geradas no deploy real
 backend pra `/opt/webcrm/backend`, criar `/etc/webcrm/backend.env` com valores reais (a partir do
 `.env.example`), instalar o unit systemd, criar o projeto Firebase e rodar `firebase deploy` no
 frontend com a URL real do backend em `.env.production`.
+
+## Leva Deploy Real (2026-08-12, mesmo dia da preparação)
+
+Conta Google criada pelo usuário; projeto GCP `webcrm-505318`. Deploy de ponta a ponta executado
+nesta leva, com vários problemas reais resolvidos no caminho (registrados abaixo pra não repetir).
+
+**Infra provisionada**:
+- VM `webcrm-backend` (`e2-micro`, `us-east1-b`, Ubuntu 24.04 LTS Minimal amd64, disco permanente
+  **padrão** de 30GB — não o "equilibrado"/SSD, que fica fora do free tier). IP externo promovido a
+  **estático**: `34.138.41.74`.
+- Programação de snapshot automática (`default-schedule-1`, criada por padrão pelo Console)
+  desvinculada do disco via `gcloud compute disks remove-resource-policies` (o botão "Excluir" da
+  UI não funciona enquanto o disco estiver em uso — precisa desvincular primeiro).
+- Backend rodando como serviço systemd (`webcrm-backend.service`, `deploy/webcrm-backend.service`
+  no repo) — `Restart=always`, usuário dedicado `webcrm`, `ProtectSystem=strict` +
+  `ReadWritePaths` restrito a `/opt/webcrm/app/backend/data`.
+- **HTTPS via Caddy** (`/etc/caddy/Caddyfile`, na própria VM) fazendo proxy reverso de `443` pra
+  `localhost:3101`, com certificado Let's Encrypt automático. Domínio usado: **nip.io**
+  (`34.138.41.74.nip.io`, resolve pro IP estático sem precisar de conta/DNS próprio) —
+  **solução temporária**, trocar por um domínio de verdade quando disponível (só re-configurar o
+  `Caddyfile` com o novo domínio e atualizar `VITE_API_URL`/`CORS_ORIGINS`).
+- Código versionado: **repositório Git criado nesta leva** (`github.com/cribeirox7i/webcrm`,
+  privado). VM clona via **deploy key** (SSH, só leitura, sem dar acesso de escrita nem à conta
+  pessoal do usuário).
+- Frontend publicado: **`firebase deploy --only hosting`**, projeto `webcrm-505318` →
+  `https://webcrm-505318.web.app`.
+
+### Bugs reais encontrados e corrigidos no processo
+
+1. **Build de produção do frontend estava quebrado** (`npm run dev` nunca detecta isso, só
+   `tsc -b` do build real): `frontend/src/lib/export.ts` usava `doc.internal.getNumberOfPages()`,
+   API que migrou pra `doc.getNumberOfPages()` direto na v4 do `jsPDF` (já instalada). Corrigido
+   antes de qualquer deploy — **lição confirmada na prática**: sem testar o build de produção,
+   esse erro só apareceria no primeiro deploy real.
+2. **`226/NAMESPACE` no systemd**: `ReadWritePaths=/opt/webcrm/app/backend/data` apontava pra uma
+   pasta que não existia (Git não versiona pastas vazias; `.gitignore` só exclui os arquivos
+   `.sqlite` de dentro dela, não a pasta). `systemd` recusa montar a sandbox se o caminho não
+   existir. Corrigido criando a pasta manualmente antes do primeiro start.
+3. **`tsc: not found` no build do backend na VM**: `npm install` sem `--include=dev` pulou as
+   `devDependencies` (onde fica o `typescript`) — o build de produção precisa delas mesmo em prod,
+   já que compila TS→JS na própria VM (não há etapa de CI separada). Corrigido com
+   `npm install --include=dev`.
+4. **`ADMIN_PIN` corrompido no `/etc/webcrm/backend.env`**: tentativas sucessivas de editar a
+   variável via `nano`/`sed` (a sessão SSH do navegador teve problema de edição interativa,
+   "texto não editável") deixaram a linha com **três valores concatenados na mesma linha, sem
+   quebra de linha** — incluindo o placeholder original `escolha-um-pin-forte-aqui` ainda
+   presente. Resolvido reescrevendo o arquivo inteiro de uma vez via `tee <<'EOF'` (heredoc,
+   idempotente, sem depender de editor interativo) — **abordagem recomendada pra esse tipo de
+   arquivo daqui pra frente**, já que evita exatamente esse tipo de corrupção. PIN final gerado
+   sem caracteres especiais (`openssl rand -base64 12 | tr -dc 'A-Za-z0-9'`) pra evitar problemas
+   de escaping em comandos futuros.
+5. **Confusão Cloud Shell vs. SSH da VM**: comandos de instalação do Caddy (`apt-get install`,
+   `systemctl`) foram tentados no **Cloud Shell** (máquina temporária do Google, sem `systemd`) em
+   vez da sessão SSH da própria VM — erro `System has not been booted with systemd as init system`.
+   Não é bug de configuração, só ambiente errado; resolvido reidentificando qual terminal é qual
+   (Cloud Shell só pra comandos `gcloud`, SSH da VM pra tudo que instala/configura software nela).
+6. **Fluxo de login do Firebase CLI, duas tentativas falhas antes de funcionar**: a primeira
+   (`firebase login` rodado pela própria ferramenta do agente) gerou um link, mas o processo que
+   guarda o `code_verifier` (PKCE) morreu antes do código ser colado de volta — completar o login
+   numa invocação separada (`firebase login <code>`) sempre falha nesse caso ("Unable to
+   authenticate using the provided code"). Resolvido rodando `firebase login --no-localhost` **do
+   início ao fim no mesmo terminal interativo do usuário** (não da ferramenta do agente, que não
+   sustenta uma sessão interativa esperando input no meio da execução).
+
+### Verificado depois do deploy
+
+Sem erro de CORS no console do navegador acessando `https://webcrm-505318.web.app` (só um `401`
+esperado de `GET /api/parametros` antes do login, comportamento já documentado). Tela de login
+renderizou completa (fundo, logo, campos, botões). `curl https://34.138.41.74.nip.io/health`
+respondendo `{"ok":true}` de fora da VM, confirmando HTTPS/Caddy/systemd funcionando em conjunto.
+
+### Ainda pendente antes de abrir para usuários reais
+
+- **SMTP não configurado** — convite/recuperação de senha só loga link no console da VM.
+- **Domínio nip.io é provisório** — trocar por domínio próprio quando disponível (some domínio
+  formal também deixaria o certificado Let's Encrypt mais robusto/confiável para os usuários).
+- **Dados ainda são só massa de teste** — migração real (item 7 de "Próximos passos", mais acima
+  neste documento) continua pendente; **não convidar usuários reais antes dessa migração**, ou a
+  massa de teste seria confundida com dados reais.
+- **Backup do banco pra Cloud Storage** — ainda não configurado (risco de perda se a VM tiver
+  problema; o disco padrão da VM não é backup).
+- Revisar o backfill de permissão "acesso total" dado aos 12 usuários de teste antes de qualquer
+  usuário real ganhar acesso.
