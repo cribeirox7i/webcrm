@@ -1,4 +1,11 @@
-import { Pool, PoolClient } from "pg";
+import { Pool, PoolClient, types } from "pg";
+
+// O driver `pg` devolve colunas NUMERIC/DECIMAL como string por padrão (evita perda de precisão
+// genérica), mas todo o frontend trata esses campos como `number` (formatMoney/toLocaleString) --
+// sem isso, a formatação falha silenciosamente (string.toLocaleString ignora as opções e devolve
+// o valor bruto). OID 1700 = numeric. Convertido pra float aqui, uma única vez, em vez de corrigir
+// cada tela.
+types.setTypeParser(1700, (val) => (val === null ? null : parseFloat(val)));
 
 const connectionString = process.env.DATABASE_URL;
 if (!connectionString) {
