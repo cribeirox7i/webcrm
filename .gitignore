@@ -10,6 +10,8 @@ backend/data/*.sqlite-wal
 backend/.env
 backend/server.log
 frontend/.env.production.local
+*.xlsx
+__pycache__/
 
 # Config local de preview desta máquina (caminhos e PIN de dev específicos daqui)
 .claude/

@@ -1015,3 +1015,87 @@ lógica em cada entry point (`App.tsx`, `AdminApp.tsx`, `DefinirSenhaPage.tsx`).
 Testado no navegador: 375px (celular) mostra só o aviso, sem nenhum elemento do app visível;
 1280px (desktop) comporta-se normalmente, sem regressão. Build de produção limpo, publicado no
 Firebase Hosting (`firebase deploy --only hosting`).
+
+## Leva Migração VM/SQLite → Vercel/Supabase (2026-08-12, sessão longa)
+
+A pedido do usuário, decidido depois da fricção real de manter a VM (systemd, Caddy, domínio
+bloqueado por proxy corporativo, sem responsividade) — mesma arquitetura já usada com sucesso no
+projeto Sugeridor. Branch dedicada `migration/postgres-vercel`, nada tocado na VM/Firebase
+enquanto isso. Plano completo em 10 fases, aprovado via plan mode antes de codar.
+
+**Fases 1-6 (schema + backend inteiro assíncrono)** — ver detalhe nos commits da branch:
+`schema.pg.sql`/`views.pg.sql`/`triggers.pg.sql` (Postgres, com `citext` pro e-mail, triggers
+`plpgsql` consolidados, colunas geradas via `substring`/`position` em vez de `strftime`/`instr`);
+`db.ts`/`catalog.ts` reescritos pra `pg` + `information_schema`; **todo** o backend (`resource.ts`,
+`mainAuth.ts`, `permissaoResource.ts`, `auth.ts`, `usuarios.ts`, `anexos.ts`, `propostaAnexo.ts`,
+`parametros.ts`, `permissoes.ts`, `convite.ts`) convertido pra `async`/`await`, `$n` placeholders,
+`RETURNING *`. Testado de ponta a ponta contra um projeto Supabase descartável (`webcrm-scratch`)
+via `curl` e depois pelo navegador de verdade — login, CRUD genérico, permissões, troca de senha
+transacional, unicidade case-insensitive.
+
+**Bug real de ambiente encontrado nesta leva**: `cmd.exe`/`launch.json` — `set ADMIN_PIN=123456 &&`
+inclui o **espaço antes do `&&`** no valor da variável (`"123456 "`, com espaço), então a
+comparação exata do PIN nunca batia. Corrigido removendo o espaço antes de cada `&&` no
+`launch.json` global (`C:\Claude\.claude\launch.json`). Lição: nunca deixar espaço entre o valor
+de um `set` e o `&&` seguinte nesse tipo de comando encadeado.
+
+### Fase 7 — migração de dados reais (não massa de teste)
+
+Primeira tentativa foi migrar a massa de teste (SQLite local) pro Supabase — **abortada a pedido
+do usuário** ao encontrar 306 URLs com `cliente_id = 0` (sentinela sem cliente correspondente).
+Usuário preferiu fornecer a planilha real de produção (`WEBCRM_PROD.xlsx`, mesma estrutura de 34
+abas do `WEBCRM.xlsx` original) em vez de migrar dado de teste.
+
+**Levantamento de integridade referencial na planilha real** (script descartável, não ficou no
+repo) antes de tocar em qualquer dado:
+- `urls.cliente_id`: 306/2429 linhas com sentinela `0` (mesmo padrão da massa de teste — confirma
+  que é um problema real da fonte, não um artefato do teste).
+- `carteira.cliente_id`: 1/5488 linha com o mesmo sentinela.
+- `resp.cliente_id`: 6/729 linhas referenciando clientes `196/50/615/623`, que **não existem mais**
+  na aba `clientes` (diferente do sentinela — referência genuinamente quebrada, cliente foi
+  excluído e a linha de `resp` não foi limpa junto).
+- `resp.pessoa_id`: 1/729 linha referenciando pessoa `8`, que também não existe mais.
+- Todas as tabelas financeiras críticas (`precos_cliente`, `consumo_ana`, `faturamento`) vieram
+  **100% limpas** — nenhum órfão.
+
+**Decisões tomadas com o usuário** (`AskUserQuestion`, não assumidas):
+1. `urls`/`carteira` com `cliente_id = 0` → migrar com `cliente_id = NULL` de verdade (não manter
+   o sentinela inválido). Exigiu relaxar `NOT NULL` dessas duas colunas em `schema.pg.sql`.
+2. `resp` com `cliente_id`/`pessoa_id` órfão (7 linhas) → **não migrar** essas linhas.
+
+**Bug real de schema encontrado só com dado real** (massa de teste nunca expôs):
+`carteira.cart_emprestimos_mes` ("Concessões no mês") continha valores como `40787103.09` e até
+uma célula com o valor digitado como texto formatado (`"R$ 1.631.651,25"`) — é claramente um
+campo monetário, mas o schema original (herdado do SQLite, `schema.sql`) o define como `INTEGER`.
+O `STATUS.md` já documentava esse campo como financeiro (leva "Financeiro/Faturamento... Carteira",
+acima) — só o tipo da coluna nunca bateu com a intenção. Corrigido pra `NUMERIC(14,2)` em
+`schema.pg.sql`. O script de carga (`backend/scripts/migrate_prod_xlsx_to_pg.py`) ganhou um parser
+de moeda BR (`"R$ 1.234,56"` → `1234.56`) pra não perder esse valor real.
+
+**`backend/scripts/migrate_prod_xlsx_to_pg.py`** (novo, Python + `psycopg2`, reaproveita a lógica
+de limpeza de `import_test_data.py` — tokens de erro do Excel, datas ISO, `NOT NULL` pós-limpeza —
+mas grava direto no Postgres via `execute_values` em lote de 1000 linhas, não linha a linha
+(`executemany` puro chegou a ficar tempo demais nos 256 mil registros de `consumo_ana` — corrigido
+antes de rodar contra o volume real)). Roda depois de `apply-schema.ts`. Também corrige a
+sequence do `IDENTITY` de cada tabela ao final (senão o próximo INSERT via app colidiria com IDs
+migrados) e trata `float` inteiro do Excel (`1.0`) → `int` (Postgres, diferente do SQLite, não
+aceita literal `1.0` implícito numa coluna `INTEGER`).
+
+**Bug real de FK auto-referenciada**: `pessoas` (hierarquia `pessoa_diretor/ger_exec/ger/lider`)
+falhava ao inserir via `psycopg2` porque cada linha é um `INSERT` separado (diferente do multi-row
+`VALUES (...), (...)` usado no script Node de teste) — uma pessoa cujo diretor ainda não tinha
+sido inserido violava a FK na hora. Corrigido tornando essas 4 FKs `DEFERRABLE INITIALLY DEFERRED`
+em `schema.pg.sql` — a checagem passa a rodar só no `COMMIT` da transação, quando todas as 300
+pessoas já existem.
+
+**Resultado final**: 291.747 linhas em 26 tabelas migradas pro Supabase `webcrm-scratch`, validado
+depois (não só a carga em si): valor de moeda BR parseado corretamente (`1631651.25`), 306 URLs
+com `cliente_id NULL` como decidido, `cliente_status` recalculado pelos triggers durante a carga
+(233 `ATIVO` / 368 `INATIVO` — distribuição real, não zerada), colunas geradas (`pessoa_grupo`,
+`pessoa_whatsapp`) computando certo em nomes/telefones reais.
+
+`WEBCRM_PROD.xlsx` **nunca deve ir pro Git** — `.gitignore` da raiz ganhou `*.xlsx` nesta leva.
+
+**Ainda faltam** (próximas fases do plano): Fase 8 (deploy no Vercel — projeto Supabase
+definitivo, não mais o `webcrm-scratch`), Fase 9 (teste do preview publicado), Fase 10 (virada de
+produção, decomissionar a VM).
