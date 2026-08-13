@@ -1146,10 +1146,48 @@ frontend (Vercel) → backend (Vercel) → Postgres (Supabase) funcionam juntos 
 Credenciais de teste geradas durante a validação foram trocadas por senhas aleatórias descartadas
 ao final (permissão de teste também revogada) — nenhum acesso de teste deixado ativo no banco real.
 
-**URLs de preview atuais** (branch `migration/postgres-vercel`, protection desligada por ora):
+**URLs de preview usadas durante a validação** (branch `migration/postgres-vercel`):
 - Backend: `https://webcrm-git-migration-postgres-vercel-webcrm.vercel.app`
 - Frontend: `https://webcrm-wuah-git-migration-postgres-vercel-webcrm.vercel.app`
 
-**Ainda falta**: Fase 10 (virada de produção — domínio definitivo, reativar Deployment
-Protection adequadamente, atualizar `CORS_ORIGINS`/`VITE_API_URL` pras URLs de produção final,
-merge da branch, decomissionar a VM e o Firebase Hosting).
+## Fase 10 — Virada de produção (2026-08-13, mesma sessão da migração)
+
+**Domínio**: mantido `.vercel.app` (gratuito, decisão do usuário — sem domínio próprio por
+enquanto). **Deployment Protection**: deixada desligada nos dois projetos (app já tem seu
+próprio login/permissão; decisão do usuário).
+
+**Merge**: `migration/postgres-vercel` → `main` (fast-forward, sem conflito). Push pra `main`
+disparou deploy de **Production** automaticamente nos dois projetos Vercel (branch de produção
+default).
+
+**Bug real encontrado na virada**: o build de Production do frontend saiu usando a URL **antiga
+da VM** (`https://34.138.41.74.nip.io`) — `VITE_API_URL` nunca tinha sido configurado pra
+Production no painel do Vercel (só Preview), então caiu no valor comitado em
+`frontend/.env.production` (a config da Fase 8/9, apontando pra VM que estávamos justamente
+decomissionando). Corrigido atualizando esse arquivo pra `https://webcrm-mu.vercel.app` (URL de
+Production do backend) — decisão de manter isso **no código**, não só no painel do Vercel, pra
+não repetir o mesmo tipo de confusão de configuração manual já visto nesta migração.
+`CORS_ORIGINS` de Production do backend (sem arquivo de fallback, só painel) configurado pra
+`https://webcrm-wuah.vercel.app` (URL de Production do frontend).
+
+**Validado em produção real** (não só preview): CORS preflight com `Access-Control-Allow-Origin`
+correto, bundle do frontend com a URL certa do backend, e login completo pela UI com usuária real
+(Vanessa Affonso) — mesmo teste da Fase 9, repetido contra as URLs de produção definitivas.
+Senha de teste trocada por aleatória descartável ao final, mesma disciplina das fases anteriores.
+
+**URLs de produção definitivas**:
+- Backend: `https://webcrm-mu.vercel.app`
+- Frontend: `https://webcrm-wuah.vercel.app`
+- Banco: Supabase (projeto `webcrm`, connection pooler em produção)
+
+**Decomissionamento da infra antiga** (a pedido do usuário): projeto GCP `webcrm-505318`
+encerrado por completo (IAM e administrador → Configurações → Encerrar) — isso removeu de uma
+vez a VM (`webcrm-backend`), o IP estático, o disco, a regra de firewall **e** o Firebase
+Hosting (estava hospedado dentro do mesmo projeto GCP). Confirmado que a VM já não responde
+(timeout) minutos depois do encerramento — o Google mantém os dados por ~30 dias antes da
+exclusão definitiva (rede de segurança padrão deles, não é possível pular), mas os recursos
+pagos/em execução já pararam imediatamente. Conta Google/Gmail em si **mantida** (decisão
+explícita do usuário — só o projeto GCP foi encerrado, não a conta).
+
+**Migração completa**: SQLite/VM/Caddy/Firebase Hosting → Postgres (Supabase)/Vercel, com dados
+reais de produção, testada de ponta a ponta, VM antiga desligada. Repositório 100% em `main`.
