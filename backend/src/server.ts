@@ -73,10 +73,12 @@ app.use("/api", propostaAnexoRouter);
 app.use("/api", metaRouter);
 app.use("/api", resourceRouter);
 
-// Sob Vercel (serverless), este módulo só exporta `app` -- quem chama .listen() é
-// backend/api/index.ts (via require.main check) ou nunca, no runtime serverless real.
-// Local dev (`npm run dev`) continua chamando .listen() normalmente aqui.
-if (require.main === module) {
+// Sob Vercel (serverless), `process.env.VERCEL` é definido automaticamente em todo
+// deployment -- checagem mais confiável que `require.main === module`, que pode se
+// comportar de forma inesperada dentro do bundler serverless (achado real: chamar
+// .listen() ali causava FUNCTION_INVOCATION_FAILED em todo request, mesmo com as env vars
+// certas configuradas). Local dev (`npm run dev`) não tem essa variável -- chama .listen() normal.
+if (!process.env.VERCEL) {
   const PORT = Number(process.env.PORT) || 3000;
   app.listen(PORT, () => {
     console.log(`[server] WEBCRM backend em http://localhost:${PORT}`);
