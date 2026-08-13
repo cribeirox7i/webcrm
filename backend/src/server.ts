@@ -73,7 +73,14 @@ app.use("/api", propostaAnexoRouter);
 app.use("/api", metaRouter);
 app.use("/api", resourceRouter);
 
-const PORT = Number(process.env.PORT) || 3000;
-app.listen(PORT, () => {
-  console.log(`[server] WEBCRM backend em http://localhost:${PORT}`);
-});
+// Sob Vercel (serverless), este módulo só exporta `app` -- quem chama .listen() é
+// backend/api/index.ts (via require.main check) ou nunca, no runtime serverless real.
+// Local dev (`npm run dev`) continua chamando .listen() normalmente aqui.
+if (require.main === module) {
+  const PORT = Number(process.env.PORT) || 3000;
+  app.listen(PORT, () => {
+    console.log(`[server] WEBCRM backend em http://localhost:${PORT}`);
+  });
+}
+
+export default app;
