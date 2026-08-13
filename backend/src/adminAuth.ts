@@ -13,8 +13,13 @@ if (!configuredPin) {
   console.log(`[admin] ADMIN_PIN configurado é curto demais (mín. 6 caracteres) -- ignorado. PIN temporário: ${ADMIN_PIN}`);
 }
 
-// token de sessão único gerado a cada boot do servidor -- login fica válido até o próximo restart do backend
-export const SESSION_TOKEN = crypto.randomBytes(24).toString("hex");
+// Token determinístico a partir do ADMIN_PIN (env var, compartilhada por todas as instâncias),
+// não um random gerado no boot do módulo -- em serverless (Vercel) cada instância/cold start
+// reexecuta este arquivo, então um token aleatório por instância fazia requisições paralelas
+// (ex.: "Marcar todas as permissões", ~15 chamadas de uma vez) caírem em instâncias diferentes
+// com tokens diferentes, devolvendo 401 "não autenticado" pra algumas e derrubando a sessão do
+// admin no frontend. Com o mesmo ADMIN_PIN, toda instância calcula o mesmo SESSION_TOKEN.
+export const SESSION_TOKEN = crypto.createHash("sha256").update(`webcrm-admin-session:${ADMIN_PIN}`).digest("hex");
 
 export function requireAdmin(req: Request, res: Response, next: NextFunction) {
   const auth = req.header("authorization") ?? "";
