@@ -34,6 +34,18 @@
   display: none;
 }
 
+/* Zoom padrão de 80% pedido pelo usuário, pra caber mais informação em tela sem mexer em cada
+   componente individualmente. Precisa ir no <html>, não no #root: `100vh` (usado por
+   .app-shell) é resolvido dentro do próprio contexto já escalado quando o zoom está no
+   elemento raiz, preenchendo a tela real corretamente -- testado que zoom no #root deixa uma
+   faixa em branco de ~20% da altura, porque o 100vh aí é calculado contra o viewport real
+   (sem zoom) antes de encolher. Propriedade não-padrão (Chrome/Edge/Safari); Firefox ignora e
+   renderiza a 100%, sem quebrar (só sem o efeito) -- aceitável pois o app já é desktop-only e
+   não há uso documentado de Firefox neste projeto. */
+html {
+  zoom: 80%;
+}
+
 @media (max-width: 767px) {
   #root {
     display: none;
@@ -166,7 +178,7 @@ button:focus-visible {
 .app-shell {
   display: grid;
   grid-template-columns: 224px 1fr;
-  height: 100vh;
+  height: calc(100vh / 0.8);
   overflow: hidden;
 }
 
@@ -294,7 +306,7 @@ button:focus-visible {
   display: flex;
   flex-direction: column;
   min-width: 0;
-  height: 100vh;
+  height: calc(100vh / 0.8);
   overflow: hidden;
 }
 
@@ -884,7 +896,7 @@ tbody tr:hover td {
 .admin-shell {
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  height: calc(100vh / 0.8);
   overflow: hidden;
 }
 
@@ -935,7 +947,7 @@ tbody tr:hover td {
 }
 
 .admin-login-shell {
-  height: 100vh;
+  height: calc(100vh / 0.8);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -965,7 +977,7 @@ tbody tr:hover td {
    mesma ideia visual do .admin-login-*, mas mais larga e com inputs normais (a tela de
    PIN do admin é a única que precisa de texto centralizado com letter-spacing). ---- */
 .auth-shell {
-  height: 100vh;
+  height: calc(100vh / 0.8);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -987,7 +999,7 @@ tbody tr:hover td {
 .auth-photo-frame {
   position: relative;
   flex: none;
-  width: min(1459px, 92vw, calc(92vh * 1459 / 814));
+  width: min(1459px, calc(92vw / 0.8), calc(92vh / 0.8 * 1459 / 814));
   aspect-ratio: 1459 / 814;
   container-type: inline-size;
 }
@@ -1321,7 +1333,7 @@ tbody tr:hover td {
   padding: 22px;
   width: 460px;
   max-width: 100%;
-  max-height: 90vh;
+  max-height: calc(90vh / 0.8);
   overflow: auto;
   display: flex;
   flex-direction: column;
