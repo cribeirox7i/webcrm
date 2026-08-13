@@ -1096,6 +1096,60 @@ com `cliente_id NULL` como decidido, `cliente_status` recalculado pelos triggers
 
 `WEBCRM_PROD.xlsx` **nunca deve ir pro Git** — `.gitignore` da raiz ganhou `*.xlsx` nesta leva.
 
-**Ainda faltam** (próximas fases do plano): Fase 8 (deploy no Vercel — projeto Supabase
-definitivo, não mais o `webcrm-scratch`), Fase 9 (teste do preview publicado), Fase 10 (virada de
-produção, decomissionar a VM).
+### Fase 8/9 — deploy no Vercel + teste do preview publicado
+
+O projeto Supabase que vínhamos chamando de "scratch" (`db.biuhklwctvvvbwajnxnk`) **é o
+definitivo** — usuário já tinha criado como tal, os 291.747 registros da Fase 7 já são dados
+reais de produção. Connection string do **pooler** (porta 6543, obrigatória pro Vercel —
+conexão direta esgotaria sob serverless) obtida e testada antes de configurar o Vercel.
+
+**`backend/api/index.ts`** (novo) + **`backend/vercel.json`** (rewrite catch-all
+`/(.*) -> /api/index`): adaptador serverless, exporta a app Express direto (Vercel aceita uma
+app Express como handler). **`backend/src/server.ts`**: `app.listen()` só roda fora do Vercel.
+
+**Bug real encontrado**: a checagem original (`require.main === module`) não funciona como
+esperado dentro do bundler serverless do Vercel — causava `FUNCTION_INVOCATION_FAILED` em toda
+requisição. Corrigido usando `process.env.VERCEL` (variável que o Vercel sempre define), mais
+confiável nesse contexto.
+
+**Tentativa de monorepo multi-serviço abandonada**: o recurso mais novo do Vercel (`vercel.json`
+na raiz com `"services": {...}`) criou mais confusão do que ajudou — o serviço "frontend"
+declarado nunca expôs uma URL própria de forma clara. Voltamos pro modelo de **2 projetos Vercel
+separados** (cada um com "Root Directory" apontando pra `backend`/`frontend` na configuração do
+próprio projeto, sem `vercel.json` na raiz do repo) — mais simples e é o que o plano original já
+recomendava. `frontend/vercel.json` ganhou o rewrite de SPA (`/(.*) -> /index.html`).
+
+**Outros achados/erros reais no caminho** (nenhum de código, todos de configuração/operação):
+1. Botão "Redeploy" da interface do Vercel redeployou a branch errada (`main`, código antigo)
+   mais de uma vez — sem querer, ao clicar na linha errada da lista de Deployments. Resolvido
+   evitando esse botão: `git commit --allow-empty` + `git push` dispara um deploy novo e
+   inequívoco da branch certa.
+2. Variáveis de ambiente (`DATABASE_URL`/`ADMIN_PIN`/`CORS_ORIGINS`/`VITE_API_URL`) salvas só pro
+   ambiente **Production** por padrão — nosso deploy é **Preview** (branch não-default), então
+   nada chegava na função. Corrigido configurando cada variável também pro ambiente Preview
+   (`Settings → Environments → Preview`, caminho que evitou um dropdown de múltipla-seleção que
+   não estava clicável na UI).
+3. `VITE_API_URL` foi salvo com o texto `VITE_API_URLhttps://...` (nome da variável colado junto
+   do valor, dentro do campo Value) — o app tentava resolver isso como caminho relativo à própria
+   origem do frontend. Corrigido deixando só a URL no campo Value.
+4. **Deployment Protection** (SSO do Vercel) bloqueava qualquer acesso não-autenticado a deploys
+   de Preview por padrão (erro 302 pra `vercel.com/sso-api`) — desativado (`Settings → Deployment
+   Protection → Require Log In` desligado) nos dois projetos, só pra viabilizar teste externo via
+   `curl`/navegador automatizado durante esta fase.
+
+**Testado de ponta a ponta, com dados reais de produção**, via `curl` e depois pelo navegador de
+verdade: login admin (PIN), criar/consultar usuário real (e-mails `@totvs.com.br` migrados),
+CRUD genérico em `clientes` (601 registros reais, nomes/CNPJs verdadeiros) com enforcement de
+permissão (200 com `perm_leitura`, 403 sem), e **login completo pela UI** com uma usuária real
+(Vanessa Affonso) — caiu corretamente na tela de "Troca de senha obrigatória", confirmando que
+frontend (Vercel) → backend (Vercel) → Postgres (Supabase) funcionam juntos de ponta a ponta.
+Credenciais de teste geradas durante a validação foram trocadas por senhas aleatórias descartadas
+ao final (permissão de teste também revogada) — nenhum acesso de teste deixado ativo no banco real.
+
+**URLs de preview atuais** (branch `migration/postgres-vercel`, protection desligada por ora):
+- Backend: `https://webcrm-git-migration-postgres-vercel-webcrm.vercel.app`
+- Frontend: `https://webcrm-wuah-git-migration-postgres-vercel-webcrm.vercel.app`
+
+**Ainda falta**: Fase 10 (virada de produção — domínio definitivo, reativar Deployment
+Protection adequadamente, atualizar `CORS_ORIGINS`/`VITE_API_URL` pras URLs de produção final,
+merge da branch, decomissionar a VM e o Firebase Hosting).
