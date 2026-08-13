@@ -11,6 +11,11 @@ interface ApiError {
   error: string;
 }
 
+export interface ParametroStorageMenu {
+  menu_key: string;
+  pasta: string;
+}
+
 async function request<T>(path: string, token: string | null, options?: RequestInit): Promise<T> {
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (token) headers["Authorization"] = `Bearer ${token}`;
@@ -53,6 +58,15 @@ export const adminApi = {
     request<void>(`/api/usuarios/${userId}/senha`, token, {
       method: "PUT",
       body: JSON.stringify({ novaSenha }),
+    }),
+  // parametros_storage_menu: pasta (dentro do bucket do Supabase Storage) usada por cada
+  // menu com upload de anexo -- rota dedicada (não é PK composta, mas é admin-only, fora
+  // do padrão de sessão de usuário do resourceRouter genérico).
+  listParametrosStorage: (token: string) => request<ParametroStorageMenu[]>("/api/parametros_storage_menu", token),
+  updateParametroStorage: (token: string, menuKey: string, pasta: string) =>
+    request<ParametroStorageMenu>(`/api/parametros_storage_menu/${encodeURIComponent(menuKey)}`, token, {
+      method: "PUT",
+      body: JSON.stringify({ pasta }),
     }),
   // usuarios_permissoes_menu tem PK composta (user_id, menu_key) -- usa rota dedicada do backend
   updatePermissaoMenu: <T>(

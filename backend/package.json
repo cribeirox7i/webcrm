@@ -9,7 +9,7 @@
     "build": "tsc -p ."
   },
   "dependencies": {
-    "@google-cloud/storage": "^7.14.0",
+    "@supabase/supabase-js": "^2.112.3",
     "@types/nodemailer": "^8.0.1",
     "cors": "^2.8.5",
     "express": "^4.21.2",

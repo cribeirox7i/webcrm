@@ -3,6 +3,7 @@ import multer from "multer";
 import crypto from "node:crypto";
 import { query } from "../db";
 import { deleteObject, getSignedDownloadUrl, isStorageConfigured, uploadBuffer } from "../storage";
+import { getPastaStorage } from "./parametrosStorage";
 import { bloqueado } from "../permissaoResource";
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
@@ -23,7 +24,7 @@ export const propostaAnexoRouter = Router();
 
 propostaAnexoRouter.post("/propostas/:id/anexo", upload.single("file"), async (req, res) => {
   if (!isStorageConfigured()) {
-    res.status(400).json({ error: "Armazenamento de arquivos não configurado (variável GCS_BUCKET ausente no backend)" });
+    res.status(400).json({ error: "Armazenamento de arquivos não configurado (variáveis SUPABASE_URL/SUPABASE_SERVICE_ROLE_KEY ausentes no backend)" });
     return;
   }
   const file = req.file;
@@ -41,7 +42,8 @@ propostaAnexoRouter.post("/propostas/:id/anexo", upload.single("file"), async (r
   }
   if (await bloqueado(req, res, "propostas", "perm_edicao")) return;
 
-  const objectPath = `propostas/${proposta.proposta_id}/${Date.now()}-${crypto.randomBytes(6).toString("hex")}-${sanitizeFilename(
+  const pasta = await getPastaStorage("propostas");
+  const objectPath = `${pasta}/${proposta.proposta_id}/${Date.now()}-${crypto.randomBytes(6).toString("hex")}-${sanitizeFilename(
     file.originalname
   )}`;
 
@@ -77,7 +79,7 @@ propostaAnexoRouter.get("/propostas/:id/anexo/download", async (req, res) => {
   }
 
   if (!isStorageConfigured()) {
-    res.status(400).json({ error: "Armazenamento de arquivos não configurado (variável GCS_BUCKET ausente no backend)" });
+    res.status(400).json({ error: "Armazenamento de arquivos não configurado (variáveis SUPABASE_URL/SUPABASE_SERVICE_ROLE_KEY ausentes no backend)" });
     return;
   }
 

@@ -51,6 +51,24 @@ export const api = {
       : "";
     return request<ListResponse<T>>(`/api/${resource}${qs}`);
   },
+  /** Igual a `list`, mas busca TODAS as páginas (respeitando o `total` devolvido pelo
+   * backend) em vez de confiar que tudo cabe num único request de `limit` linhas --
+   * necessário pra recursos que podem passar do MAX_LIMIT do backend (20 mil linhas/req),
+   * como `consumo_ana` de um cliente com muita transação num mês. */
+  listAll: async <T>(resource: string, params?: Record<string, string | number>): Promise<T[]> => {
+    const pageSize = Number(params?.limit) || 20000;
+    let offset = 0;
+    const all: T[] = [];
+    for (;;) {
+      const pageParams = new URLSearchParams();
+      Object.entries({ ...params, limit: pageSize, offset }).forEach(([k, v]) => pageParams.set(k, String(v)));
+      const page = await request<ListResponse<T>>(`/api/${resource}?${pageParams.toString()}`);
+      all.push(...page.data);
+      offset += page.data.length;
+      if (page.data.length === 0 || offset >= page.total) break;
+    }
+    return all;
+  },
   get: <T>(resource: string, id: number | string) => request<T>(`/api/${resource}/${id}`),
   create: <T>(resource: string, body: Record<string, unknown>) =>
     request<T>(`/api/${resource}`, { method: "POST", body: JSON.stringify(body) }),

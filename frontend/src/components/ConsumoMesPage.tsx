@@ -48,14 +48,14 @@ export function ConsumoMesPage({ cartMesId, cartAnoMes, onBack, onAbrirAlertaPre
     setLoading(true);
     setLoadError(null);
     try {
-      const [precosRes, precosClienteRes, clientesRes, produtosRes] = await Promise.all([
-        api.list<PrecosClienteMesAtual>("precos_cliente_mes_atual", { cart_mes_id: cartMesId, limit: 20000 }),
-        api.list<PrecosCliente>("precos_cliente", { cart_mes_id: cartMesId, limit: 20000 }),
+      const [precos, precosCliente, clientesRes, produtosRes] = await Promise.all([
+        api.listAll<PrecosClienteMesAtual>("precos_cliente_mes_atual", { cart_mes_id: cartMesId }),
+        api.listAll<PrecosCliente>("precos_cliente", { cart_mes_id: cartMesId }),
         api.list<Cliente>("clientes", { limit: 20000 }),
         api.list<Produto>("produtos", { limit: 20000 }),
       ]);
-      setPrecos(precosRes.data);
-      setPrecosCliente(precosClienteRes.data);
+      setPrecos(precos);
+      setPrecosCliente(precosCliente);
       setClientes(clientesRes.data);
       setProdutos(produtosRes.data);
     } catch (err) {

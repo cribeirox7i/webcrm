@@ -5,6 +5,7 @@ import { MENUS } from "../menus";
 
 interface UsuarioPermissoesMenuPageProps {
   usuario: Usuario;
+  todosUsuarios: Usuario[];
   token: string;
   onBack: () => void;
   onInvalidToken: () => void;
@@ -14,12 +15,19 @@ type PermFlags = { perm_leitura: boolean; perm_insercao: boolean; perm_edicao: b
 
 const SEM_PERMISSAO: PermFlags = { perm_leitura: false, perm_insercao: false, perm_edicao: false, perm_exclusao: false };
 
-export function UsuarioPermissoesMenuPage({ usuario, token, onBack, onInvalidToken }: UsuarioPermissoesMenuPageProps) {
+export function UsuarioPermissoesMenuPage({ usuario, todosUsuarios, token, onBack, onInvalidToken }: UsuarioPermissoesMenuPageProps) {
   const [permissoes, setPermissoes] = useState<UsuarioPermissaoMenu[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [savingKey, setSavingKey] = useState<string | null>(null);
   const [savingAll, setSavingAll] = useState(false);
+  const [herdarDeId, setHerdarDeId] = useState<string>("");
+  const [herdando, setHerdando] = useState(false);
+
+  const outrosUsuarios = useMemo(
+    () => todosUsuarios.filter((u) => u.user_id !== usuario.user_id).sort((a, b) => a.user_nome.localeCompare(b.user_nome)),
+    [todosUsuarios, usuario.user_id]
+  );
 
   function handleAuthError(err: unknown): boolean {
     if ((err as Error).message === "não autenticado") {
@@ -118,6 +126,46 @@ export function UsuarioPermissoesMenuPage({ usuario, token, onBack, onInvalidTok
     }
   }
 
+  /** Copia as 4 permissões de TODOS os menus de outro usuário (`herdarDeId`) pro usuário
+   * atual, num tiro só -- útil quando um usuário novo deve ter o mesmo acesso de outro já
+   * configurado, sem precisar remarcar linha por linha. Menu que o usuário de origem não
+   * tem linha em `usuarios_permissoes_menu` é tratado como SEM_PERMISSAO (oculto). */
+  async function handleHerdar() {
+    if (!herdarDeId) return;
+    setHerdando(true);
+    setError(null);
+    try {
+      const origemRes = await adminApi.list<UsuarioPermissaoMenu>("usuarios_permissoes_menu", token, {
+        user_id: Number(herdarDeId),
+        limit: 1000,
+      });
+      const origemByMenu = new Map<string, PermFlags>();
+      origemRes.data.forEach((p) =>
+        origemByMenu.set(p.menu_key, {
+          perm_leitura: !!p.perm_leitura,
+          perm_insercao: !!p.perm_insercao,
+          perm_edicao: !!p.perm_edicao,
+          perm_exclusao: !!p.perm_exclusao,
+        })
+      );
+      const updated = await Promise.all(
+        MENUS.map((menu) =>
+          adminApi.updatePermissaoMenu<UsuarioPermissaoMenu>(
+            token,
+            usuario.user_id,
+            menu.key,
+            origemByMenu.get(menu.key) ?? SEM_PERMISSAO
+          )
+        )
+      );
+      setPermissoes(updated);
+    } catch (err) {
+      if (!handleAuthError(err)) setError((err as Error).message);
+    } finally {
+      setHerdando(false);
+    }
+  }
+
   return (
     <div className="page">
       <div className="dashboard-header">
@@ -144,6 +192,23 @@ export function UsuarioPermissoesMenuPage({ usuario, token, onBack, onInvalidTok
         </button>
         <button disabled={savingAll || loading} onClick={() => handleToggleTudo(false)}>
           {savingAll ? "Salvando..." : "Desmarcar todas as permissões"}
+        </button>
+      </div>
+
+      <div className="modal-actions" style={{ justifyContent: "flex-start", marginBottom: 10, gap: 8 }}>
+        <label htmlFor="herdar-de" style={{ alignSelf: "center" }}>
+          Herdar de:
+        </label>
+        <select id="herdar-de" value={herdarDeId} onChange={(e) => setHerdarDeId(e.target.value)} disabled={herdando || loading}>
+          <option value="">Selecione um usuário...</option>
+          {outrosUsuarios.map((u) => (
+            <option key={u.user_id} value={u.user_id}>
+              {u.user_nome} ({u.user_mail})
+            </option>
+          ))}
+        </select>
+        <button disabled={!herdarDeId || herdando || loading} onClick={handleHerdar}>
+          {herdando ? "Copiando..." : "Copiar permissões"}
         </button>
       </div>
 

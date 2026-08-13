@@ -3,6 +3,7 @@ import multer from "multer";
 import crypto from "node:crypto";
 import { query } from "../db";
 import { deleteObject, getSignedDownloadUrl, isStorageConfigured, uploadBuffer } from "../storage";
+import { getPastaStorage } from "./parametrosStorage";
 import { bloqueado } from "../permissaoResource";
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
@@ -27,7 +28,7 @@ export const anexosRouter = Router();
 
 anexosRouter.post("/anexos/upload", upload.single("file"), async (req, res) => {
   if (!isStorageConfigured()) {
-    res.status(400).json({ error: "Armazenamento de arquivos não configurado (variável GCS_BUCKET ausente no backend)" });
+    res.status(400).json({ error: "Armazenamento de arquivos não configurado (variáveis SUPABASE_URL/SUPABASE_SERVICE_ROLE_KEY ausentes no backend)" });
     return;
   }
   const file = req.file;
@@ -41,10 +42,12 @@ anexosRouter.post("/anexos/upload", upload.single("file"), async (req, res) => {
     res.status(400).json({ error: "informe cliente_id ou fornecedor_id" });
     return;
   }
-  if (await bloqueado(req, res, clienteId ? "clientes" : "fornecedores", "perm_insercao")) return;
+  const menuKey = clienteId ? "clientes" : "fornecedores";
+  if (await bloqueado(req, res, menuKey, "perm_insercao")) return;
 
+  const pasta = await getPastaStorage(menuKey);
   const entityFolder = clienteId ? `clientes/${clienteId}` : `fornecedores/${fornecedorId}`;
-  const objectPath = `anexos/${entityFolder}/${Date.now()}-${crypto.randomBytes(6).toString("hex")}-${sanitizeFilename(
+  const objectPath = `${pasta}/${entityFolder}/${Date.now()}-${crypto.randomBytes(6).toString("hex")}-${sanitizeFilename(
     file.originalname
   )}`;
   const nome = (req.body.anexo_nome as string | undefined)?.trim() || file.originalname;
@@ -82,7 +85,7 @@ anexosRouter.get("/anexos/:id/download", async (req, res) => {
   }
 
   if (!isStorageConfigured()) {
-    res.status(400).json({ error: "Armazenamento de arquivos não configurado (variável GCS_BUCKET ausente no backend)" });
+    res.status(400).json({ error: "Armazenamento de arquivos não configurado (variáveis SUPABASE_URL/SUPABASE_SERVICE_ROLE_KEY ausentes no backend)" });
     return;
   }
 

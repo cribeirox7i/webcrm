@@ -398,6 +398,14 @@ CREATE TABLE parametros_gerais (
 );
 INSERT INTO parametros_gerais (param_id) VALUES (1);
 
+-- Pasta (dentro do bucket do Supabase Storage) usada por cada menu com upload de anexo --
+-- configurável no Admin em vez de fixa no código. Menu sem linha aqui cai no próprio
+-- menu_key como pasta default (ver backend/src/routes/parametrosStorage.ts).
+CREATE TABLE parametros_storage_menu (
+    menu_key    TEXT PRIMARY KEY,
+    pasta       TEXT NOT NULL
+);
+
 -- ============================================================
 -- REFERÊNCIA / ENUM (tabelas pequenas, listas fixas)
 -- ============================================================

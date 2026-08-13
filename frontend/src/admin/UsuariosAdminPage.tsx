@@ -177,6 +177,7 @@ export function UsuariosAdminPage({ token, onLogout }: UsuariosAdminPageProps) {
     return (
       <UsuarioPermissoesMenuPage
         usuario={permissoesFor}
+        todosUsuarios={usuarios}
         token={token}
         onBack={() => setPermissoesFor(null)}
         onInvalidToken={onLogout}

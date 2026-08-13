@@ -32,13 +32,12 @@ export function ConsumoAnaDetalhePage({
     setLoading(true);
     setLoadError(null);
     try {
-      const res = await api.list<ConsumoAna>("consumo_ana", {
+      const registros = await api.listAll<ConsumoAna>("consumo_ana", {
         cliente_id: clienteId,
         produto_id: produtoId,
         cart_mes_id: cartMesId,
-        limit: 20000,
       });
-      setRegistros(res.data);
+      setRegistros(registros);
     } catch (err) {
       setLoadError((err as Error).message);
     } finally {
