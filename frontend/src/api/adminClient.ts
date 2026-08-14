@@ -16,6 +16,39 @@ export interface ParametroStorageMenu {
   pasta: string;
 }
 
+/** Uma linha da planilha de medição, já mapeada pelas colunas (ver ImportarCarteiraPage). */
+export interface LinhaMedicao {
+  nome: string | null;
+  cnpj: string | null;
+  qtd: unknown;
+  vlr: unknown;
+  pdd: unknown;
+  semPdd: unknown;
+  fat: unknown;
+  qtdMes: unknown;
+  emprestimosMes: unknown;
+  ultDef: unknown;
+  dataBase: unknown;
+  datExtracao: unknown;
+  rds: string | null;
+  db: string | null;
+  prod: string | null;
+}
+
+export interface RelatorioImportacao {
+  simulado: boolean;
+  mes: string;
+  linhasNaPlanilha: number;
+  aInserir: number;
+  porCnpj: number;
+  porNome: { nome: string; cnpj: string; clienteId: number; clienteNome: string }[];
+  porDatabase: { nome: string; db: string; clienteId: number; clienteNome: string }[];
+  ignorados: { nome: string; cnpj: string; db: string; motivo: string }[];
+  linhasExistentesNoMes: number;
+  inseridos?: number;
+  apagados?: number;
+}
+
 async function request<T>(path: string, token: string | null, options?: RequestInit): Promise<T> {
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (token) headers["Authorization"] = `Bearer ${token}`;
@@ -67,6 +100,13 @@ export const adminApi = {
     request<ParametroStorageMenu>(`/api/parametros_storage_menu/${encodeURIComponent(menuKey)}`, token, {
       method: "PUT",
       body: JSON.stringify({ pasta }),
+    }),
+  // importação da planilha de medição -> carteira. Sempre chamada 2x: `simular: true` devolve o
+  // relatório sem gravar nada, e só depois da confirmação do usuário vai com `simular: false`.
+  importarCarteira: (token: string, cartMesId: number, linhas: LinhaMedicao[], simular: boolean) =>
+    request<RelatorioImportacao>("/api/admin/importar-carteira", token, {
+      method: "POST",
+      body: JSON.stringify({ cartMesId, linhas, simular }),
     }),
   // usuarios_permissoes_menu tem PK composta (user_id, menu_key) -- usa rota dedicada do backend
   updatePermissaoMenu: <T>(

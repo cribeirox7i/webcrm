@@ -4,10 +4,11 @@ import { UsuariosAdminPage } from "./UsuariosAdminPage";
 import { CartMesAdminPage } from "./CartMesAdminPage";
 import { ParametrosGeraisPage } from "./ParametrosGeraisPage";
 import { ParametrosStoragePage } from "./ParametrosStoragePage";
+import { ImportarCarteiraPage } from "./ImportarCarteiraPage";
 
 const TOKEN_KEY = "webcrm_admin_token";
 
-type AdminPage = "usuarios" | "carteira" | "parametros" | "armazenamento";
+type AdminPage = "usuarios" | "carteira" | "importar" | "parametros" | "armazenamento";
 
 export function AdminApp() {
   const [token, setToken] = useState<string | null>(() => localStorage.getItem(TOKEN_KEY));
@@ -36,6 +37,9 @@ export function AdminApp() {
           <button className={page === "carteira" ? "active" : ""} onClick={() => setPage("carteira")}>
             Carteira
           </button>
+          <button className={page === "importar" ? "active" : ""} onClick={() => setPage("importar")}>
+            Importar Carteira
+          </button>
           <button className={page === "parametros" ? "active" : ""} onClick={() => setPage("parametros")}>
             Parâmetros
           </button>
@@ -51,6 +55,7 @@ export function AdminApp() {
       <main>
         {page === "usuarios" && <UsuariosAdminPage token={token} onLogout={handleLogout} />}
         {page === "carteira" && <CartMesAdminPage token={token} onLogout={handleLogout} />}
+        {page === "importar" && <ImportarCarteiraPage token={token} onLogout={handleLogout} />}
         {page === "parametros" && <ParametrosGeraisPage token={token} onLogout={handleLogout} />}
         {page === "armazenamento" && <ParametrosStoragePage token={token} onLogout={handleLogout} />}
       </main>
