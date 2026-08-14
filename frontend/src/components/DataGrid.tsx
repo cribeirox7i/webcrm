@@ -32,6 +32,14 @@ export interface DataGridFilter<T> {
   value: (row: T) => string;
 }
 
+/** Checkbox por linha + "selecionar todas" (considerando só as linhas visíveis após busca/filtro).
+ * Estado (`selectedIds`) mora no componente pai -- o DataGrid só renderiza e dispara os callbacks. */
+export interface DataGridSelection {
+  selectedIds: Set<string | number>;
+  onToggle: (id: string | number) => void;
+  onToggleAll: (ids: (string | number)[]) => void;
+}
+
 interface DataGridProps<T> {
   data: T[];
   columns: DataGridColumn<T>[];
@@ -54,6 +62,8 @@ interface DataGridProps<T> {
   onExportPdf?: () => void;
   /** Valores iniciais dos dropdowns de filtro (ex.: abrir Portfólio já filtrado em "ANDAMENTO"). */
   defaultFilterValues?: Record<string, string>;
+  /** Ativa a coluna de checkbox (seleção múltipla) -- omitir pra grid sem seleção (padrão). */
+  selection?: DataGridSelection;
 }
 
 const columnHelper = createColumnHelper<Record<string, unknown>>();
@@ -75,6 +85,7 @@ export function DataGrid<T>({
   onRowClick,
   onExportPdf,
   defaultFilterValues,
+  selection,
 }: DataGridProps<T>) {
   const [search, setSearch] = useState("");
   const [filterValues, setFilterValues] = useState<Record<string, string>>(defaultFilterValues ?? {});
@@ -132,6 +143,37 @@ export function DataGrid<T>({
         },
       })
     );
+    if (selection) {
+      const filteredIds = filtered.map((row) => getRowId(row as T));
+      const allSelected = filteredIds.length > 0 && filteredIds.every((id) => selection.selectedIds.has(id));
+      cols.unshift(
+        columnHelper.display({
+          id: "__selection",
+          size: 40,
+          minSize: 40,
+          header: () => (
+            <input
+              type="checkbox"
+              checked={allSelected}
+              onChange={() => selection.onToggleAll(filteredIds)}
+              aria-label="Selecionar todas"
+            />
+          ),
+          cell: (info) => {
+            const id = getRowId(info.row.original as T);
+            return (
+              <input
+                type="checkbox"
+                checked={selection.selectedIds.has(id)}
+                onChange={() => selection.onToggle(id)}
+                onClick={(e) => e.stopPropagation()}
+                aria-label="Selecionar linha"
+              />
+            );
+          },
+        })
+      );
+    }
     if (renderActions) {
       cols.push(
         columnHelper.display({
@@ -144,7 +186,7 @@ export function DataGrid<T>({
       );
     }
     return cols;
-  }, [columns, renderActions, actionsWidth]);
+  }, [columns, renderActions, actionsWidth, selection, filtered, getRowId]);
 
   const table = useReactTable({
     data: filtered as Record<string, unknown>[],

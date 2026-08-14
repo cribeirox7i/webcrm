@@ -52,7 +52,10 @@ async function loadCoverLogoAsDataUrl(): Promise<{ dataUrl: string; width: numbe
 async function addCoverPage(doc: jsPDF, title: string, lines: { text: string; fontSize?: number }[]) {
   const pageWidth = doc.internal.pageSize.getWidth();
   const logo = await loadCoverLogoAsDataUrl();
-  const logoWidth = 90;
+  // 130mm -- aumentado (era 90mm) pra ajudar a legibilidade do texto "evertec" em cinza
+  // claro da logo oficial (baixo contraste em fundo branco por design deles, não alterado
+  // aqui -- ver discussão sobre manter o arquivo exatamente como está na URL configurada).
+  const logoWidth = 130;
   const logoHeight = (logo.height / logo.width) * logoWidth;
   doc.addImage(logo.dataUrl, "PNG", (pageWidth - logoWidth) / 2, 60, logoWidth, logoHeight);
 

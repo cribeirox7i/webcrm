@@ -37,6 +37,23 @@ export function FaturamentoMesPage({ cartMesId, cartAnoMes, onBack }: Faturament
   const [editing, setEditing] = useState<FaturamentoDetalhe | null>(null);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+
+  function toggleSelected(id: string | number) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id as number)) next.delete(id as number);
+      else next.add(id as number);
+      return next;
+    });
+  }
+
+  function toggleSelectedAll(ids: (string | number)[]) {
+    setSelectedIds((prev) => {
+      const allSelected = ids.length > 0 && ids.every((id) => prev.has(id as number));
+      return allSelected ? new Set() : new Set(ids as number[]);
+    });
+  }
 
   async function loadAll() {
     setLoading(true);
@@ -150,21 +167,31 @@ export function FaturamentoMesPage({ cartMesId, cartAnoMes, onBack }: Faturament
     );
   }
 
+  // COD_PROD e MENSAGEM são constantes fixas dessa integração (confirmadas com o usuário a
+  // partir de 11 exportações reais anteriores, idênticas em todo cliente/valor) -- não vêm
+  // de nenhum produto específico, já que cada linha do CSV representa o TOTAL a faturar do
+  // cliente no mês (a própria linha da grid), não um item de venda avulso.
+  const PROTHEUS_COD_PROD = "0623301141";
+  const PROTHEUS_MENSAGEM = "LIBERACRED";
+
+  function faturamentoParaLinhaProtheus(f: FaturamentoDetalhe) {
+    return {
+      cgc: (f.cliente_cnpj_fat ?? f.cliente_cnpj ?? "").replace(/\D/g, ""),
+      codProd: PROTHEUS_COD_PROD,
+      valorUnit: valorAFaturar(f),
+      condPag: f.fat_cod_venc_protheus ?? "",
+      mensagem: PROTHEUS_MENSAGEM,
+    };
+  }
+
   function handleCsvProtheus(f: FaturamentoDetalhe) {
-    const cgc = (f.cliente_cnpj_fat ?? f.cliente_cnpj ?? "").replace(/\D/g, "");
-    const linhas = precosMesAtual
-      .filter((p) => p.cliente_id === f.cliente_id)
-      .map((p) => {
-        const produto = produtoById.get(p.produto_id);
-        return {
-          cgc,
-          codProd: produto?.produto_sku ?? "",
-          valorUnit: p.pc_mes_atu_vlr_final_liq ?? 0,
-          condPag: f.fat_cod_venc_protheus ?? "",
-          mensagem: produto?.produto_nome ?? "",
-        };
-      });
-    exportCsvProtheus(`csv_protheus_${f.cliente_id}_${cartAnoMes.replace("/", "-")}`, linhas);
+    exportCsvProtheus(`csv_protheus_${f.cliente_id}_${cartAnoMes.replace("/", "-")}`, [faturamentoParaLinhaProtheus(f)]);
+  }
+
+  function handleCsvProtheusSelecionados() {
+    const selecionados = faturamentos.filter((f) => selectedIds.has(f.fat_id));
+    if (!selecionados.length) return;
+    exportCsvProtheus(`csv_protheus_${cartAnoMes.replace("/", "-")}`, selecionados.map(faturamentoParaLinhaProtheus));
   }
 
   const totais = useMemo(
@@ -267,6 +294,12 @@ export function FaturamentoMesPage({ cartMesId, cartAnoMes, onBack }: Faturament
         loading={loading}
         exportFilename={`faturamento_${cartAnoMes.replace("/", "-")}`}
         actionsWidth={140}
+        selection={{ selectedIds, onToggle: toggleSelected, onToggleAll: toggleSelectedAll }}
+        toolbarExtra={
+          <button disabled={selectedIds.size === 0} onClick={handleCsvProtheusSelecionados} title="Gera um único CSV Protheus, uma linha por linha selecionada">
+            CSV Protheus ({selectedIds.size} selecionadas)
+          </button>
+        }
         renderActions={(f) => (
           <div className="row-actions">
             {podeEditar && (
