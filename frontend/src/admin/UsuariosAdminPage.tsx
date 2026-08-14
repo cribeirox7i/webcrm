@@ -256,7 +256,7 @@ export function UsuariosAdminPage({ token, onLogout }: UsuariosAdminPageProps) {
       )}
 
       {senhaProvisoria && (
-        <div className="modal-backdrop" onClick={() => setSenhaProvisoria(null)}>
+        <div className="modal-backdrop">
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <h2>Usuário criado: {senhaProvisoria.nome}</h2>
             <p className="page-subtitle">
@@ -276,7 +276,7 @@ export function UsuariosAdminPage({ token, onLogout }: UsuariosAdminPageProps) {
       )}
 
       {definindoSenhaFor && (
-        <div className="modal-backdrop" onClick={() => setDefinindoSenhaFor(null)}>
+        <div className="modal-backdrop">
           <form className="modal" onClick={(e) => e.stopPropagation()} onSubmit={handleDefinirSenha}>
             <h2>Definir senha: {definindoSenhaFor.user_nome}</h2>
             <p className="page-subtitle">

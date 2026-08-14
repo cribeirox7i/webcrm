@@ -4,7 +4,8 @@ import type { CartMes } from "../api/types";
 import { DataGrid, type DataGridColumn, type DataGridFilter } from "../components/DataGrid";
 import { StatCards } from "../components/StatCards";
 import { CartMesForm, valuesToPayload, type CartMesFormValues } from "./CartMesForm";
-import { EditIcon, TrashIcon } from "../components/icons";
+import { ImportarCarteiraModal } from "./ImportarCarteiraModal";
+import { EditIcon, TrashIcon, UploadIcon } from "../components/icons";
 
 interface CartMesAdminPageProps {
   token: string;
@@ -19,6 +20,7 @@ export function CartMesAdminPage({ token, onLogout }: CartMesAdminPageProps) {
   const [editing, setEditing] = useState<CartMes | null | "new">(null);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [importandoPara, setImportandoPara] = useState<CartMes | null>(null);
 
   function handleAuthError(err: unknown): boolean {
     if ((err as Error).message === "não autenticado") {
@@ -126,11 +128,19 @@ export function CartMesAdminPage({ token, onLogout }: CartMesAdminPageProps) {
         filters={filters}
         loading={loading}
         exportFilename="cart_mes"
-        actionsWidth={100}
+        actionsWidth={140}
         renderActions={(m) => (
           <div className="row-actions">
             <button className="icon-btn" title="Editar" aria-label="Editar" onClick={() => setEditing(m)}>
               <EditIcon />
+            </button>
+            <button
+              className="icon-btn"
+              title="Importar planilha de medição para este mês"
+              aria-label="Importar carteira"
+              onClick={() => setImportandoPara(m)}
+            >
+              <UploadIcon />
             </button>
             <button className="icon-btn danger" title="Excluir" aria-label="Excluir" onClick={() => handleDelete(m)}>
               <TrashIcon />
@@ -154,6 +164,15 @@ export function CartMesAdminPage({ token, onLogout }: CartMesAdminPageProps) {
             setFormError(null);
           }}
           onSubmit={handleSubmit}
+        />
+      )}
+
+      {importandoPara && (
+        <ImportarCarteiraModal
+          cartMes={importandoPara}
+          token={token}
+          onClose={() => setImportandoPara(null)}
+          onLogout={onLogout}
         />
       )}
     </div>

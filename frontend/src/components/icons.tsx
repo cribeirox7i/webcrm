@@ -261,6 +261,16 @@ export function DownloadIcon() {
   );
 }
 
+export function UploadIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <path d="M12 16V4" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M7 9l5-5 5 5" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M4 19h16" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 export function PaperclipIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
