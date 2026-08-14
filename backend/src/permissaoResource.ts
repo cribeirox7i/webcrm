@@ -9,6 +9,7 @@ import { query } from "./db";
 const MENU_BY_RESOURCE: Record<string, string> = {
   clientes: "clientes",
   contatos: "contatos",
+  grupos_econ: "grupos_econ",
   propostas: "propostas",
   urls: "urls",
   servidores: "servidores",

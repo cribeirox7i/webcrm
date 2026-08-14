@@ -5,6 +5,7 @@ import { LoginPage } from "./auth/LoginPage";
 import { TrocarSenhaPage } from "./auth/TrocarSenhaPage";
 import { ClientesPage } from "./components/ClientesPage";
 import { ClienteDashboardPage } from "./components/ClienteDashboardPage";
+import { GruposEconPage } from "./components/GruposEconPage";
 import { UrlsPage } from "./components/UrlsPage";
 import { ContatosPage } from "./components/ContatosPage";
 import { ProdutosPage } from "./components/ProdutosPage";
@@ -22,6 +23,7 @@ import {
   ClientesIcon,
   UrlsIcon,
   ContatosIcon,
+  GruposEconIcon,
   ProdutosIcon,
   ServidoresIcon,
   PessoasIcon,
@@ -36,6 +38,7 @@ type Tab =
   | "clientes"
   | "urls"
   | "contatos"
+  | "grupos_econ"
   | "propostas"
   | "produtos"
   | "servidores"
@@ -53,6 +56,7 @@ const NAV_ITEMS: NavItem[] = [
     children: [
       { id: "contatos", label: "Contatos", icon: <ContatosIcon /> },
       { id: "propostas", label: "Propostas", icon: <PropostasIcon /> },
+      { id: "grupos_econ", label: "Grupos Econômicos", icon: <GruposEconIcon /> },
     ],
   },
   {
@@ -77,6 +81,7 @@ const TITLES: Record<Tab, string> = {
   clientes: "Clientes",
   urls: "URLs",
   contatos: "Contatos",
+  grupos_econ: "Grupos Econômicos",
   propostas: "Propostas",
   produtos: "Produtos",
   servidores: "Servidores",
@@ -170,6 +175,7 @@ function App() {
               ))}
             {tab === "urls" && <UrlsPage />}
             {tab === "contatos" && <ContatosPage />}
+            {tab === "grupos_econ" && <GruposEconPage />}
             {tab === "propostas" && <PropostasPage />}
             {tab === "produtos" && <ProdutosPage />}
             {tab === "servidores" && <ServidoresPage />}

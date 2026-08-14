@@ -1,6 +1,24 @@
 import { useState } from "react";
 import type { Cliente, GrupoEcon } from "../api/types";
 
+/** Máscara de CNPJ alfanumérico (Receita Federal, a partir de 2026): os 12 primeiros
+ * caracteres podem ser letra ou número, só os 2 dígitos verificadores no fim continuam
+ * numéricos -- por isso não dá mais pra usar uma máscara só-números como antes. */
+function formatCnpj(raw: string): string {
+  const alnum = raw.toUpperCase().replace(/[^A-Z0-9]/g, "");
+  const base = alnum.slice(0, 12);
+  const dv = alnum.slice(12, 14).replace(/[^0-9]/g, "");
+  const clean = (base + dv).slice(0, 14);
+  let out = "";
+  for (let i = 0; i < clean.length; i++) {
+    if (i === 2 || i === 5) out += ".";
+    else if (i === 8) out += "/";
+    else if (i === 12) out += "-";
+    out += clean[i];
+  }
+  return out;
+}
+
 export interface ClienteFormValues {
   cliente_nome: string;
   grp_id: string;
@@ -113,11 +131,14 @@ export function ClienteForm({ cliente, grupos, saving, error, onCancel, onSubmit
         </div>
 
         <div className="form-row">
-          <label htmlFor="cliente_cnpj">CNPJ</label>
+          <label htmlFor="cliente_cnpj">CNPJ *</label>
           <input
             id="cliente_cnpj"
+            required
+            placeholder="AA.AAA.AAA/AAAA-99"
+            maxLength={18}
             value={values.cliente_cnpj}
-            onChange={(e) => set("cliente_cnpj", e.target.value)}
+            onChange={(e) => set("cliente_cnpj", formatCnpj(e.target.value))}
           />
         </div>
 
@@ -125,8 +146,10 @@ export function ClienteForm({ cliente, grupos, saving, error, onCancel, onSubmit
           <label htmlFor="cliente_cnpj_fat">CNPJ faturamento</label>
           <input
             id="cliente_cnpj_fat"
+            placeholder="AA.AAA.AAA/AAAA-99"
+            maxLength={18}
             value={values.cliente_cnpj_fat}
-            onChange={(e) => set("cliente_cnpj_fat", e.target.value)}
+            onChange={(e) => set("cliente_cnpj_fat", formatCnpj(e.target.value))}
           />
         </div>
 

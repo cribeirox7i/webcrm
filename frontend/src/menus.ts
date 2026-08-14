@@ -8,6 +8,7 @@ export interface MenuDef {
 export const MENUS: MenuDef[] = [
   { key: "clientes", label: "Clientes" },
   { key: "contatos", label: "Contatos" },
+  { key: "grupos_econ", label: "Grupos Econômicos" },
   { key: "propostas", label: "Propostas" },
   { key: "urls", label: "URLs" },
   { key: "financeiro", label: "Financeiro" },

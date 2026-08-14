@@ -68,13 +68,17 @@ interface DataGridProps<T> {
 
 const columnHelper = createColumnHelper<Record<string, unknown>>();
 
+/** Identidade estável pro default de `filters` -- `filters = []` no destructuring criaria um
+ * array novo a cada render, invalidando os useMemo que dependem dele sem nenhum motivo real. */
+const NO_FILTERS: DataGridFilter<never>[] = [];
+
 export function DataGrid<T>({
   data,
   columns,
   getRowId,
   searchValue,
   searchPlaceholder = "Buscar...",
-  filters = [],
+  filters = NO_FILTERS as unknown as DataGridFilter<T>[],
   renderActions,
   actionsWidth = 150,
   toolbarExtra,
@@ -92,6 +96,24 @@ export function DataGrid<T>({
   const [sorting, setSorting] = useState<SortingState>([]);
   const [columnSizing, setColumnSizing] = useState<ColumnSizingState>({});
 
+  // As páginas passam `searchValue`/`getRowId`/`renderActions`/`selection` inline (identidade
+  // nova a cada render). Guardar em ref e ler no momento da chamada mantém o valor sempre
+  // atual SEM entrar nas listas de dependência dos useMemo abaixo -- especialmente o
+  // `tableColumns`: uma função `cell` com identidade nova faz o flexRender do TanStack tratá-la
+  // como outro componente, então o React desmonta e remonta a célula a cada render. Isso
+  // destruía foco e clique dos botões de ação (bug real: nenhum botão da tela Financeiro abria
+  // nada, o foco do Tab "piscava e sumia"), porque a remontagem impede o mousedown e o mouseup
+  // de cair no mesmo elemento -- requisito do navegador pra emitir o evento de clique.
+  const searchValueRef = useRef(searchValue);
+  searchValueRef.current = searchValue;
+  const getRowIdRef = useRef(getRowId);
+  getRowIdRef.current = getRowId;
+  const renderActionsRef = useRef(renderActions);
+  renderActionsRef.current = renderActions;
+  const selectionRef = useRef(selection);
+  selectionRef.current = selection;
+  const filteredRef = useRef<T[]>([]);
+
   const filterOptions = useMemo(() => {
     const map: Record<string, string[]> = {};
     filters.forEach((f) => {
@@ -108,14 +130,15 @@ export function DataGrid<T>({
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
     return data.filter((row) => {
-      if (term && !searchValue(row).toLowerCase().includes(term)) return false;
+      if (term && !searchValueRef.current(row).toLowerCase().includes(term)) return false;
       for (const f of filters) {
         const active = filterValues[f.id];
         if (active && f.value(row) !== active) return false;
       }
       return true;
     });
-  }, [data, search, filterValues, filters, searchValue]);
+  }, [data, search, filterValues, filters]);
+  filteredRef.current = filtered;
 
   const alignById = useMemo(() => {
     const map: Record<string, "left" | "right" | "center"> = {};
@@ -124,6 +147,11 @@ export function DataGrid<T>({
     });
     return map;
   }, [columns]);
+
+  // Só a PRESENÇA (não a identidade) dessas props muda o conjunto de colunas -- booleano em vez
+  // da função/objeto cru pra não invalidar o useMemo a cada render.
+  const hasActions = !!renderActions;
+  const hasSelection = !!selection;
 
   const tableColumns = useMemo(() => {
     const cols: ColumnDef<Record<string, unknown>, ExportCell>[] = columns.map((col) =>
@@ -143,29 +171,37 @@ export function DataGrid<T>({
         },
       })
     );
-    if (selection) {
-      const filteredIds = filtered.map((row) => getRowId(row as T));
-      const allSelected = filteredIds.length > 0 && filteredIds.every((id) => selection.selectedIds.has(id));
+    if (hasSelection) {
       cols.unshift(
         columnHelper.display({
           id: "__selection",
           size: 40,
           minSize: 40,
-          header: () => (
-            <input
-              type="checkbox"
-              checked={allSelected}
-              onChange={() => selection.onToggleAll(filteredIds)}
-              aria-label="Selecionar todas"
-            />
-          ),
-          cell: (info) => {
-            const id = getRowId(info.row.original as T);
+          // header/cell leem das refs (são chamados durante o render, então o valor é sempre o
+          // atual) -- assim a definição da coluna não precisa ser recriada quando a seleção muda.
+          header: () => {
+            const sel = selectionRef.current;
+            if (!sel) return null;
+            const ids = filteredRef.current.map((row) => getRowIdRef.current(row));
+            const allSelected = ids.length > 0 && ids.every((id) => sel.selectedIds.has(id));
             return (
               <input
                 type="checkbox"
-                checked={selection.selectedIds.has(id)}
-                onChange={() => selection.onToggle(id)}
+                checked={allSelected}
+                onChange={() => sel.onToggleAll(ids)}
+                aria-label="Selecionar todas"
+              />
+            );
+          },
+          cell: (info) => {
+            const sel = selectionRef.current;
+            if (!sel) return null;
+            const id = getRowIdRef.current(info.row.original as T);
+            return (
+              <input
+                type="checkbox"
+                checked={sel.selectedIds.has(id)}
+                onChange={() => sel.onToggle(id)}
                 onClick={(e) => e.stopPropagation()}
                 aria-label="Selecionar linha"
               />
@@ -174,19 +210,19 @@ export function DataGrid<T>({
         })
       );
     }
-    if (renderActions) {
+    if (hasActions) {
       cols.push(
         columnHelper.display({
           id: "__actions",
           header: "",
           size: actionsWidth,
           minSize: Math.min(120, actionsWidth),
-          cell: (info) => renderActions(info.row.original as T),
+          cell: (info) => renderActionsRef.current?.(info.row.original as T) ?? null,
         })
       );
     }
     return cols;
-  }, [columns, renderActions, actionsWidth, selection, filtered, getRowId]);
+  }, [columns, hasActions, hasSelection, actionsWidth]);
 
   const table = useReactTable({
     data: filtered as Record<string, unknown>[],
