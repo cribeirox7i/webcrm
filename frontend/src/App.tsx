@@ -56,7 +56,9 @@ const NAV_ITEMS: NavItem[] = [
     children: [
       { id: "contatos", label: "Contatos", icon: <ContatosIcon /> },
       { id: "propostas", label: "Propostas", icon: <PropostasIcon /> },
-      { id: "grupos_econ", label: "Grupos Econômicos", icon: <GruposEconIcon /> },
+      // label curto só na sidebar (cabe melhor no submenu) -- o título da tela e o rótulo da
+      // permissão no Admin continuam "Grupos Econômicos", ver TITLES abaixo e menus.ts.
+      { id: "grupos_econ", label: "Grupos", icon: <GruposEconIcon /> },
     ],
   },
   {
