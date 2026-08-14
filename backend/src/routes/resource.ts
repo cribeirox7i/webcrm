@@ -65,15 +65,15 @@ resourceRouter.get("/:resource", enforceMenuPermission("perm_leitura", "resource
     : "";
   const baseParams = filterEntries.map(([, value]) => value as string);
 
-  const { rows } = await query(
-    `SELECT * FROM ${quoteIdent(info.name)} ${whereSql} LIMIT $${baseParams.length + 1} OFFSET $${baseParams.length + 2}`,
-    [...baseParams, limit, offset]
-  );
-
-  const { rows: totalRows } = await query<{ n: number }>(
-    `SELECT COUNT(*)::int AS n FROM ${quoteIdent(info.name)} ${whereSql}`,
-    baseParams
-  );
+  // dados e contagem total não dependem um do outro -- rodar em paralelo em vez de sequencial
+  // corta pela metade a latência de rede até o Postgres em cada listagem.
+  const [{ rows }, { rows: totalRows }] = await Promise.all([
+    query(
+      `SELECT * FROM ${quoteIdent(info.name)} ${whereSql} LIMIT $${baseParams.length + 1} OFFSET $${baseParams.length + 2}`,
+      [...baseParams, limit, offset]
+    ),
+    query<{ n: number }>(`SELECT COUNT(*)::int AS n FROM ${quoteIdent(info.name)} ${whereSql}`, baseParams),
+  ]);
 
   res.json({ data: redactRows(info.name, rows as Record<string, unknown>[]), total: totalRows[0].n, limit, offset });
 });
