@@ -63,6 +63,9 @@ export function ImportarCarteiraModal({ cartMes, token, onClose, onLogout }: Imp
   // { índice da linha na planilha -> cliente_id escolhido à mão }, quando o usuário não
   // concorda com o cliente que a heurística (nome parecido / database) escolheu.
   const [correcoes, setCorrecoes] = useState<Record<number, number>>({});
+  // linhas da tabela "Não serão importadas" onde o usuário desmarcou "Ignorar" -- só nessas
+  // mostra o campo de escolher cliente. Marcado (ignorar) é o padrão pra toda linha de fora.
+  const [atribuindoCliente, setAtribuindoCliente] = useState<Record<number, boolean>>({});
 
   const opcoesCliente = useMemo(
     () =>
@@ -86,6 +89,7 @@ export function ImportarCarteiraModal({ cartMes, token, onClose, onLogout }: Imp
     setConcluido(null);
     setLinhas(null);
     setCorrecoes({});
+    setAtribuindoCliente({});
     setNomeArquivo(file.name);
     try {
       const wb = new ExcelJS.Workbook();
@@ -167,6 +171,7 @@ export function ImportarCarteiraModal({ cartMes, token, onClose, onLogout }: Imp
       setLinhas(null);
       setNomeArquivo("");
       setCorrecoes({});
+      setAtribuindoCliente({});
     } catch (err) {
       if (!tratarErroAuth(err)) setErro((err as Error).message);
     } finally {
@@ -320,7 +325,8 @@ export function ImportarCarteiraModal({ cartMes, token, onClose, onLogout }: Imp
               <>
                 <h3>Não serão importadas</h3>
                 <p className="page-subtitle">
-                  Se algum desses for um cliente real, escolha na coluna abaixo pra incluir a linha na importação.
+                  Por padrão, essas linhas ficam de fora. Desmarque "Ignorar" pra escolher um cliente e incluir a
+                  linha na importação.
                 </p>
                 <table className="mini-table">
                   <thead>
@@ -329,26 +335,44 @@ export function ImportarCarteiraModal({ cartMes, token, onClose, onLogout }: Imp
                       <th>CNPJ</th>
                       <th>Database</th>
                       <th>Motivo</th>
-                      <th>Atribuir cliente</th>
+                      <th>Ignorar</th>
+                      <th>Cliente</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {relatorio.ignorados.map((r) => (
-                      <tr key={r.indice}>
-                        <td>{r.nome}</td>
-                        <td>{r.cnpj}</td>
-                        <td>{r.db}</td>
-                        <td>{r.motivo}</td>
-                        <td>
-                          <SearchableSelect
-                            options={opcoesCliente}
-                            value=""
-                            onChange={(v) => v && corrigirCliente(r.indice, Number(v))}
-                            placeholder="Buscar cliente..."
-                          />
-                        </td>
-                      </tr>
-                    ))}
+                    {relatorio.ignorados.map((r) => {
+                      const atribuindo = !!atribuindoCliente[r.indice];
+                      return (
+                        <tr key={r.indice}>
+                          <td>{r.nome}</td>
+                          <td>{r.cnpj}</td>
+                          <td>{r.db}</td>
+                          <td>{r.motivo}</td>
+                          <td className="text-center">
+                            <input
+                              type="checkbox"
+                              checked={!atribuindo}
+                              aria-label={`Ignorar linha de ${r.nome || "linha sem nome"}`}
+                              onChange={(e) =>
+                                setAtribuindoCliente((prev) => ({ ...prev, [r.indice]: !e.target.checked }))
+                              }
+                            />
+                          </td>
+                          <td>
+                            {atribuindo ? (
+                              <SearchableSelect
+                                options={opcoesCliente}
+                                value=""
+                                onChange={(v) => v && corrigirCliente(r.indice, Number(v))}
+                                placeholder="Buscar cliente..."
+                              />
+                            ) : (
+                              <span className="page-subtitle">—</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </>
