@@ -113,6 +113,18 @@ importarCarteiraRouter.post("/admin/importar-carteira", async (req, res) => {
     // origem correspondente, com o cliente corrigido, pra continuar auditável no relatório.
     const corrigido = correcoesPorIndice.get(indice);
 
+    // linha sem atividade nenhuma (decisão do usuário: desprezar) -- vazio conta como zero pra
+    // esse fim. Corrigir manualmente na tabela de ignorados ainda resgata a linha, se um dia
+    // fizer sentido importar uma dessas mesmo assim.
+    const ehZero = (v: unknown) => {
+      const n = numero(v);
+      return n == null || n === 0;
+    };
+    if (ehZero(bruta.vlr) && ehZero(bruta.qtd) && ehZero(bruta.qtdMes) && !corrigido) {
+      ignorados.push({ indice, nome, cnpj, db, motivo: "Carteira, operações e operações no mês zeradas" });
+      return;
+    }
+
     const candidatos = cnpj ? porCnpj.get(cnpj) ?? [] : [];
     if (candidatos.length === 1 && !corrigido) {
       paraInserir.push({ linha: bruta, clienteId: candidatos[0].cliente_id, origem: "cnpj" });
