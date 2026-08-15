@@ -41,12 +41,14 @@ export interface RelatorioImportacao {
   linhasNaPlanilha: number;
   aInserir: number;
   porCnpj: number;
-  porNome: { nome: string; cnpj: string; clienteId: number; clienteNome: string }[];
-  porDatabase: { nome: string; db: string; clienteId: number; clienteNome: string }[];
-  ignorados: { nome: string; cnpj: string; db: string; motivo: string }[];
+  porNome: { indice: number; nome: string; cnpj: string; clienteId: number; clienteNome: string }[];
+  porDatabase: { indice: number; nome: string; db: string; clienteId: number; clienteNome: string }[];
+  ignorados: { indice: number; nome: string; cnpj: string; db: string; motivo: string }[];
   linhasExistentesNoMes: number;
   inseridos?: number;
   apagados?: number;
+  /** Só vem na simulação -- usada pra montar o dropdown de correção manual. */
+  clientes?: { cliente_id: number; cliente_nome: string }[];
 }
 
 async function request<T>(path: string, token: string | null, options?: RequestInit): Promise<T> {
@@ -103,10 +105,18 @@ export const adminApi = {
     }),
   // importação da planilha de medição -> carteira. Sempre chamada 2x: `simular: true` devolve o
   // relatório sem gravar nada, e só depois da confirmação do usuário vai com `simular: false`.
-  importarCarteira: (token: string, cartMesId: number, linhas: LinhaMedicao[], simular: boolean) =>
+  // `correcoes` é { índice da linha na planilha -> cliente_id } pras linhas em que o usuário não
+  // concordou com o cliente escolhido pela heurística (CNPJ ambíguo / achado pelo database).
+  importarCarteira: (
+    token: string,
+    cartMesId: number,
+    linhas: LinhaMedicao[],
+    simular: boolean,
+    correcoes?: Record<number, number>
+  ) =>
     request<RelatorioImportacao>("/api/admin/importar-carteira", token, {
       method: "POST",
-      body: JSON.stringify({ cartMesId, linhas, simular }),
+      body: JSON.stringify({ cartMesId, linhas, simular, correcoes }),
     }),
   // usuarios_permissoes_menu tem PK composta (user_id, menu_key) -- usa rota dedicada do backend
   updatePermissaoMenu: <T>(

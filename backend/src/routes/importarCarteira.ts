@@ -29,14 +29,28 @@ export interface LinhaMedicao {
   prod?: string | null;
 }
 
-type Origem = "cnpj" | "nome" | "database";
+type Origem = "cnpj" | "nome" | "database" | "manual";
 
 importarCarteiraRouter.post("/admin/importar-carteira", async (req, res) => {
-  const { cartMesId, linhas, simular } = (req.body ?? {}) as {
+  const { cartMesId, linhas, simular, correcoes } = (req.body ?? {}) as {
     cartMesId?: unknown;
     linhas?: unknown;
     simular?: unknown;
+    // { índice da linha na planilha -> cliente_id escolhido à mão }, quando o usuário não
+    // concorda com o cliente que a heurística escolheu (ver relatório na tela).
+    correcoes?: unknown;
   };
+
+  const correcoesPorIndice = new Map<number, number>();
+  if (correcoes && typeof correcoes === "object") {
+    Object.entries(correcoes as Record<string, unknown>).forEach(([k, v]) => {
+      const indice = Number(k);
+      const clienteId = Number(v);
+      if (Number.isInteger(indice) && Number.isInteger(clienteId) && clienteId > 0) {
+        correcoesPorIndice.set(indice, clienteId);
+      }
+    });
+  }
 
   const mesId = Number(cartMesId);
   if (!Number.isInteger(mesId) || mesId <= 0) {
@@ -84,39 +98,59 @@ importarCarteiraRouter.post("/admin/importar-carteira", async (req, res) => {
 
   // ---- classificação ----
   const paraInserir: { linha: LinhaMedicao; clienteId: number; origem: Origem }[] = [];
-  const resolvidosPorNome: { nome: string; cnpj: string; clienteId: number; clienteNome: string }[] = [];
-  const resolvidosPorDatabase: { nome: string; db: string; clienteId: number; clienteNome: string }[] = [];
-  const ignorados: { nome: string; cnpj: string; db: string; motivo: string }[] = [];
+  const resolvidosPorNome: { indice: number; nome: string; cnpj: string; clienteId: number; clienteNome: string }[] = [];
+  const resolvidosPorDatabase: { indice: number; nome: string; db: string; clienteId: number; clienteNome: string }[] = [];
+  const ignorados: { indice: number; nome: string; cnpj: string; db: string; motivo: string }[] = [];
 
-  for (const bruta of linhas as LinhaMedicao[]) {
+  const nomePorClienteId = new Map(clientes.map((c) => [c.cliente_id, c.cliente_nome]));
+
+  (linhas as LinhaMedicao[]).forEach((bruta, indice) => {
     const nome = texto(bruta.nome) ?? "";
     const cnpj = normalizaCnpj(bruta.cnpj);
     const db = texto(bruta.db) ?? "";
 
+    // correção manual do usuário vence qualquer heurística -- mas ainda aparece na tabela de
+    // origem correspondente, com o cliente corrigido, pra continuar auditável no relatório.
+    const corrigido = correcoesPorIndice.get(indice);
+
     const candidatos = cnpj ? porCnpj.get(cnpj) ?? [] : [];
-    if (candidatos.length === 1) {
+    if (candidatos.length === 1 && !corrigido) {
       paraInserir.push({ linha: bruta, clienteId: candidatos[0].cliente_id, origem: "cnpj" });
-      continue;
+      return;
     }
     if (candidatos.length > 1) {
-      const escolhido = escolhePorNome(nome, candidatos)!;
-      paraInserir.push({ linha: bruta, clienteId: escolhido.cliente_id, origem: "nome" });
-      resolvidosPorNome.push({ nome, cnpj, clienteId: escolhido.cliente_id, clienteNome: escolhido.cliente_nome });
-      continue;
+      const clienteId = corrigido ?? escolhePorNome(nome, candidatos)!.cliente_id;
+      paraInserir.push({ linha: bruta, clienteId, origem: corrigido ? "manual" : "nome" });
+      resolvidosPorNome.push({
+        indice,
+        nome,
+        cnpj,
+        clienteId,
+        clienteNome: nomePorClienteId.get(clienteId) ?? "",
+      });
+      return;
     }
     const viaDb = db ? porDatabase.get(db.toLowerCase()) : undefined;
-    if (viaDb) {
-      paraInserir.push({ linha: bruta, clienteId: viaDb.cliente_id, origem: "database" });
-      resolvidosPorDatabase.push({ nome, db, clienteId: viaDb.cliente_id, clienteNome: viaDb.cliente_nome });
-      continue;
+    if (viaDb || corrigido) {
+      const clienteId = corrigido ?? viaDb!.cliente_id;
+      paraInserir.push({ linha: bruta, clienteId, origem: corrigido ? "manual" : "database" });
+      resolvidosPorDatabase.push({
+        indice,
+        nome,
+        db,
+        clienteId,
+        clienteNome: nomePorClienteId.get(clienteId) ?? "",
+      });
+      return;
     }
     ignorados.push({
+      indice,
       nome,
       cnpj,
       db,
       motivo: cnpj ? "CNPJ não cadastrado e database sem histórico" : "linha sem CNPJ",
     });
-  }
+  });
 
   const { rows: existentes } = await query<{ n: number }>(
     "SELECT COUNT(*)::int AS n FROM carteira WHERE cart_mes_id = $1",
@@ -131,6 +165,9 @@ importarCarteiraRouter.post("/admin/importar-carteira", async (req, res) => {
     porNome: resolvidosPorNome,
     porDatabase: resolvidosPorDatabase,
     ignorados,
+    // só na simulação -- a tela usa isso pra montar o dropdown de correção manual; não precisa
+    // ir de novo na resposta de confirmação (`simular: false`), que já é o resultado final.
+    clientes: simular !== false ? clientes.map((c) => ({ cliente_id: c.cliente_id, cliente_nome: c.cliente_nome })) : undefined,
     linhasExistentesNoMes: existentes[0].n,
   };
 

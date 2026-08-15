@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import ExcelJS from "exceljs";
 import { adminApi, type LinhaMedicao, type RelatorioImportacao } from "../api/adminClient";
 import type { CartMes } from "../api/types";
+import { SearchableSelect } from "../components/SearchableSelect";
 
 interface ImportarCarteiraModalProps {
   cartMes: CartMes;
@@ -59,6 +60,17 @@ export function ImportarCarteiraModal({ cartMes, token, onClose, onLogout }: Imp
   const [concluido, setConcluido] = useState<RelatorioImportacao | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [ocupado, setOcupado] = useState(false);
+  // { índice da linha na planilha -> cliente_id escolhido à mão }, quando o usuário não
+  // concorda com o cliente que a heurística (nome parecido / database) escolheu.
+  const [correcoes, setCorrecoes] = useState<Record<number, number>>({});
+
+  const opcoesCliente = useMemo(
+    () =>
+      (relatorio?.clientes ?? [])
+        .map((c) => ({ value: String(c.cliente_id), label: `#${c.cliente_id} ${c.cliente_nome}` }))
+        .sort((a, b) => a.label.localeCompare(b.label)),
+    [relatorio?.clientes]
+  );
 
   function tratarErroAuth(err: unknown): boolean {
     if ((err as Error).message === "não autenticado") {
@@ -73,6 +85,7 @@ export function ImportarCarteiraModal({ cartMes, token, onClose, onLogout }: Imp
     setRelatorio(null);
     setConcluido(null);
     setLinhas(null);
+    setCorrecoes({});
     setNomeArquivo(file.name);
     try {
       const wb = new ExcelJS.Workbook();
@@ -112,7 +125,24 @@ export function ImportarCarteiraModal({ cartMes, token, onClose, onLogout }: Imp
     setOcupado(true);
     setErro(null);
     try {
-      setRelatorio(await adminApi.importarCarteira(token, cartMes.cart_mes_id, linhas, true));
+      setRelatorio(await adminApi.importarCarteira(token, cartMes.cart_mes_id, linhas, true, correcoes));
+    } catch (err) {
+      if (!tratarErroAuth(err)) setErro((err as Error).message);
+    } finally {
+      setOcupado(false);
+    }
+  }
+
+  /** Chamado quando o usuário troca o cliente escolhido numa linha do relatório -- guarda a
+   * correção e já reanalisa, pra ver o efeito (contagens, ignorados etc.) na hora. */
+  async function corrigirCliente(indice: number, clienteId: number) {
+    if (!linhas) return;
+    const novasCorrecoes = { ...correcoes, [indice]: clienteId };
+    setCorrecoes(novasCorrecoes);
+    setOcupado(true);
+    setErro(null);
+    try {
+      setRelatorio(await adminApi.importarCarteira(token, cartMes.cart_mes_id, linhas, true, novasCorrecoes));
     } catch (err) {
       if (!tratarErroAuth(err)) setErro((err as Error).message);
     } finally {
@@ -131,11 +161,12 @@ export function ImportarCarteiraModal({ cartMes, token, onClose, onLogout }: Imp
     setOcupado(true);
     setErro(null);
     try {
-      const rel = await adminApi.importarCarteira(token, cartMes.cart_mes_id, linhas, false);
+      const rel = await adminApi.importarCarteira(token, cartMes.cart_mes_id, linhas, false, correcoes);
       setConcluido(rel);
       setRelatorio(null);
       setLinhas(null);
       setNomeArquivo("");
+      setCorrecoes({});
     } catch (err) {
       if (!tratarErroAuth(err)) setErro((err as Error).message);
     } finally {
@@ -189,6 +220,7 @@ export function ImportarCarteiraModal({ cartMes, token, onClose, onLogout }: Imp
             <p className="page-subtitle">
               {relatorio.linhasNaPlanilha} linhas na planilha · <strong>{relatorio.aInserir} serão gravadas</strong> ·{" "}
               {relatorio.ignorados.length} ficam de fora
+              {ocupado && " · atualizando..."}
               {relatorio.linhasExistentesNoMes > 0 && (
                 <>
                   {" "}
@@ -232,12 +264,18 @@ export function ImportarCarteiraModal({ cartMes, token, onClose, onLogout }: Imp
                     </tr>
                   </thead>
                   <tbody>
-                    {relatorio.porNome.map((r, i) => (
-                      <tr key={i}>
+                    {relatorio.porNome.map((r) => (
+                      <tr key={r.indice}>
                         <td>{r.nome}</td>
                         <td>{r.cnpj}</td>
                         <td>
-                          #{r.clienteId} {r.clienteNome}
+                          <SearchableSelect
+                            options={opcoesCliente}
+                            value={String(r.clienteId)}
+                            onChange={(v) => v && corrigirCliente(r.indice, Number(v))}
+                            allowEmpty={false}
+                            placeholder="Buscar cliente..."
+                          />
                         </td>
                       </tr>
                     ))}
@@ -258,12 +296,18 @@ export function ImportarCarteiraModal({ cartMes, token, onClose, onLogout }: Imp
                     </tr>
                   </thead>
                   <tbody>
-                    {relatorio.porDatabase.map((r, i) => (
-                      <tr key={i}>
+                    {relatorio.porDatabase.map((r) => (
+                      <tr key={r.indice}>
                         <td>{r.nome}</td>
                         <td>{r.db}</td>
                         <td>
-                          #{r.clienteId} {r.clienteNome}
+                          <SearchableSelect
+                            options={opcoesCliente}
+                            value={String(r.clienteId)}
+                            onChange={(v) => v && corrigirCliente(r.indice, Number(v))}
+                            allowEmpty={false}
+                            placeholder="Buscar cliente..."
+                          />
                         </td>
                       </tr>
                     ))}
@@ -275,6 +319,9 @@ export function ImportarCarteiraModal({ cartMes, token, onClose, onLogout }: Imp
             {relatorio.ignorados.length > 0 && (
               <>
                 <h3>Não serão importadas</h3>
+                <p className="page-subtitle">
+                  Se algum desses for um cliente real, escolha na coluna abaixo pra incluir a linha na importação.
+                </p>
                 <table className="mini-table">
                   <thead>
                     <tr>
@@ -282,15 +329,24 @@ export function ImportarCarteiraModal({ cartMes, token, onClose, onLogout }: Imp
                       <th>CNPJ</th>
                       <th>Database</th>
                       <th>Motivo</th>
+                      <th>Atribuir cliente</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {relatorio.ignorados.map((r, i) => (
-                      <tr key={i}>
+                    {relatorio.ignorados.map((r) => (
+                      <tr key={r.indice}>
                         <td>{r.nome}</td>
                         <td>{r.cnpj}</td>
                         <td>{r.db}</td>
                         <td>{r.motivo}</td>
+                        <td>
+                          <SearchableSelect
+                            options={opcoesCliente}
+                            value=""
+                            onChange={(v) => v && corrigirCliente(r.indice, Number(v))}
+                            placeholder="Buscar cliente..."
+                          />
+                        </td>
                       </tr>
                     ))}
                   </tbody>
