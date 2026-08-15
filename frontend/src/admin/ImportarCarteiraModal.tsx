@@ -145,8 +145,10 @@ export function ImportarCarteiraModal({ cartMes, token, onClose, onLogout }: Imp
 
   return (
     <div className="modal-backdrop">
-      <div className="modal" style={{ width: 880, maxWidth: "100%" }}>
+      <div className="modal modal-fixo" style={{ width: 880, maxWidth: "100%" }}>
         <h2>Importar carteira — {cartMes.cart_ano_mes}</h2>
+
+        <div className="modal-corpo">
         <p className="page-subtitle">
           O cliente é identificado pelo CNPJ; quando o CNPJ não resolve, o sistema tenta pelo nome do
           database usando o histórico da carteira. Nada é gravado antes de você conferir.
@@ -297,6 +299,7 @@ export function ImportarCarteiraModal({ cartMes, token, onClose, onLogout }: Imp
             )}
           </>
         )}
+        </div>
 
         <div className="modal-actions">
           <button type="button" onClick={onClose} disabled={ocupado}>

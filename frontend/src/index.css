@@ -1350,6 +1350,28 @@ tbody tr:hover td {
   width: 760px;
 }
 
+/* Modal de conteúdo longo (ex.: relatório da importação de carteira): em vez de deixar o
+   modal inteiro rolar via max-height (que depende do cálculo de vh e ficou frágil com o
+   zoom global de 80%), separa em 3 faixas -- título e botões fixos, só o corpo rola. O
+   .modal-corpo tem max-height próprio ALÉM do flex:1, pra garantir uma região rolável
+   mesmo se a altura do pai não ficar limitada por algum motivo. */
+.modal-fixo {
+  overflow: hidden;
+}
+
+.modal-corpo {
+  flex: 1;
+  min-height: 0;
+  max-height: calc(65vh / 0.8);
+  overflow-y: auto;
+  overflow-x: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  /* respiro pra barra de rolagem não colar no conteúdo */
+  padding-right: 4px;
+}
+
 .alert-btn {
   display: flex;
   align-items: center;
