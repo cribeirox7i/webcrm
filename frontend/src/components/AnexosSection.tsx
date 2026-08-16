@@ -3,7 +3,8 @@ import { api } from "../api/client";
 import type { Anexo } from "../api/types";
 import { DataGrid, type DataGridColumn } from "./DataGrid";
 import { AnexoUploadForm } from "./AnexoUploadForm";
-import { DownloadIcon, TrashIcon } from "./icons";
+import { ExpandedGridModal } from "./ExpandedGridModal";
+import { DownloadIcon, ExpandIcon, TrashIcon } from "./icons";
 import { usePermissao } from "../auth/usePermissao";
 
 function formatDate(v: string | null): string {
@@ -30,6 +31,7 @@ export function AnexosSection({ filterKey, filterId, menuKey }: AnexosSectionPro
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [showUpload, setShowUpload] = useState(false);
+  const [expandido, setExpandido] = useState(false);
 
   async function loadAll() {
     setLoading(true);
@@ -91,15 +93,40 @@ export function AnexosSection({ filterKey, filterId, menuKey }: AnexosSectionPro
     { id: "anexo_data", header: "Data", value: (a) => a.anexo_data, width: 100, align: "center", cell: (a) => formatDate(a.anexo_data) },
   ];
 
+  const rowActions = (a: Anexo) => (
+    <div className="row-actions">
+      <button className="icon-btn" title="Baixar" aria-label="Baixar" onClick={() => handleDownload(a)}>
+        <DownloadIcon />
+      </button>
+      {podeExcluir && (
+        <button className="icon-btn danger" title="Excluir" aria-label="Excluir" onClick={() => handleDelete(a)}>
+          <TrashIcon />
+        </button>
+      )}
+    </div>
+  );
+
+  const addButton = podeInserir && (
+    <button className="primary" onClick={() => setShowUpload(true)}>
+      + Adicionar
+    </button>
+  );
+
   return (
     <div className="dashboard-card">
       <div className="dashboard-card-header">
         <h3>Anexos</h3>
-        {podeInserir && (
-          <button className="primary" onClick={() => setShowUpload(true)}>
-            + Adicionar
+        <div className="dashboard-card-header-actions">
+          {addButton}
+          <button
+            className="dashboard-card-expand"
+            title="Expandir"
+            aria-label="Expandir Anexos"
+            onClick={() => setExpandido(true)}
+          >
+            <ExpandIcon />
           </button>
-        )}
+        </div>
       </div>
       <div className="dashboard-card-body">
         {loadError && (
@@ -118,21 +145,27 @@ export function AnexosSection({ filterKey, filterId, menuKey }: AnexosSectionPro
             exportFilename={`anexos_${filterKey}_${filterId}`}
             hideToolbar
             actionsWidth={90}
-            renderActions={(a) => (
-              <div className="row-actions">
-                <button className="icon-btn" title="Baixar" aria-label="Baixar" onClick={() => handleDownload(a)}>
-                  <DownloadIcon />
-                </button>
-                {podeExcluir && (
-                  <button className="icon-btn danger" title="Excluir" aria-label="Excluir" onClick={() => handleDelete(a)}>
-                    <TrashIcon />
-                  </button>
-                )}
-              </div>
-            )}
+            renderActions={rowActions}
           />
         )}
       </div>
+
+      {expandido && (
+        <ExpandedGridModal
+          title="Anexos"
+          onClose={() => setExpandido(false)}
+          data={anexos}
+          columns={columns}
+          getRowId={(a) => a.anexo_id}
+          searchValue={(a) => a.anexo_nome ?? ""}
+          searchPlaceholder="Buscar anexo..."
+          exportFilename={`anexos_${filterKey}_${filterId}`}
+          emptyMessage="Nenhum anexo cadastrado."
+          actionsWidth={90}
+          renderActions={rowActions}
+          headerExtra={addButton}
+        />
+      )}
 
       {showUpload && (
         <AnexoUploadForm

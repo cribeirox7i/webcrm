@@ -5,7 +5,8 @@ import { StatCards } from "./StatCards";
 import { DataGrid, type DataGridColumn } from "./DataGrid";
 import { usePageTitle } from "../PageTitleContext";
 import { useAuth } from "../auth/AuthContext";
-import { ExternalLinkIcon } from "./icons";
+import { ExternalLinkIcon, ExpandIcon } from "./icons";
+import { ExpandedGridModal } from "./ExpandedGridModal";
 
 function slugify(value: string): string {
   return value
@@ -44,6 +45,8 @@ export function ClienteDashboardPage({ clienteId, onBack }: ClienteDashboardPage
   const [cartMeses, setCartMeses] = useState<CartMes[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  // qual subgrid está expandida em tela cheia no momento (só uma por vez) -- null = nenhuma.
+  const [expandido, setExpandido] = useState<"contatos" | "carteira" | "urls" | null>(null);
 
   async function loadAll() {
     setLoading(true);
@@ -212,6 +215,51 @@ export function ClienteDashboardPage({ clienteId, onBack }: ClienteDashboardPage
     );
   }
 
+  const carteiraRowActions = (c: Carteira) => (
+    <div className="row-actions">
+      <button
+        className="icon-btn"
+        title="Planilha"
+        aria-label="Planilha"
+        disabled={!c.cart_url_plan_analitica}
+        onClick={() => window.open(c.cart_url_plan_analitica ?? "", "_blank", "noopener,noreferrer")}
+      >
+        <ExternalLinkIcon />
+      </button>
+    </div>
+  );
+
+  // card de Contatos é idêntico nos dois layouts (com/sem Financeiro) -- monta uma vez só.
+  const contatosCard = (
+    <div className="dashboard-card">
+      <div className="dashboard-card-header">
+        <h3>Contatos</h3>
+        <button
+          className="dashboard-card-expand"
+          title="Expandir"
+          aria-label="Expandir Contatos"
+          onClick={() => setExpandido("contatos")}
+        >
+          <ExpandIcon />
+        </button>
+      </div>
+      <div className="dashboard-card-body">
+        {contatos.length === 0 ? (
+          <p className="dashboard-empty">Nenhum contato cadastrado.</p>
+        ) : (
+          <DataGrid
+            data={contatos}
+            columns={contatoColumns}
+            getRowId={(c) => c.contato_id}
+            searchValue={(c) => c.contato_nome}
+            exportFilename={`contatos_${cliente.cliente_id}`}
+            hideToolbar
+          />
+        )}
+      </div>
+    </div>
+  );
+
   return (
     <div className="page">
       <div className="dashboard-header">
@@ -236,26 +284,20 @@ export function ClienteDashboardPage({ clienteId, onBack }: ClienteDashboardPage
       <div className="dashboard-grid">
         {permFinanceiro ? (
           <div className="dashboard-stack">
-            <div className="dashboard-card">
-              <h3>Contatos</h3>
-              <div className="dashboard-card-body">
-                {contatos.length === 0 ? (
-                  <p className="dashboard-empty">Nenhum contato cadastrado.</p>
-                ) : (
-                  <DataGrid
-                    data={contatos}
-                    columns={contatoColumns}
-                    getRowId={(c) => c.contato_id}
-                    searchValue={(c) => c.contato_nome}
-                    exportFilename={`contatos_${cliente.cliente_id}`}
-                    hideToolbar
-                  />
-                )}
-              </div>
-            </div>
+            {contatosCard}
 
             <div className="dashboard-card">
-              <h3>Carteira</h3>
+              <div className="dashboard-card-header">
+                <h3>Carteira</h3>
+                <button
+                  className="dashboard-card-expand"
+                  title="Expandir"
+                  aria-label="Expandir Carteira"
+                  onClick={() => setExpandido("carteira")}
+                >
+                  <ExpandIcon />
+                </button>
+              </div>
               <div className="dashboard-card-body">
                 {carteiraOrdenada.length === 0 ? (
                   <p className="dashboard-empty">Nenhuma carteira registrada.</p>
@@ -268,46 +310,28 @@ export function ClienteDashboardPage({ clienteId, onBack }: ClienteDashboardPage
                     exportFilename={`carteira_${cliente.cliente_id}`}
                     hideToolbar
                     actionsWidth={50}
-                    renderActions={(c) => (
-                      <div className="row-actions">
-                        <button
-                          className="icon-btn"
-                          title="Planilha"
-                          aria-label="Planilha"
-                          disabled={!c.cart_url_plan_analitica}
-                          onClick={() => window.open(c.cart_url_plan_analitica ?? "", "_blank", "noopener,noreferrer")}
-                        >
-                          <ExternalLinkIcon />
-                        </button>
-                      </div>
-                    )}
+                    renderActions={carteiraRowActions}
                   />
                 )}
               </div>
             </div>
           </div>
         ) : (
-          <div className="dashboard-card">
-            <h3>Contatos</h3>
-            <div className="dashboard-card-body">
-              {contatos.length === 0 ? (
-                <p className="dashboard-empty">Nenhum contato cadastrado.</p>
-              ) : (
-                <DataGrid
-                  data={contatos}
-                  columns={contatoColumns}
-                  getRowId={(c) => c.contato_id}
-                  searchValue={(c) => c.contato_nome}
-                  exportFilename={`contatos_${cliente.cliente_id}`}
-                  hideToolbar
-                />
-              )}
-            </div>
-          </div>
+          contatosCard
         )}
 
         <div className="dashboard-card">
-          <h3>Produtos / URLs</h3>
+          <div className="dashboard-card-header">
+            <h3>Produtos / URLs</h3>
+            <button
+              className="dashboard-card-expand"
+              title="Expandir"
+              aria-label="Expandir Produtos / URLs"
+              onClick={() => setExpandido("urls")}
+            >
+              <ExpandIcon />
+            </button>
+          </div>
           <div className="dashboard-card-body">
             {urls.length === 0 ? (
               <p className="dashboard-empty">Nenhuma URL cadastrada.</p>
@@ -324,6 +348,50 @@ export function ClienteDashboardPage({ clienteId, onBack }: ClienteDashboardPage
           </div>
         </div>
       </div>
+
+      {expandido === "contatos" && (
+        <ExpandedGridModal
+          title={`Contatos — ${cliente.cliente_nome}`}
+          onClose={() => setExpandido(null)}
+          data={contatos}
+          columns={contatoColumns}
+          getRowId={(c) => c.contato_id}
+          searchValue={(c) => c.contato_nome}
+          searchPlaceholder="Buscar contato..."
+          exportFilename={`contatos_${cliente.cliente_id}`}
+          emptyMessage="Nenhum contato cadastrado."
+        />
+      )}
+
+      {expandido === "carteira" && (
+        <ExpandedGridModal
+          title={`Carteira — ${cliente.cliente_nome}`}
+          onClose={() => setExpandido(null)}
+          data={carteiraOrdenada}
+          columns={carteiraColumns}
+          getRowId={(c) => c.cart_id}
+          searchValue={(c) => (c.cart_mes_id != null ? anoMesPorCartMesId.get(c.cart_mes_id) ?? "" : "")}
+          searchPlaceholder="Buscar por mês..."
+          exportFilename={`carteira_${cliente.cliente_id}`}
+          emptyMessage="Nenhuma carteira registrada."
+          actionsWidth={50}
+          renderActions={carteiraRowActions}
+        />
+      )}
+
+      {expandido === "urls" && (
+        <ExpandedGridModal
+          title={`Produtos / URLs — ${cliente.cliente_nome}`}
+          onClose={() => setExpandido(null)}
+          data={urls}
+          columns={urlColumns}
+          getRowId={(u) => u.url_id}
+          searchValue={(u) => u.url_path}
+          searchPlaceholder="Buscar URL..."
+          exportFilename={`urls_${cliente.cliente_id}`}
+          emptyMessage="Nenhuma URL cadastrada."
+        />
+      )}
     </div>
   );
 }

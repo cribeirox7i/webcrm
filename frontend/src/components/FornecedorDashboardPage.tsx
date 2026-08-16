@@ -7,8 +7,9 @@ import { AnexosSection } from "./AnexosSection";
 import { FornContratoForm, valuesToPayload as contratoValuesToPayload } from "./FornContratoForm";
 import { FornPagadoriaForm, valuesToPayload as pagamentoValuesToPayload } from "./FornPagadoriaForm";
 import { usePageTitle } from "../PageTitleContext";
-import { EditIcon, TrashIcon } from "./icons";
+import { EditIcon, ExpandIcon, TrashIcon } from "./icons";
 import { usePermissao } from "../auth/usePermissao";
+import { ExpandedGridModal } from "./ExpandedGridModal";
 
 function formatMoney(v: number | null): string {
   return v != null ? v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : "";
@@ -36,6 +37,9 @@ export function FornecedorDashboardPage({ fornecedorId, onBack }: FornecedorDash
   const [editingPagamento, setEditingPagamento] = useState<FornPagadoria | null | "new">(null);
   const [savingPagamento, setSavingPagamento] = useState(false);
   const [pagamentoError, setPagamentoError] = useState<string | null>(null);
+
+  // qual subgrid está expandida em tela cheia no momento (só uma por vez) -- null = nenhuma.
+  const [expandido, setExpandido] = useState<"contratos" | "pagadoria" | null>(null);
 
   async function loadAll() {
     setLoading(true);
@@ -176,6 +180,42 @@ export function FornecedorDashboardPage({ fornecedorId, onBack }: FornecedorDash
 
   usePageTitle(["Fornecedores", fornecedor?.fornecedor_nome ?? "..."]);
 
+  const contratoRowActions =
+    permFornecedores.podeEditar || permFornecedores.podeExcluir
+      ? (c: FornContrato) => (
+          <div className="row-actions">
+            {permFornecedores.podeEditar && (
+              <button className="icon-btn" title="Editar" aria-label="Editar" onClick={() => setEditingContrato(c)}>
+                <EditIcon />
+              </button>
+            )}
+            {permFornecedores.podeExcluir && (
+              <button className="icon-btn danger" title="Excluir" aria-label="Excluir" onClick={() => handleDeleteContrato(c)}>
+                <TrashIcon />
+              </button>
+            )}
+          </div>
+        )
+      : undefined;
+
+  const pagamentoRowActions =
+    permPagadoria.podeEditar || permPagadoria.podeExcluir
+      ? (p: FornPagadoria) => (
+          <div className="row-actions">
+            {permPagadoria.podeEditar && (
+              <button className="icon-btn" title="Editar" aria-label="Editar" onClick={() => setEditingPagamento(p)}>
+                <EditIcon />
+              </button>
+            )}
+            {permPagadoria.podeExcluir && (
+              <button className="icon-btn danger" title="Excluir" aria-label="Excluir" onClick={() => handleDeletePagamento(p)}>
+                <TrashIcon />
+              </button>
+            )}
+          </div>
+        )
+      : undefined;
+
   if (loading && !fornecedor) {
     return (
       <div className="page">
@@ -217,11 +257,21 @@ export function FornecedorDashboardPage({ fornecedorId, onBack }: FornecedorDash
         <div className="dashboard-card dashboard-card-fixed">
           <div className="dashboard-card-header">
             <h3>Contratos</h3>
-            {permFornecedores.podeInserir && (
-              <button className="primary" onClick={() => setEditingContrato("new")}>
-                + Adicionar
+            <div className="dashboard-card-header-actions">
+              {permFornecedores.podeInserir && (
+                <button className="primary" onClick={() => setEditingContrato("new")}>
+                  + Adicionar
+                </button>
+              )}
+              <button
+                className="dashboard-card-expand"
+                title="Expandir"
+                aria-label="Expandir Contratos"
+                onClick={() => setExpandido("contratos")}
+              >
+                <ExpandIcon />
               </button>
-            )}
+            </div>
           </div>
           <div className="dashboard-card-body">
             {contratos.length === 0 ? (
@@ -235,24 +285,7 @@ export function FornecedorDashboardPage({ fornecedorId, onBack }: FornecedorDash
                 exportFilename={`forn_contratos_${fornecedorId}`}
                 hideToolbar
                 actionsWidth={90}
-                renderActions={
-                  permFornecedores.podeEditar || permFornecedores.podeExcluir
-                    ? (c) => (
-                        <div className="row-actions">
-                          {permFornecedores.podeEditar && (
-                            <button className="icon-btn" title="Editar" aria-label="Editar" onClick={() => setEditingContrato(c)}>
-                              <EditIcon />
-                            </button>
-                          )}
-                          {permFornecedores.podeExcluir && (
-                            <button className="icon-btn danger" title="Excluir" aria-label="Excluir" onClick={() => handleDeleteContrato(c)}>
-                              <TrashIcon />
-                            </button>
-                          )}
-                        </div>
-                      )
-                    : undefined
-                }
+                renderActions={contratoRowActions}
               />
             )}
           </div>
@@ -262,11 +295,21 @@ export function FornecedorDashboardPage({ fornecedorId, onBack }: FornecedorDash
           <div className="dashboard-card">
             <div className="dashboard-card-header">
               <h3>Pagadoria</h3>
-              {permPagadoria.podeInserir && (
-                <button className="primary" onClick={() => setEditingPagamento("new")}>
-                  + Adicionar
+              <div className="dashboard-card-header-actions">
+                {permPagadoria.podeInserir && (
+                  <button className="primary" onClick={() => setEditingPagamento("new")}>
+                    + Adicionar
+                  </button>
+                )}
+                <button
+                  className="dashboard-card-expand"
+                  title="Expandir"
+                  aria-label="Expandir Pagadoria"
+                  onClick={() => setExpandido("pagadoria")}
+                >
+                  <ExpandIcon />
                 </button>
-              )}
+              </div>
             </div>
             <div className="dashboard-card-body">
               {pagamentos.length === 0 ? (
@@ -280,24 +323,7 @@ export function FornecedorDashboardPage({ fornecedorId, onBack }: FornecedorDash
                   exportFilename={`forn_pagadoria_${fornecedorId}`}
                   hideToolbar
                   actionsWidth={90}
-                  renderActions={
-                    permPagadoria.podeEditar || permPagadoria.podeExcluir
-                      ? (p) => (
-                          <div className="row-actions">
-                            {permPagadoria.podeEditar && (
-                              <button className="icon-btn" title="Editar" aria-label="Editar" onClick={() => setEditingPagamento(p)}>
-                                <EditIcon />
-                              </button>
-                            )}
-                            {permPagadoria.podeExcluir && (
-                              <button className="icon-btn danger" title="Excluir" aria-label="Excluir" onClick={() => handleDeletePagamento(p)}>
-                                <TrashIcon />
-                              </button>
-                            )}
-                          </div>
-                        )
-                      : undefined
-                  }
+                  renderActions={pagamentoRowActions}
                 />
               )}
             </div>
@@ -306,6 +332,52 @@ export function FornecedorDashboardPage({ fornecedorId, onBack }: FornecedorDash
           <AnexosSection filterKey="fornecedor_id" filterId={fornecedorId} menuKey="fornecedores" />
         </div>
       </div>
+
+      {expandido === "contratos" && (
+        <ExpandedGridModal
+          title={`Contratos — ${fornecedor.fornecedor_nome}`}
+          onClose={() => setExpandido(null)}
+          data={contratos}
+          columns={contratoColumns}
+          getRowId={(c) => c.forn_cont_id}
+          searchValue={(c) => c.forn_cont_num_contrato ?? ""}
+          searchPlaceholder="Buscar contrato..."
+          exportFilename={`forn_contratos_${fornecedorId}`}
+          emptyMessage="Nenhum contrato cadastrado."
+          actionsWidth={90}
+          renderActions={contratoRowActions}
+          headerExtra={
+            permFornecedores.podeInserir && (
+              <button className="primary" onClick={() => setEditingContrato("new")}>
+                + Adicionar
+              </button>
+            )
+          }
+        />
+      )}
+
+      {expandido === "pagadoria" && (
+        <ExpandedGridModal
+          title={`Pagadoria — ${fornecedor.fornecedor_nome}`}
+          onClose={() => setExpandido(null)}
+          data={pagamentos}
+          columns={pagamentoColumns}
+          getRowId={(p) => p.forn_pag_id}
+          searchValue={(p) => `${p.forn_pag_resp ?? ""} ${p.forn_pag_tipo ?? ""}`}
+          searchPlaceholder="Buscar pagamento..."
+          exportFilename={`forn_pagadoria_${fornecedorId}`}
+          emptyMessage="Nenhum pagamento cadastrado."
+          actionsWidth={90}
+          renderActions={pagamentoRowActions}
+          headerExtra={
+            permPagadoria.podeInserir && (
+              <button className="primary" onClick={() => setEditingPagamento("new")}>
+                + Adicionar
+              </button>
+            )
+          }
+        />
+      )}
 
       {editingContrato && (
         <FornContratoForm
