@@ -353,19 +353,27 @@ export function ImportarCarteiraModal({ cartMes, token, onClose, onLogout }: Imp
                               type="checkbox"
                               checked={!atribuindo}
                               aria-label={`Ignorar linha de ${r.nome || "linha sem nome"}`}
-                              onChange={(e) =>
-                                setAtribuindoCliente((prev) => ({ ...prev, [r.indice]: !e.target.checked }))
-                              }
+                              onChange={(e) => {
+                                const desmarcou = !e.target.checked;
+                                setAtribuindoCliente((prev) => ({ ...prev, [r.indice]: desmarcou }));
+                                // já achamos o cliente pelo CNPJ/database -- aplica direto em vez
+                                // de fazer o usuário buscar de novo o que a heurística já sabe.
+                                if (desmarcou && r.clienteIdSugerido != null && correcoes[r.indice] == null) {
+                                  corrigirCliente(r.indice, r.clienteIdSugerido);
+                                }
+                              }}
                             />
                           </td>
                           <td>
                             {atribuindo ? (
                               <SearchableSelect
                                 options={opcoesCliente}
-                                value=""
+                                value={String(correcoes[r.indice] ?? r.clienteIdSugerido ?? "")}
                                 onChange={(v) => v && corrigirCliente(r.indice, Number(v))}
                                 placeholder="Buscar cliente..."
                               />
+                            ) : r.clienteNomeSugerido ? (
+                              <span className="page-subtitle">Sugestão: {r.clienteNomeSugerido}</span>
                             ) : (
                               <span className="page-subtitle">—</span>
                             )}

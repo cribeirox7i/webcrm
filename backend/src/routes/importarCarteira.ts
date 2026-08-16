@@ -100,7 +100,15 @@ importarCarteiraRouter.post("/admin/importar-carteira", async (req, res) => {
   const paraInserir: { linha: LinhaMedicao; clienteId: number; origem: Origem }[] = [];
   const resolvidosPorNome: { indice: number; nome: string; cnpj: string; clienteId: number; clienteNome: string }[] = [];
   const resolvidosPorDatabase: { indice: number; nome: string; db: string; clienteId: number; clienteNome: string }[] = [];
-  const ignorados: { indice: number; nome: string; cnpj: string; db: string; motivo: string }[] = [];
+  const ignorados: {
+    indice: number;
+    nome: string;
+    cnpj: string;
+    db: string;
+    motivo: string;
+    clienteIdSugerido?: number;
+    clienteNomeSugerido?: string;
+  }[] = [];
 
   const nomePorClienteId = new Map(clientes.map((c) => [c.cliente_id, c.cliente_nome]));
 
@@ -113,6 +121,21 @@ importarCarteiraRouter.post("/admin/importar-carteira", async (req, res) => {
     // origem correspondente, com o cliente corrigido, pra continuar auditável no relatório.
     const corrigido = correcoesPorIndice.get(indice);
 
+    // candidatos por CNPJ/database são calculados antes do filtro de linha zerada, pra que uma
+    // linha ignorada por estar zerada ainda venha com sugestão de cliente no relatório (o
+    // usuário via CNPJ batendo mas "não identificado" nas ignoradas -- o cliente é achado, só não
+    // é importado por estar zerado).
+    const candidatos = cnpj ? porCnpj.get(cnpj) ?? [] : [];
+    const viaDb = db ? porDatabase.get(db.toLowerCase()) : undefined;
+    const sugestao: ClienteCandidato | null =
+      candidatos.length === 1
+        ? candidatos[0]
+        : candidatos.length > 1
+          ? escolhePorNome(nome, candidatos)
+          : viaDb
+            ? { cliente_id: viaDb.cliente_id, cliente_nome: viaDb.cliente_nome }
+            : null;
+
     // linha sem atividade nenhuma (decisão do usuário: desprezar) -- vazio conta como zero pra
     // esse fim. Corrigir manualmente na tabela de ignorados ainda resgata a linha, se um dia
     // fizer sentido importar uma dessas mesmo assim.
@@ -121,17 +144,24 @@ importarCarteiraRouter.post("/admin/importar-carteira", async (req, res) => {
       return n == null || n === 0;
     };
     if (ehZero(bruta.vlr) && ehZero(bruta.qtd) && ehZero(bruta.qtdMes) && !corrigido) {
-      ignorados.push({ indice, nome, cnpj, db, motivo: "Carteira, operações e operações no mês zeradas" });
+      ignorados.push({
+        indice,
+        nome,
+        cnpj,
+        db,
+        motivo: "Carteira, operações e operações no mês zeradas",
+        clienteIdSugerido: sugestao?.cliente_id,
+        clienteNomeSugerido: sugestao?.cliente_nome,
+      });
       return;
     }
 
-    const candidatos = cnpj ? porCnpj.get(cnpj) ?? [] : [];
     if (candidatos.length === 1 && !corrigido) {
       paraInserir.push({ linha: bruta, clienteId: candidatos[0].cliente_id, origem: "cnpj" });
       return;
     }
     if (candidatos.length > 1) {
-      const clienteId = corrigido ?? escolhePorNome(nome, candidatos)!.cliente_id;
+      const clienteId = corrigido ?? sugestao!.cliente_id;
       paraInserir.push({ linha: bruta, clienteId, origem: corrigido ? "manual" : "nome" });
       resolvidosPorNome.push({
         indice,
@@ -142,7 +172,6 @@ importarCarteiraRouter.post("/admin/importar-carteira", async (req, res) => {
       });
       return;
     }
-    const viaDb = db ? porDatabase.get(db.toLowerCase()) : undefined;
     if (viaDb || corrigido) {
       const clienteId = corrigido ?? viaDb!.cliente_id;
       paraInserir.push({ linha: bruta, clienteId, origem: corrigido ? "manual" : "database" });

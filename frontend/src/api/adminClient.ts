@@ -43,7 +43,15 @@ export interface RelatorioImportacao {
   porCnpj: number;
   porNome: { indice: number; nome: string; cnpj: string; clienteId: number; clienteNome: string }[];
   porDatabase: { indice: number; nome: string; db: string; clienteId: number; clienteNome: string }[];
-  ignorados: { indice: number; nome: string; cnpj: string; db: string; motivo: string }[];
+  ignorados: {
+    indice: number;
+    nome: string;
+    cnpj: string;
+    db: string;
+    motivo: string;
+    clienteIdSugerido?: number;
+    clienteNomeSugerido?: string;
+  }[];
   linhasExistentesNoMes: number;
   inseridos?: number;
   apagados?: number;
