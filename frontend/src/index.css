@@ -735,6 +735,14 @@ tbody tr:hover td {
   height: 230px;
 }
 
+/* dois cards dividindo a altura igualmente dentro de uma coluna do dashboard-grid (ex.:
+   Contatos + Carteira no dashboard de Cliente, ao lado de Produtos/URLs) -- dashboard-card-fixed
+   acima cobre o caso de altura própria fixa, este cobre o de 50/50. */
+.dashboard-stack > .dashboard-card {
+  flex: 1;
+  min-height: 0;
+}
+
 .dashboard-row {
   display: flex;
   gap: 14px;
