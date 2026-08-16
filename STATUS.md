@@ -1,15 +1,16 @@
 # WEBCRM — Status do Projeto
 
-> Documento de retomada. Última atualização: 2026-08-11 (auditoria de segurança contra uma
-> checklist de 20 vulnerabilidades + 4 correções reais implementadas — ver "Leva Auditoria de
-> Segurança (checklist de 20 itens)" no fim do arquivo; as levas anteriores no mesmo dia foram
-> "Leva Login e Controle de Acesso", "Leva CORS e Permissão por Menu", "Leva PIN vs Senha",
-> "Leva Redesign da Tela de Login" e "Leva Bug: login case-sensitive no e-mail").
+> Documento de retomada. Última atualização: 2026-08-14 (leva longa pós-migração pra
+> Vercel/Supabase: favicon, correção de formatação numérica, sessão do Admin caindo em
+> requisições paralelas, renomeação dos projetos Vercel, herdar permissões, migração de
+> storage GCS→Supabase, otimização de cold start, CSV Protheus, bug crítico de botões mortos
+> no DataGrid, máscara/obrigatoriedade de CNPJ, tela de Grupos Econômicos, recuperação de
+> anexos perdidos e a funcionalidade de Importação de Carteira — ver "Leva Ajustes pós-migração:
+> logo, storage, performance e importação de carteira" no fim do arquivo).
 
-> **⚠️ Este documento está desatualizado em relação ao código** — existem funcionalidades
-> implementadas em sessões posteriores à última atualização que nunca foram registradas aqui.
-> Ver "Funcionalidades no código não documentadas neste arquivo" no fim, antes de assumir que
-> algo "não existe" só porque não está descrito acima.
+> Ainda existe uma seção "Funcionalidades no código não documentadas neste arquivo" mais abaixo,
+> registrada em 2026-08-11 — cobre achados de sessões anteriores a essa data, não revisada de
+> novo nesta leva.
 
 ## Resumo rápido pra retomar a sessão
 
@@ -40,6 +41,10 @@
 6. Título da tela de login: "WebCRM - Entrar" ficou em **19px**, não nos 24px pedidos pra label "Entrar" — o texto mais longo não cabe em 1 linha na largura do card e quebrava cortando o botão Login. Avisado ao usuário na hora; se 24px for requisito, precisa de outra solução (2 linhas de propósito ou texto mais curto). Ver "Leva Redesign da Tela de Login".
 7. Tela de login, modo "Esqueci minha senha": o título virou **"Recuperar senha"** (18px) — texto encurtado por mim pra caber no card, não pedido pelo usuário.
 8. Botão de login mantém `cursor: pointer` mesmo desabilitado (pedido explícito) — diverge do resto do app, onde `button:disabled` usa `cursor: not-allowed`. Só a tela de login tem essa exceção.
+9. **4 pares de clientes com CNPJ duplicado no cadastro** (achado validando a importação de carteira): DHARTE SECURITIZADORA/AURA TECNOLOGIA, THP CAPITAL SECURITIZADORA/THP CAPITAL, CRX CREDITO/ORANGE EMPRESA SIMPLES, CREDISSIM/CREDITBEM SOLUCOES. Em cada par, um dos dois está com CNPJ errado no cadastro — não corrigido, só contornado na importação (heurística de nome mais parecido).
+10. `clientes.cliente_tip_vlr` (regime de faturamento) ficou **opcional** por decisão do usuário, mesmo depois do CNPJ virar `NOT NULL` — 191 dos 601 clientes reais (32%) ainda sem esse campo preenchido.
+11. Domínio antigo do frontend (`webcrm-wuah.vercel.app`) mantido como redirect pro novo (`crmevertec.vercel.app`), não removido — decisão consciente do usuário, evita link quebrado.
+12. Modais fixos (não fecham ao clicar fora) só foram aplicados no Admin, a pedido explícito do usuário. Os modais do app principal (Clientes, URLs, Propostas etc.) continuam fechando ao clicar fora — se um dia pedirem o mesmo lá, são ~15 arquivos.
 
 Detalhes completos de cada decisão/bug/teste, em ordem cronológica, a partir daqui ↓
 
@@ -1191,3 +1196,204 @@ explícita do usuário — só o projeto GCP foi encerrado, não a conta).
 
 **Migração completa**: SQLite/VM/Caddy/Firebase Hosting → Postgres (Supabase)/Vercel, com dados
 reais de produção, testada de ponta a ponta, VM antiga desligada. Repositório 100% em `main`.
+
+## Leva Ajustes pós-migração: logo, storage, performance e importação de carteira (2026-08-13/14)
+
+Sessão longa, sequência de pedidos avulsos do usuário depois da virada de produção pra
+Vercel/Supabase. Registrando em ordem cronológica de commit (`git log --oneline` na branch
+`main`, do primeiro ao último desta leva: `e38dd09` até `e8801a1`).
+
+### Favicon, formatação numérica e ajustes visuais (`e38dd09`, `e6fa547`, `dd377f2`)
+
+- **Favicon trocado** pro logo real da Evertec (baixado de `companieslogo.com`, dots laranja,
+  fundo já vinha transparente) — antes era o SVG placeholder padrão do Vite.
+- **Bug real de formatação encontrado e corrigido**: telas monetárias (ex. Financeiro) mostravam
+  o valor bruto sem máscara (`69738.40832800` em vez de `R$ 69.738,41`). Causa: o driver `pg`
+  devolve colunas `NUMERIC` como **string**, não `number` — `formatMoney`/`toLocaleString` (já
+  implementado certo em ~10 telas) virava no-op silencioso, porque `String.prototype.toLocaleString`
+  ignora as opções de formatação. Corrigido de uma vez só em `backend/src/db.ts` com
+  `types.setTypeParser(1700, parseFloat)` (OID 1700 = numeric), sem tocar em nenhuma tela.
+  **Lição pra qualquer bug futuro parecido** ("número não formata"/"mostra string bruta"): suspeitar
+  primeiro do tipo de dado vindo do Postgres, não da lógica de formatação.
+- Título da aba do navegador trocado do placeholder padrão do Vite (`frontend`) pra `WebCRM`.
+- **Zoom padrão de 80%** aplicado no app inteiro, a pedido do usuário (`html { zoom: 80%; }` em
+  `index.css`). Achado real no processo: zoom no `#root` (em vez de no `<html>`) deixava uma faixa
+  em branco de ~20% da altura, porque `100vh` (usado por `.app-shell`/`.app-content`) é calculado
+  contra o viewport real quando o zoom não está no elemento raiz — todo `calc(100vh / 0.8)` (e
+  similares em `vw`) no CSS existe por causa disso; qualquer `vh`/`vw` novo em telas futuras
+  precisa da mesma compensação, ou vai sobrar/faltar espaço.
+
+### Sessão do Admin caindo em requisições paralelas (`69b9909`)
+
+**Bug real, achado testando "Marcar todas as permissões"**: `SESSION_TOKEN` (PIN mestre) era
+gerado com `crypto.randomBytes` no carregamento do módulo (`backend/src/adminAuth.ts`) — em
+serverless (Vercel), cada instância/cold start reexecuta esse código, gerando um token
+**diferente por instância**. Rajadas de requisições paralelas (a tela de permissões dispara uma
+chamada por menu de uma vez) podiam cair em instâncias com tokens diferentes do que o login
+gerou, devolvendo 401 e derrubando a sessão do admin no frontend. Corrigido tornando o token
+determinístico (hash do `ADMIN_PIN`), idêntico em qualquer instância que compartilhe a mesma env
+var. **Consequência pro futuro**: se o `ADMIN_PIN` mudar (rotação), toda sessão de admin aberta
+em qualquer navegador é invalidada — efeito esperado, não bug.
+
+### Renomeação dos projetos Vercel e novo domínio (sem commit, mudança só no painel)
+
+A pedido do usuário, pra ficar mais fácil de identificar:
+- Backend: projeto **`webcrm`** → **`webcrm_back`**. Domínio **não mudou** (renomear o projeto na
+  Vercel não troca o domínio `.vercel.app` já atribuído) — continua `https://webcrm-mu.vercel.app`.
+- Frontend: projeto **`webcrm-wuah`** → `evertec` → **`webcrm_from`** (renomeado duas vezes).
+  Domínio novo **`https://crmevertec.vercel.app`** — precisou ser adicionado manualmente em
+  Settings → Domains (renomear o projeto sozinho não gera esse domínio). Domínio antigo
+  (`webcrm-wuah.vercel.app`) mantido como redirect pro novo, não removido.
+- `CORS_ORIGINS` do backend (Production + Preview, painel Vercel) atualizado pra
+  `https://crmevertec.vercel.app`. `frontend/.env.production` (`VITE_API_URL`) **não precisou
+  mudar**, já que só o domínio do frontend mudou, não o do backend.
+- **`ADMIN_PIN` foi rotacionado** depois (painel Vercel, Production + Preview) — precisou de um
+  deploy novo (`git commit --allow-empty && git push`) pra pegar, já que a Vercel não reaplica
+  env var em deploys já existentes. Efeito colateral confirmado: invalidou toda sessão de admin
+  aberta (ver acima).
+
+### Herdar permissões, paginação do Consumo e migração de storage pra Supabase (`94842b4`)
+
+- **Admin > Usuários > Permissões**: dropdown "Herdar de" copia as 4 permissões de todos os menus
+  de outro usuário de uma vez, sem precisar marcar linha por linha.
+- **Financeiro > Consumo**: `api.listAll()` (novo, em `frontend/src/api/client.ts`) pagina
+  automaticamente por `offset` em vez de confiar no `limit` fixo de 20 mil linhas/request do
+  backend — `consumo_ana` de um cliente com muita transação num mês podia estourar esse limite e
+  cortar dados silenciosamente. Aplicado em `ConsumoAnaDetalhePage.tsx`/`ConsumoMesPage.tsx`.
+- **Upload de anexos migrado de Google Cloud Storage pra Supabase Storage** (mesmo projeto que já
+  hospeda o Postgres) — o GCS ficou órfão desde a decomissão do projeto GCP na migração anterior,
+  então upload/download estavam **desligados em produção** sem ninguém perceber até agora.
+  `backend/src/storage.ts` reescrito pro cliente `@supabase/supabase-js` (`SUPABASE_URL` +
+  `SUPABASE_SERVICE_ROLE_KEY`, nunca a `anon`/`publishable` key — essa não tem permissão de
+  escrita). Nova tabela `parametros_storage_menu` (menu_key → pasta no bucket) + tela **Admin >
+  Armazenamento** deixam a pasta configurável sem precisar de deploy. Bucket `anexos`, privado,
+  criado manualmente no painel Supabase (não existe automação pra isso).
+- **Recuperação dos anexos de propostas perdidos** na decomissão do GCS: os valores gravados em
+  `proposta_anexo`/`anexo_arquivo` nunca foram, de fato, caminhos nossos (GCS ou Supabase) — eram
+  um resquício bruto da estrutura interna do AppSheet (`Files/Propostas/<id>.proposta_anexo...`,
+  `APPSHEET/data/<appid>/propostas/...`), nunca resolvidos por nenhuma migração anterior. Os
+  arquivos reais sobreviveram no Google Drive original do usuário, sincronizado localmente via
+  Google Drive para Desktop (múltiplas contas montadas em letras de unidade diferentes — a conta
+  certa foi achada procurando pelo nome do projeto, `I:\Meu Drive\WEBCRM\Files\`). Scripts
+  `backend/scripts/report-propostas-anexo.ts` (leitura) e `recover-propostas-anexo.ts` (upload +
+  update, modo simulação por padrão) — **34 de 34 propostas recuperadas** com sucesso, rodado pelo
+  usuário no próprio terminal (o agente não roda `--apply` em produção, só o usuário).
+
+### Otimização de cold start (`b8dbb44`)
+
+**Bug de performance real**: `loadCatalog()` (`backend/src/catalog.ts`) fazia 1 consulta pra
+listar tabelas + **2 consultas POR TABELA** (colunas + PK) num loop sequencial — com as ~40
+tabelas/views atuais, ~81 idas e vindas ao Postgres toda vez que uma instância nova do backend
+"acordava" no Vercel (cold start, comum no plano Hobby, que desliga a função sem tráfego), **antes
+de responder qualquer request**. Causa provável do "às vezes demora 5-7 segundos" reportado pelo
+usuário. Reduzido pra 3 consultas totais (medido: 452ms contra produção, vs. potencialmente vários
+segundos antes). Bônus: `GET /:resource` (`resource.ts`) rodava a query de dados e o `COUNT(*)` em
+sequência; agora em paralelo (`Promise.all`).
+
+### CSV Protheus, seleção múltipla e cache de logo (`e7fa0d7`)
+
+- **Bug real no CSV Protheus** (Financeiro > Faturamento): gerava uma linha por item de
+  `precos_cliente_mes_atual` do cliente inteiro no mês (duplicando produtos, ex. 6 linhas
+  idênticas do mesmo SKU) em vez de 1 linha = 1 linha da grid clicada. Confirmado contra 11
+  exportações reais anteriores do usuário: `COD_PROD` e `MENSAGEM` são **constantes fixas**
+  (`"0623301141"` e `"LIBERACRED"`), não vêm de produto nenhum — cada linha do CSV representa o
+  TOTAL a faturar do cliente no mês, não um item de venda avulso.
+- `DataGrid` ganhou suporte genérico a **seleção múltipla** (checkbox por linha + "selecionar
+  todas", respeitando busca/filtro) — usado em `FaturamentoMesPage` pra gerar um único CSV
+  Protheus com uma linha por linha selecionada, cabeçalho único.
+- **Bug real de cache**: `lib/parametros.ts` (URLs de logo) cacheava pra sempre, sem TTL — trocar
+  a logo no Admin e gerar um PDF de teste na mesma aba, sem recarregar, continuava usando o valor
+  antigo. TTL de 1 minuto adicionado.
+- Logo da capa do PDF aumentada (90mm → 130mm) pra ajudar a legibilidade do texto "evertec" em
+  cinza claro (baixo contraste por design da própria marca, não alterado). **Cuidado**: nunca
+  recortar/alterar pixels do arquivo de logo pra "consertar" um problema de contraste — na mesma
+  leva, o agente cortou uma área que na verdade eram letras brancas do wordmark (invisíveis contra
+  fundo branco na inspeção, mas reais), destruindo parte da logo. Revertido; a solução certa foi
+  aumentar o tamanho e, principalmente, usar a URL certa em Parâmetros Gerais (logo clara ≠ logo
+  escura — são dois arquivos hospedados em URLs diferentes, configurados separadamente).
+
+### Bug crítico: botões de ação mortos no DataGrid (`7d96e52`)
+
+**O bug mais sério desta leva**: depois do commit anterior (seleção múltipla), **nenhum botão de
+ação da tela Financeiro abria nada** — cliques não completavam, o foco do `Tab` "piscava e sumia"
+nos botões. Causa raiz: `filtered` e `getRowId` entraram nas dependências do `useMemo` de
+`tableColumns` (`DataGrid.tsx`), e as páginas passam essas funções inline (identidade nova a cada
+render) — as definições de coluna eram recriadas em **todo** render. O `flexRender` do TanStack
+trata uma função `cell` com identidade nova como outro componente, então o React desmontava e
+remontava a célula — impedindo o `mousedown`/`mouseup` de cair no mesmo elemento (requisito do
+navegador pra emitir o clique). Corrigido lendo `searchValue`/`getRowId`/`renderActions`/`selection`
+de refs no momento da chamada, deixando `tableColumns` depender só da presença (booleano) de
+ações/seleção. **Verificado com prova de causalidade** no navegador (não só "parece que
+funcionou"): comparado o mesmo teste nas duas versões — na versão com bug o nó do botão não
+sobrevivia a um re-render (`isConnected: false`); corrigida, sobrevive e o clique abre o modal.
+**Lição**: em qualquer mudança futura no `DataGrid`, cuidado com o que entra nas deps do
+`useMemo` de colunas — funções/objetos inline dos componentes-pai não são estáveis entre renders.
+
+Na mesma leva:
+- **Máscara de CNPJ alfanumérica** (Receita Federal, a partir de 2026 o CNPJ aceita letra e
+  número, só os 2 dígitos verificadores continuam numéricos) em `ClienteForm.tsx`, campos CNPJ e
+  CNPJ faturamento. CNPJ agora **obrigatório na tela e `NOT NULL` no banco** (os 601 clientes reais
+  já tinham 100% de cobertura, migração aplicada em produção,
+  `backend/scripts/migrate-cliente-cnpj-notnull.ts`). Regime de faturamento **mantido opcional**
+  por decisão do usuário — 191 clientes reais (32%) ainda sem esse campo preenchido.
+- **Nova tela Grupos Econômicos** (CRUD completo, submenu de Clientes, label curto "Grupos" na
+  sidebar mas título da tela e permissão no Admin continuam "Grupos Econômicos") — menu novo
+  precisa de permissão liberada manualmente no Admin pra cada usuário existente (não é retroativo).
+
+### Anexos de fornecedores recuperados e limpeza de órfãos (`393f87a`, `ca0bf55`)
+
+Mesma lógica da recuperação de propostas, aplicada aos anexos de contratos de fornecedores
+(tabela `anexos`): **46 de 49 linhas recuperadas** com sucesso. As 3 restantes (ids 1-3) apontavam
+pra uma estrutura de app **ainda mais antiga** (`FORNECEDORES_DOCS`/coluna `forndoc_anexo`) que não
+existe em nenhuma pasta sincronizada do Drive — investigando o conteúdo, os nomes eram literalmente
+"adsdsd"/"dsdsd"/"sdsdsd" (dado de teste, não documento real), então **excluídas** do banco
+(`backend/scripts/delete-anexos-orfaos.ts`, com guarda: só apaga se o caminho legado ainda estiver
+lá, não sobrescreve nada que tenha sido corrigido/reenviado nesse meio tempo).
+
+### Importação mensal da planilha de medição pra carteira (`3ca76dc` até `e8801a1`)
+
+Funcionalidade nova grande: **Admin > Carteira > botão de importar** (ícone de upload na linha do
+mês, ao lado de editar/excluir) abre um modal já amarrado àquele `cart_mes_id`, carrega o `.xlsx`
+mensal de medição (lido no navegador com `exceljs`), mostra um relatório de conferência completo e
+só grava depois de confirmado.
+
+**Identificação do cliente** (regras decididas com o usuário, `backend/src/matchCliente.ts` +
+`routes/importarCarteira.ts`), nesta ordem:
+1. CNPJ normalizado com exatamente 1 cliente → usa esse;
+2. CNPJ repetido em mais de um cliente (há CNPJ duplicado real no cadastro — achado ao validar,
+   4 casos: DHARTE/AURA, THP/THP, CRX/ORANGE, CREDISSIM/CREDITBEM, um dos dois em cada par está
+   com CNPJ errado, não corrigido ainda) → escolhe o de nome mais parecido (coeficiente de Dice
+   sobre bigramas, `similaridadeNome`);
+3. CNPJ sem cadastro → tenta pelo nome do database (coluna `BD` da planilha = `carteira.cart_db`),
+   olhando o histórico da própria carteira;
+4. **Linha com `VALOR_CARTEIRA`, `QTD_OPE` e `QTD_OP_MES` todos zero/vazios → desprezada** (decisão
+   do usuário, é ruído — sem atividade nenhuma no mês). Checado ANTES das regras 1-3, então nem
+   gasta heurística com essas linhas. Na planilha real de 2026/07 isso reduziu de 233 pra 216
+   linhas a gravar (26 zeradas descartadas) — inclusive resolveu sozinha uma ambiguidade da regra 3
+   ("CRX CREDITO LTDA." que ia por database pro cliente errado "#561 DEMONSTRACAO SA" saiu da
+   lista por estar zerada, sem precisar de decisão manual).
+5. Não achou por nenhuma regra → fica de fora, mas o relatório mostra checkbox **"Ignorar"**
+   (marcado por padrão) + campo de busca de cliente pra atribuir manualmente e resgatar a linha.
+
+Reimportação **substitui o mês inteiro** (`DELETE` + `INSERT` na mesma transação) — o total de
+linhas a apagar é mostrado antes da confirmação. Conversores de valor (`backend/src/planilhaValores.ts`,
+módulo puro sem banco, testável isoladamente em `scripts/testa-conversores-medicao.ts`, 13 casos):
+datas `dd/mm/aaaa` → ISO (a coluna gerada `cart_nome_plan_analitica` faz `substring` do texto, sem
+ISO o nome da planilha analítica sai errado), moeda BR em texto → número.
+
+**Bug real de UX encontrado e corrigido nesta mesma leva**: o modal inteiro era a área de rolagem
+(`max-height` + `overflow: auto` no `.modal`) — com o relatório completo, os botões
+Cancelar/Confirmar ficavam no fim do conteúdo rolável, **fora da tela visível**, deixando a
+impressão de tela travada. Corrigido separando em 3 faixas (título e botões fixos, só o corpo
+`.modal-corpo` rola) — só aplicado neste modal específico; os outros modais do Admin (editar
+usuário, editar mês, definir senha) continuam com o modelo antigo, sem esse problema hoje porque
+são curtos, mas teriam o mesmo bug se crescessem.
+
+Também nesta leva: **modais do Admin pararam de fechar ao clicar fora** (só por
+Salvar/Cancelar/Fechar) — pedido explícito do usuário, pra não perder o relatório/formulário com
+um clique acidental. Aplicado nos 5 modais do Admin; os do app principal (Clientes, URLs etc.)
+**não foram alterados**, continuam fechando ao clicar fora.
+
+**Validado com a planilha real de 2026/07** (244 linhas), ponta a ponta pelo navegador: 216 a
+gravar (208 por CNPJ, 4 por nome, 4 por database), 28 de fora (26 zeradas + 2 sem cadastro). O
+usuário ainda não confirmou a gravação real em produção até o fim desta leva.
