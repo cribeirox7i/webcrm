@@ -7,6 +7,12 @@ import { DataGrid, type DataGridColumn, type DataGridFilter } from "./DataGrid";
 import { EditIcon, TrashIcon } from "./icons";
 import { usePermissao } from "../auth/usePermissao";
 
+function formatDate(iso: string | null): string {
+  if (!iso) return "";
+  const [y, m, d] = iso.split("-");
+  return d && m && y ? `${d}/${m}/${y}` : iso;
+}
+
 function slugify(value: string): string {
   return value
     .toLowerCase()
@@ -133,7 +139,14 @@ export function UrlsPage() {
             ""
           ),
       },
-      { id: "url_dt_status", header: "Data Status", value: (u) => u.url_dt_status ?? "", width: 120 },
+      {
+        id: "url_dt_status",
+        header: "Data Status",
+        value: (u) => u.url_dt_status ?? "",
+        width: 110,
+        align: "center",
+        cell: (u) => formatDate(u.url_dt_status),
+      },
       {
         id: "url_exc",
         header: "Exclusão",
@@ -141,7 +154,14 @@ export function UrlsPage() {
         width: 190,
         cell: (u) => (u.url_exc ? <span className={`badge badge-${slugify(u.url_exc)}`}>{u.url_exc}</span> : ""),
       },
-      { id: "url_dt_exc", header: "Data Exclusão", value: (u) => u.url_dt_exc ?? "", width: 120 },
+      {
+        id: "url_dt_exc",
+        header: "Data Exclusão",
+        value: (u) => u.url_dt_exc ?? "",
+        width: 110,
+        align: "center",
+        cell: (u) => formatDate(u.url_dt_exc),
+      },
     ],
     [clienteNomeById, produtoNomeById, servidorNomeById]
   );

@@ -20,7 +20,7 @@ export interface UrlFormValues {
 // Não existe tabela de lookup pra url_exc (só url_status tem list_url_status) -- únicos 2
 // valores encontrados nos dados reais migrados da planilha, mesmo padrão do STATUS_OPTIONS
 // hardcoded em CronoForm.tsx.
-const EXCLUSAO_OPTIONS = ["EXCLUÍDO", "MOVER PARA S3 E EXCLUIR"];
+const EXCLUSAO_OPTIONS = ["EXCLUÍDO", "S3 E EXCLUIR"];
 
 function toFormValues(url: Url | null): UrlFormValues {
   return {
