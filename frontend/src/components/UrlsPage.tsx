@@ -133,6 +133,15 @@ export function UrlsPage() {
             ""
           ),
       },
+      { id: "url_dt_status", header: "Data Status", value: (u) => u.url_dt_status ?? "", width: 120 },
+      {
+        id: "url_exc",
+        header: "Exclusão",
+        value: (u) => u.url_exc,
+        width: 190,
+        cell: (u) => (u.url_exc ? <span className={`badge badge-${slugify(u.url_exc)}`}>{u.url_exc}</span> : ""),
+      },
+      { id: "url_dt_exc", header: "Data Exclusão", value: (u) => u.url_dt_exc ?? "", width: 120 },
     ],
     [clienteNomeById, produtoNomeById, servidorNomeById]
   );
@@ -140,6 +149,7 @@ export function UrlsPage() {
   const filters: DataGridFilter<Url>[] = useMemo(
     () => [
       { id: "url_status", label: "Status", value: (u) => u.url_status ?? "" },
+      { id: "url_exc", label: "Exclusão", value: (u) => u.url_exc ?? "" },
       { id: "produto", label: "Produto", value: produtoNome },
       { id: "servidor", label: "Servidor", value: servidorNome },
     ],
@@ -167,7 +177,7 @@ export function UrlsPage() {
         columns={columns}
         getRowId={(u) => u.url_id}
         searchValue={(u) =>
-          `${u.url_path} ${clienteNome(u)} ${produtoNome(u)} ${servidorNome(u)} ${u.url_status ?? ""}`
+          `${u.url_path} ${clienteNome(u)} ${produtoNome(u)} ${servidorNome(u)} ${u.url_status ?? ""} ${u.url_exc ?? ""}`
         }
         searchPlaceholder="Buscar por caminho, cliente, produto, status..."
         filters={filters}
