@@ -8,11 +8,19 @@ export interface UrlFormValues {
   server_id: string;
   produto_id: string;
   url_status: string;
+  url_dt_status: string;
+  url_exc: string;
+  url_dt_exc: string;
   url_pasta_raiz: string;
   url_pasta_anexos: string;
   urb_bd: string;
   url_obs: string;
 }
+
+// Não existe tabela de lookup pra url_exc (só url_status tem list_url_status) -- únicos 2
+// valores encontrados nos dados reais migrados da planilha, mesmo padrão do STATUS_OPTIONS
+// hardcoded em CronoForm.tsx.
+const EXCLUSAO_OPTIONS = ["EXCLUÍDO", "MOVER PARA S3 E EXCLUIR"];
 
 function toFormValues(url: Url | null): UrlFormValues {
   return {
@@ -21,6 +29,9 @@ function toFormValues(url: Url | null): UrlFormValues {
     server_id: url?.server_id != null ? String(url.server_id) : "",
     produto_id: url?.produto_id != null ? String(url.produto_id) : "",
     url_status: url?.url_status ?? "",
+    url_dt_status: url?.url_dt_status ?? "",
+    url_exc: url?.url_exc ?? "",
+    url_dt_exc: url?.url_dt_exc ?? "",
     url_pasta_raiz: url?.url_pasta_raiz ?? "",
     url_pasta_anexos: url?.url_pasta_anexos ?? "",
     urb_bd: url?.urb_bd ?? "",
@@ -35,6 +46,9 @@ export function valuesToPayload(values: UrlFormValues): Record<string, unknown> 
     server_id: values.server_id ? Number(values.server_id) : null,
     produto_id: values.produto_id ? Number(values.produto_id) : null,
     url_status: values.url_status || null,
+    url_dt_status: values.url_dt_status || null,
+    url_exc: values.url_exc || null,
+    url_dt_exc: values.url_dt_exc || null,
     url_pasta_raiz: values.url_pasta_raiz.trim() || null,
     url_pasta_anexos: values.url_pasta_anexos.trim() || null,
     urb_bd: values.urb_bd.trim() || null,
@@ -74,6 +88,10 @@ export function UrlForm({
   const clienteOptions = clientes.map((c) => ({ value: String(c.cliente_id), label: c.cliente_nome }));
   const produtoOptions = produtos.map((p) => ({ value: String(p.produto_id), label: p.produto_nome }));
   const servidorOptions = servidores.map((s) => ({ value: String(s.server_id), label: s.server_nome }));
+  const exclusaoOptions =
+    values.url_exc && !EXCLUSAO_OPTIONS.includes(values.url_exc)
+      ? [values.url_exc, ...EXCLUSAO_OPTIONS]
+      : EXCLUSAO_OPTIONS;
 
   return (
     <div className="modal-backdrop" onClick={onCancel}>
@@ -141,6 +159,38 @@ export function UrlForm({
               </option>
             ))}
           </select>
+        </div>
+
+        <div className="form-row">
+          <label htmlFor="url_dt_status">Data status</label>
+          <input
+            id="url_dt_status"
+            type="date"
+            value={values.url_dt_status}
+            onChange={(e) => set("url_dt_status", e.target.value)}
+          />
+        </div>
+
+        <div className="form-row">
+          <label htmlFor="url_exc">Exclusão</label>
+          <select id="url_exc" value={values.url_exc} onChange={(e) => set("url_exc", e.target.value)}>
+            <option value="">(nenhum)</option>
+            {exclusaoOptions.map((o) => (
+              <option key={o} value={o}>
+                {o}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="form-row">
+          <label htmlFor="url_dt_exc">Data exclusão</label>
+          <input
+            id="url_dt_exc"
+            type="date"
+            value={values.url_dt_exc}
+            onChange={(e) => set("url_dt_exc", e.target.value)}
+          />
         </div>
 
         <div className="form-row">
