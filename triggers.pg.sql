@@ -1,6 +1,8 @@
 -- WEBCRM — triggers PostgreSQL (Supabase), portado de triggers.sql (SQLite)
--- Mantém clientes.cliente_status sincronizado -- mesma regra do original: cliente fica
--- ATIVO se tiver ao menos uma URL com url_status='ATIVO' num servidor de ambiente 'PROD'.
+-- Mantém clientes.cliente_status e clientes.cliente_dat_bloqueio sincronizados -- cliente fica
+-- ATIVO se tiver ao menos uma URL com url_status='ATIVO' num servidor de ambiente 'PROD'; senão
+-- fica INATIVO e cliente_dat_bloqueio recebe a data de status (url_dt_status) mais recente entre
+-- as URLs desse cliente em servidor 'PROD'.
 --
 -- Melhoria em relação ao original: o SQLite não tem funções reaproveitáveis fora de views,
 -- então a mesma lógica "CASE WHEN EXISTS (...)" era duplicada nos 4 triggers (ver comentário
@@ -11,12 +13,22 @@
 
 CREATE OR REPLACE FUNCTION recalc_cliente_status(p_cliente_id INTEGER) RETURNS void AS $$
 BEGIN
-    UPDATE clientes SET cliente_status = (
-        CASE WHEN EXISTS (
-            SELECT 1 FROM urls u JOIN servidores s ON s.server_id = u.server_id
-            WHERE u.cliente_id = p_cliente_id AND u.url_status = 'ATIVO' AND s.server_ambiente = 'PROD'
-        ) THEN 'ATIVO' ELSE 'INATIVO' END
-    )
+    UPDATE clientes SET
+        cliente_status = (
+            CASE WHEN EXISTS (
+                SELECT 1 FROM urls u JOIN servidores s ON s.server_id = u.server_id
+                WHERE u.cliente_id = p_cliente_id AND u.url_status = 'ATIVO' AND s.server_ambiente = 'PROD'
+            ) THEN 'ATIVO' ELSE 'INATIVO' END
+        ),
+        cliente_dat_bloqueio = (
+            CASE WHEN EXISTS (
+                SELECT 1 FROM urls u JOIN servidores s ON s.server_id = u.server_id
+                WHERE u.cliente_id = p_cliente_id AND u.url_status = 'ATIVO' AND s.server_ambiente = 'PROD'
+            ) THEN NULL ELSE (
+                SELECT MAX(u.url_dt_status) FROM urls u JOIN servidores s ON s.server_id = u.server_id
+                WHERE u.cliente_id = p_cliente_id AND s.server_ambiente = 'PROD'
+            ) END
+        )
     WHERE cliente_id = p_cliente_id;
 END;
 $$ LANGUAGE plpgsql;

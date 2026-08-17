@@ -1,8 +1,10 @@
 -- WEBCRM — triggers (v1)
--- Mantém clientes.cliente_status sincronizado, substituindo a fórmula original:
+-- Mantém clientes.cliente_status e clientes.cliente_dat_bloqueio sincronizados, substituindo
+-- a fórmula original:
 --   =IF(COUNTIFS(urls!B:B,A2,urls!H:H,"ATIVO",urls!G:G,"PROD")>0,"ATIVO","INATIVO")
 -- ou seja: cliente fica ATIVO se tiver pelo menos uma URL com url_status='ATIVO'
--- num servidor de ambiente 'PROD'.
+-- num servidor de ambiente 'PROD'; senão fica INATIVO e cliente_dat_bloqueio recebe a
+-- data de status (url_dt_status) mais recente entre as URLs desse cliente em servidor 'PROD'.
 --
 -- NOTA: url_ambiente (era "urls!G:G" na planilha) não existe como coluna em urls
 -- (schema.sql) -- era um VLOOKUP pra servidores.server_ambiente via server_id.
@@ -10,51 +12,91 @@
 --
 -- Rode depois de schema.sql e views.sql.
 
--- Recalcula o status de um cliente específico
+-- Recalcula o status/bloqueio de um cliente específico
 -- (repetido em cada trigger porque SQLite não tem "funções" reaproveitáveis fora de views)
 
 CREATE TRIGGER trg_urls_ai_cliente_status
 AFTER INSERT ON urls
 BEGIN
-    UPDATE clientes SET cliente_status = (
-        CASE WHEN EXISTS (
-            SELECT 1 FROM urls u JOIN servidores s ON s.server_id = u.server_id
-            WHERE u.cliente_id = NEW.cliente_id AND u.url_status = 'ATIVO' AND s.server_ambiente = 'PROD'
-        ) THEN 'ATIVO' ELSE 'INATIVO' END
-    )
+    UPDATE clientes SET
+        cliente_status = (
+            CASE WHEN EXISTS (
+                SELECT 1 FROM urls u JOIN servidores s ON s.server_id = u.server_id
+                WHERE u.cliente_id = NEW.cliente_id AND u.url_status = 'ATIVO' AND s.server_ambiente = 'PROD'
+            ) THEN 'ATIVO' ELSE 'INATIVO' END
+        ),
+        cliente_dat_bloqueio = (
+            CASE WHEN EXISTS (
+                SELECT 1 FROM urls u JOIN servidores s ON s.server_id = u.server_id
+                WHERE u.cliente_id = NEW.cliente_id AND u.url_status = 'ATIVO' AND s.server_ambiente = 'PROD'
+            ) THEN NULL ELSE (
+                SELECT MAX(u.url_dt_status) FROM urls u JOIN servidores s ON s.server_id = u.server_id
+                WHERE u.cliente_id = NEW.cliente_id AND s.server_ambiente = 'PROD'
+            ) END
+        )
     WHERE cliente_id = NEW.cliente_id;
 END;
 
 CREATE TRIGGER trg_urls_au_cliente_status
 AFTER UPDATE ON urls
 BEGIN
-    UPDATE clientes SET cliente_status = (
-        CASE WHEN EXISTS (
-            SELECT 1 FROM urls u JOIN servidores s ON s.server_id = u.server_id
-            WHERE u.cliente_id = NEW.cliente_id AND u.url_status = 'ATIVO' AND s.server_ambiente = 'PROD'
-        ) THEN 'ATIVO' ELSE 'INATIVO' END
-    )
+    UPDATE clientes SET
+        cliente_status = (
+            CASE WHEN EXISTS (
+                SELECT 1 FROM urls u JOIN servidores s ON s.server_id = u.server_id
+                WHERE u.cliente_id = NEW.cliente_id AND u.url_status = 'ATIVO' AND s.server_ambiente = 'PROD'
+            ) THEN 'ATIVO' ELSE 'INATIVO' END
+        ),
+        cliente_dat_bloqueio = (
+            CASE WHEN EXISTS (
+                SELECT 1 FROM urls u JOIN servidores s ON s.server_id = u.server_id
+                WHERE u.cliente_id = NEW.cliente_id AND u.url_status = 'ATIVO' AND s.server_ambiente = 'PROD'
+            ) THEN NULL ELSE (
+                SELECT MAX(u.url_dt_status) FROM urls u JOIN servidores s ON s.server_id = u.server_id
+                WHERE u.cliente_id = NEW.cliente_id AND s.server_ambiente = 'PROD'
+            ) END
+        )
     WHERE cliente_id = NEW.cliente_id;
 
     -- se a URL foi reatribuída pra outro cliente, o cliente antigo também precisa recalcular
-    UPDATE clientes SET cliente_status = (
-        CASE WHEN EXISTS (
-            SELECT 1 FROM urls u JOIN servidores s ON s.server_id = u.server_id
-            WHERE u.cliente_id = OLD.cliente_id AND u.url_status = 'ATIVO' AND s.server_ambiente = 'PROD'
-        ) THEN 'ATIVO' ELSE 'INATIVO' END
-    )
+    UPDATE clientes SET
+        cliente_status = (
+            CASE WHEN EXISTS (
+                SELECT 1 FROM urls u JOIN servidores s ON s.server_id = u.server_id
+                WHERE u.cliente_id = OLD.cliente_id AND u.url_status = 'ATIVO' AND s.server_ambiente = 'PROD'
+            ) THEN 'ATIVO' ELSE 'INATIVO' END
+        ),
+        cliente_dat_bloqueio = (
+            CASE WHEN EXISTS (
+                SELECT 1 FROM urls u JOIN servidores s ON s.server_id = u.server_id
+                WHERE u.cliente_id = OLD.cliente_id AND u.url_status = 'ATIVO' AND s.server_ambiente = 'PROD'
+            ) THEN NULL ELSE (
+                SELECT MAX(u.url_dt_status) FROM urls u JOIN servidores s ON s.server_id = u.server_id
+                WHERE u.cliente_id = OLD.cliente_id AND s.server_ambiente = 'PROD'
+            ) END
+        )
     WHERE cliente_id = OLD.cliente_id AND OLD.cliente_id <> NEW.cliente_id;
 END;
 
 CREATE TRIGGER trg_urls_ad_cliente_status
 AFTER DELETE ON urls
 BEGIN
-    UPDATE clientes SET cliente_status = (
-        CASE WHEN EXISTS (
-            SELECT 1 FROM urls u JOIN servidores s ON s.server_id = u.server_id
-            WHERE u.cliente_id = OLD.cliente_id AND u.url_status = 'ATIVO' AND s.server_ambiente = 'PROD'
-        ) THEN 'ATIVO' ELSE 'INATIVO' END
-    )
+    UPDATE clientes SET
+        cliente_status = (
+            CASE WHEN EXISTS (
+                SELECT 1 FROM urls u JOIN servidores s ON s.server_id = u.server_id
+                WHERE u.cliente_id = OLD.cliente_id AND u.url_status = 'ATIVO' AND s.server_ambiente = 'PROD'
+            ) THEN 'ATIVO' ELSE 'INATIVO' END
+        ),
+        cliente_dat_bloqueio = (
+            CASE WHEN EXISTS (
+                SELECT 1 FROM urls u JOIN servidores s ON s.server_id = u.server_id
+                WHERE u.cliente_id = OLD.cliente_id AND u.url_status = 'ATIVO' AND s.server_ambiente = 'PROD'
+            ) THEN NULL ELSE (
+                SELECT MAX(u.url_dt_status) FROM urls u JOIN servidores s ON s.server_id = u.server_id
+                WHERE u.cliente_id = OLD.cliente_id AND s.server_ambiente = 'PROD'
+            ) END
+        )
     WHERE cliente_id = OLD.cliente_id;
 END;
 
@@ -63,11 +105,21 @@ END;
 CREATE TRIGGER trg_servidores_au_cliente_status
 AFTER UPDATE OF server_ambiente ON servidores
 BEGIN
-    UPDATE clientes SET cliente_status = (
-        CASE WHEN EXISTS (
-            SELECT 1 FROM urls u JOIN servidores s ON s.server_id = u.server_id
-            WHERE u.cliente_id = clientes.cliente_id AND u.url_status = 'ATIVO' AND s.server_ambiente = 'PROD'
-        ) THEN 'ATIVO' ELSE 'INATIVO' END
-    )
+    UPDATE clientes SET
+        cliente_status = (
+            CASE WHEN EXISTS (
+                SELECT 1 FROM urls u JOIN servidores s ON s.server_id = u.server_id
+                WHERE u.cliente_id = clientes.cliente_id AND u.url_status = 'ATIVO' AND s.server_ambiente = 'PROD'
+            ) THEN 'ATIVO' ELSE 'INATIVO' END
+        ),
+        cliente_dat_bloqueio = (
+            CASE WHEN EXISTS (
+                SELECT 1 FROM urls u JOIN servidores s ON s.server_id = u.server_id
+                WHERE u.cliente_id = clientes.cliente_id AND u.url_status = 'ATIVO' AND s.server_ambiente = 'PROD'
+            ) THEN NULL ELSE (
+                SELECT MAX(u.url_dt_status) FROM urls u JOIN servidores s ON s.server_id = u.server_id
+                WHERE u.cliente_id = clientes.cliente_id AND s.server_ambiente = 'PROD'
+            ) END
+        )
     WHERE cliente_id IN (SELECT DISTINCT cliente_id FROM urls WHERE server_id = NEW.server_id);
 END;

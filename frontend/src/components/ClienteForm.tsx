@@ -25,7 +25,6 @@ export interface ClienteFormValues {
   cliente_cnpj: string;
   cliente_cnpj_fat: string;
   cliente_cnpj_number: string;
-  cliente_dat_bloqueio: string;
   cliente_dia_venc_consumo: string;
   cliente_dia_venc_carteira: string;
   cliente_cod_github: string;
@@ -40,7 +39,6 @@ function toFormValues(cliente: Cliente | null): ClienteFormValues {
     cliente_cnpj: cliente?.cliente_cnpj ?? "",
     cliente_cnpj_fat: cliente?.cliente_cnpj_fat ?? "",
     cliente_cnpj_number: cliente?.cliente_cnpj_number ?? "",
-    cliente_dat_bloqueio: cliente?.cliente_dat_bloqueio ?? "",
     cliente_dia_venc_consumo:
       cliente?.cliente_dia_venc_consumo != null ? String(cliente.cliente_dia_venc_consumo) : "",
     cliente_dia_venc_carteira:
@@ -58,7 +56,6 @@ export function valuesToPayload(values: ClienteFormValues): Record<string, unkno
     cliente_cnpj: values.cliente_cnpj.trim() || null,
     cliente_cnpj_fat: values.cliente_cnpj_fat.trim() || null,
     cliente_cnpj_number: values.cliente_cnpj_number.trim() || null,
-    cliente_dat_bloqueio: values.cliente_dat_bloqueio || null,
     cliente_dia_venc_consumo: values.cliente_dia_venc_consumo
       ? Number(values.cliente_dia_venc_consumo)
       : null,
@@ -100,12 +97,18 @@ export function ClienteForm({ cliente, grupos, saving, error, onCancel, onSubmit
         <h2>{cliente ? `Editar cliente #${cliente.cliente_id}` : "Novo cliente"}</h2>
 
         {cliente && (
-          <div className="form-row">
-            <label>Status (automático)</label>
-            <span className={`badge badge-${cliente.cliente_status.toLowerCase()}`}>
-              {cliente.cliente_status}
-            </span>
-          </div>
+          <>
+            <div className="form-row">
+              <label>Status (automático)</label>
+              <span className={`badge badge-${cliente.cliente_status.toLowerCase()}`}>
+                {cliente.cliente_status}
+              </span>
+            </div>
+            <div className="form-row">
+              <label>Data bloqueio (automático)</label>
+              <span>{cliente.cliente_dat_bloqueio ?? "—"}</span>
+            </div>
+          </>
         )}
 
         <div className="form-row">
@@ -196,16 +199,6 @@ export function ClienteForm({ cliente, grupos, saving, error, onCancel, onSubmit
             id="cliente_cod_github"
             value={values.cliente_cod_github}
             onChange={(e) => set("cliente_cod_github", e.target.value)}
-          />
-        </div>
-
-        <div className="form-row">
-          <label htmlFor="cliente_dat_bloqueio">Data bloqueio</label>
-          <input
-            id="cliente_dat_bloqueio"
-            type="date"
-            value={values.cliente_dat_bloqueio}
-            onChange={(e) => set("cliente_dat_bloqueio", e.target.value)}
           />
         </div>
 

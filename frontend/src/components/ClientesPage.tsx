@@ -96,7 +96,7 @@ export function ClientesPage({ onOpenCliente }: ClientesPageProps) {
         width: 110,
         cell: (c) => <span className={`badge badge-${c.cliente_status.toLowerCase()}`}>{c.cliente_status}</span>,
       },
-      { id: "cliente_log", header: "Responsável", value: (c) => c.cliente_log, width: 220 },
+      { id: "cliente_dat_bloqueio", header: "Data bloqueio", value: (c) => c.cliente_dat_bloqueio ?? "", width: 130 },
     ],
     [grupoNomeById]
   );
@@ -105,7 +105,6 @@ export function ClientesPage({ onOpenCliente }: ClientesPageProps) {
     () => [
       { id: "cliente_status", label: "Status", value: (c) => c.cliente_status },
       { id: "grupo", label: "Grupo econômico", value: grupoNome },
-      { id: "cliente_log", label: "Responsável", value: (c) => c.cliente_log ?? "" },
     ],
     [grupoNomeById]
   );
