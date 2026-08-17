@@ -56,6 +56,7 @@ export async function gerarPdfCronograma(portfolio: PortfolioProgresso, clienteN
       atividade: l.crono_atividade ?? "",
       inicio: formatDate(l.crono_inicio_calc),
       termino: formatDate(l.crono_fim_calc),
+      replan: formatDate(l.crono_replan),
       percAtual: l.crono_perc_atual_calc,
       percEstim: l.crono_perc_esperado,
       percDesvio: l.crono_perc_atual_calc - l.crono_perc_esperado,

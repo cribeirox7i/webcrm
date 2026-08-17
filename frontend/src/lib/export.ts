@@ -283,6 +283,7 @@ interface CronogramaLinha {
   atividade: string;
   inicio: string;
   termino: string;
+  replan: string;
   percAtual: number;
   percEstim: number;
   percDesvio: number;
@@ -344,13 +345,14 @@ export async function exportCronogramaPdf(
   doc.text(`CRONOGRAMA - ${projeto}`, 14, 15);
   autoTable(doc, {
     startY: 20,
-    head: [["#", "Tipo", "Atividade", "Início", "Término", "% Atual", "% Estim.", "% Desvio", "Status", "Responsável"]],
+    head: [["#", "Tipo", "Atividade", "Início", "Término", "Replan", "% Atual", "% Estim.", "% Desvio", "Status", "Responsável"]],
     body: linhas.map((l) => [
       l.numero,
       l.tipo,
       l.atividade,
       l.inicio,
       l.termino,
+      l.replan,
       formatPercent(l.percAtual),
       formatPercent(l.percEstim),
       formatPercent(l.percDesvio),
