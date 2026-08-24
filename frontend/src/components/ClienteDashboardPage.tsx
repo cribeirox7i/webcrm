@@ -100,6 +100,12 @@ export function ClienteDashboardPage({ clienteId, onBack }: ClienteDashboardPage
     return map;
   }, [servidores]);
 
+  const servidorAmbienteById = useMemo(() => {
+    const map = new Map<number, string>();
+    servidores.forEach((s) => map.set(s.server_id, s.server_ambiente ?? ""));
+    return map;
+  }, [servidores]);
+
   const produtosDistintos = useMemo(() => {
     const ids = new Set(urls.map((u) => u.produto_id).filter((id): id is number => id != null));
     return ids.size;
@@ -137,6 +143,12 @@ export function ClienteDashboardPage({ clienteId, onBack }: ClienteDashboardPage
         width: 110,
       },
       {
+        id: "ambiente",
+        header: "Ambiente",
+        value: (u) => (u.server_id != null ? servidorAmbienteById.get(u.server_id) ?? "" : ""),
+        width: 100,
+      },
+      {
         id: "url_status",
         header: "Status",
         value: (u) => u.url_status ?? "",
@@ -144,7 +156,7 @@ export function ClienteDashboardPage({ clienteId, onBack }: ClienteDashboardPage
         cell: (u) => (u.url_status ? <span className={`badge badge-${slugify(u.url_status)}`}>{u.url_status}</span> : ""),
       },
     ],
-    [produtoNomeById, servidorNomeById]
+    [produtoNomeById, servidorNomeById, servidorAmbienteById]
   );
 
   const anoMesPorCartMesId = useMemo(() => {

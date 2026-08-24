@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   createColumnHelper,
   flexRender,
@@ -249,6 +249,31 @@ export function DataGrid<T>({
   const paddingBottom =
     virtualRows.length > 0 ? virtualizer.getTotalSize() - virtualRows[virtualRows.length - 1].end : 0;
 
+  // Largura livre do container (.table-scroll) -- usada pra esticar as colunas quando a soma
+  // das larguras definidas é menor que o espaço disponível, em vez de deixar uma faixa em
+  // branco do lado das grids em telas largas.
+  const [availWidth, setAvailWidth] = useState(0);
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver((entries) => setAvailWidth(entries[0].contentRect.width));
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  // Colunas de seleção/ações têm largura de ícone e não devem esticar -- só as colunas de
+  // dado (fixedTotal excluído) recebem a largura extra, proporcionalmente ao que já tinham.
+  const isFixedCol = (id: string) => id === "__selection" || id === "__actions";
+  const naturalTotal = table.getTotalSize();
+  const fixedTotal = table
+    .getAllLeafColumns()
+    .reduce((sum, c) => (isFixedCol(c.id) ? sum + c.getSize() : sum), 0);
+  const scalableNatural = naturalTotal - fixedTotal;
+  const extra = availWidth - naturalTotal;
+  const scale = extra > 0 && scalableNatural > 0 ? (scalableNatural + extra) / scalableNatural : 1;
+  const tableWidth = extra > 0 ? availWidth : naturalTotal;
+  const displaySize = (id: string, size: number) => (isFixedCol(id) ? size : size * scale);
+
   function exportRows() {
     const headers = columns.map((c) => c.header);
     return {
@@ -335,14 +360,17 @@ export function DataGrid<T>({
       )}
 
       <div className="table-scroll" ref={scrollRef}>
-        <table style={{ width: table.getTotalSize() }}>
+        <table style={{ width: tableWidth }}>
           <thead>
             {table.getHeaderGroups().map((hg) => (
               <tr key={hg.id}>
                 {hg.headers.map((header) => (
                   <th
                     key={header.id}
-                    style={{ width: header.getSize(), textAlign: alignById[header.column.id] }}
+                    style={{
+                      width: displaySize(header.column.id, header.getSize()),
+                      textAlign: alignById[header.column.id],
+                    }}
                     className={header.column.getCanSort() ? "sortable" : ""}
                     onClick={header.column.getToggleSortingHandler()}
                   >
@@ -379,7 +407,7 @@ export function DataGrid<T>({
                   onClick={onRowClick ? () => onRowClick(row.original as T) : undefined}
                 >
                   {row.getVisibleCells().map((cell) => (
-                    <td key={cell.id} style={{ width: cell.column.getSize() }}>
+                    <td key={cell.id} style={{ width: displaySize(cell.column.id, cell.column.getSize()) }}>
                       {flexRender(cell.column.columnDef.cell, cell.getContext())}
                     </td>
                   ))}

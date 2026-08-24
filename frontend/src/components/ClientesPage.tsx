@@ -85,18 +85,19 @@ export function ClientesPage({ onOpenCliente }: ClientesPageProps) {
 
   const columns: DataGridColumn<Cliente>[] = useMemo(
     () => [
-      { id: "cliente_id", header: "ID", value: (c) => c.cliente_id, width: 70, minWidth: 60 },
-      { id: "cliente_nome", header: "Nome", value: (c) => c.cliente_nome, width: 280 },
-      { id: "grupo", header: "Grupo econômico", value: grupoNome, width: 200 },
-      { id: "cliente_cnpj", header: "CNPJ", value: (c) => c.cliente_cnpj, width: 170 },
+      { id: "cliente_id", header: "ID", value: (c) => c.cliente_id, width: 60, minWidth: 50 },
+      { id: "cliente_nome", header: "Nome", value: (c) => c.cliente_nome, width: 240 },
+      { id: "grupo", header: "Grupo econômico", value: grupoNome, width: 160 },
+      { id: "cliente_cnpj", header: "CNPJ", value: (c) => c.cliente_cnpj, width: 150 },
+      { id: "cliente_log", header: "Responsável", value: (c) => c.cliente_log ?? "", width: 170 },
       {
         id: "cliente_status",
         header: "Status",
         value: (c) => c.cliente_status,
-        width: 110,
+        width: 100,
         cell: (c) => <span className={`badge badge-${c.cliente_status.toLowerCase()}`}>{c.cliente_status}</span>,
       },
-      { id: "cliente_dat_bloqueio", header: "Data bloqueio", value: (c) => c.cliente_dat_bloqueio ?? "", width: 130 },
+      { id: "cliente_dat_bloqueio", header: "Data bloqueio", value: (c) => c.cliente_dat_bloqueio ?? "", width: 110 },
     ],
     [grupoNomeById]
   );
