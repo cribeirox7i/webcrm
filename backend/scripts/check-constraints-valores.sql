@@ -20,6 +20,37 @@
 
 
 -- =============================================================================
+-- PARTE 0 - ESTADO ATUAL (so leitura; rodar SOZINHA, antes de qualquer coisa)
+--
+-- Diz quais das 4 constraints ja existem e se cada uma ja foi validada contra o
+-- dado existente (`validada` = a coluna `convalidated` do pg_constraint). Serve
+-- pra saber de onde retomar quando nao esta claro o que ja rodou:
+--   nao existe          -> falta aplicar a PARTE 2
+--   existe, validada=f  -> PARTE 2 feita, falta a PARTE 2B
+--   existe, validada=t  -> nada a fazer, ja esta tudo aplicado
+--
+-- IMPORTANTE: no SQL Editor do Supabase, selecionar SO este bloco e rodar (ou
+-- apagar o resto). Rodando o arquivo inteiro, o editor mostra apenas o resultado
+-- da ultima instrucao que devolve linhas -- foi o que aconteceu na primeira
+-- execucao desta leva.
+-- =============================================================================
+
+SELECT c.conname AS constraint_name,
+       c.conrelid::regclass::text AS tabela,
+       c.convalidated AS validada,
+       CASE WHEN c.convalidated THEN 'ja aplicada e validada'
+            ELSE 'aplicada, mas falta a PARTE 2B' END AS situacao
+FROM pg_constraint c
+WHERE c.conname IN (
+  'carteira_valores_nao_negativos',
+  'precos_cliente_valores_nao_negativos',
+  'consumo_ana_qtd_nao_negativa',
+  'crono_valores_nao_negativos'
+)
+ORDER BY c.conrelid::regclass::text;
+
+
+-- =============================================================================
 -- PARTE 1 - CONFERENCIA (so leitura, seguro rodar a qualquer momento)
 --
 -- E UMA QUERY UNICA de proposito: o SQL Editor do Supabase mostra apenas o
@@ -111,39 +142,80 @@ ORDER BY 3 DESC, 1, 2;
 
 -- =============================================================================
 -- PARTE 2 - APLICACAO (altera o schema; rodar so se a PARTE 1 voltou tudo 0)
+--
 -- Cada constraint e NOT VALID de proposito: o Postgres passa a barrar toda
 -- escrita nova imediatamente, mas nao varre a tabela inteira na hora de aplicar
 -- (evita lock longo em `consumo_ana`, que tem ~256 mil linhas). A validacao do
 -- dado que ja existe fica pra PARTE 2B.
+--
+-- IDEMPOTENTE: cada bloco so cria a constraint se ela ainda nao existir. A
+-- primeira versao usava `ALTER TABLE ... ADD CONSTRAINT` direto, e rodar o
+-- arquivo de novo estourava `42710: constraint ... already exists` no primeiro
+-- ALTER (achado real: o usuario rodou o arquivo inteiro na primeira vez, entao a
+-- PARTE 2 ja tinha aplicado tudo, e a segunda execucao quebrou aqui). O Postgres
+-- nao tem `ADD CONSTRAINT IF NOT EXISTS`, por isso o DO/IF NOT EXISTS -- e nao um
+-- `DROP CONSTRAINT IF EXISTS` antes, que jogaria fora a validacao ja feita pela
+-- PARTE 2B e obrigaria a varredura completa de novo.
 -- =============================================================================
 
-ALTER TABLE carteira
-  ADD CONSTRAINT carteira_valores_nao_negativos CHECK (
-    cart_qtd             >= 0 AND
-    cart_vlr             >= 0 AND
-    cart_pdd             >= 0 AND
-    cart_sem_pdd         >= 0 AND
-    cart_fat             >= 0 AND
-    cart_qtd_mes         >= 0 AND
-    cart_emprestimos_mes >= 0
-  ) NOT VALID;
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint
+                 WHERE conname = 'carteira_valores_nao_negativos'
+                   AND conrelid = 'carteira'::regclass) THEN
+    ALTER TABLE carteira
+      ADD CONSTRAINT carteira_valores_nao_negativos CHECK (
+        cart_qtd             >= 0 AND
+        cart_vlr             >= 0 AND
+        cart_pdd             >= 0 AND
+        cart_sem_pdd         >= 0 AND
+        cart_fat             >= 0 AND
+        cart_qtd_mes         >= 0 AND
+        cart_emprestimos_mes >= 0
+      ) NOT VALID;
+    RAISE NOTICE 'carteira_valores_nao_negativos criada';
+  ELSE
+    RAISE NOTICE 'carteira_valores_nao_negativos ja existia, nada feito';
+  END IF;
 
-ALTER TABLE precos_cliente
-  ADD CONSTRAINT precos_cliente_valores_nao_negativos CHECK (
-    pc_vlr_franquia >= 0 AND pc_vlr_unit >= 0 AND
-    pc_fx1_lim >= 0 AND pc_fx2_lim >= 0 AND pc_fx3_lim >= 0 AND
-    pc_fx4_lim >= 0 AND pc_fx5_lim >= 0 AND
-    pc_fx1_vlr >= 0 AND pc_fx2_vlr >= 0 AND pc_fx3_vlr >= 0 AND
-    pc_fx4_vlr >= 0 AND pc_fx5_vlr >= 0
-  ) NOT VALID;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint
+                 WHERE conname = 'precos_cliente_valores_nao_negativos'
+                   AND conrelid = 'precos_cliente'::regclass) THEN
+    ALTER TABLE precos_cliente
+      ADD CONSTRAINT precos_cliente_valores_nao_negativos CHECK (
+        pc_vlr_franquia >= 0 AND pc_vlr_unit >= 0 AND
+        pc_fx1_lim >= 0 AND pc_fx2_lim >= 0 AND pc_fx3_lim >= 0 AND
+        pc_fx4_lim >= 0 AND pc_fx5_lim >= 0 AND
+        pc_fx1_vlr >= 0 AND pc_fx2_vlr >= 0 AND pc_fx3_vlr >= 0 AND
+        pc_fx4_vlr >= 0 AND pc_fx5_vlr >= 0
+      ) NOT VALID;
+    RAISE NOTICE 'precos_cliente_valores_nao_negativos criada';
+  ELSE
+    RAISE NOTICE 'precos_cliente_valores_nao_negativos ja existia, nada feito';
+  END IF;
 
-ALTER TABLE consumo_ana
-  ADD CONSTRAINT consumo_ana_qtd_nao_negativa CHECK (consumo_qtd >= 0) NOT VALID;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint
+                 WHERE conname = 'consumo_ana_qtd_nao_negativa'
+                   AND conrelid = 'consumo_ana'::regclass) THEN
+    ALTER TABLE consumo_ana
+      ADD CONSTRAINT consumo_ana_qtd_nao_negativa CHECK (consumo_qtd >= 0) NOT VALID;
+    RAISE NOTICE 'consumo_ana_qtd_nao_negativa criada';
+  ELSE
+    RAISE NOTICE 'consumo_ana_qtd_nao_negativa ja existia, nada feito';
+  END IF;
 
-ALTER TABLE crono
-  ADD CONSTRAINT crono_valores_nao_negativos CHECK (
-    crono_perc_atual >= 0 AND crono_hh_orc >= 0 AND crono_hh_real >= 0
-  ) NOT VALID;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint
+                 WHERE conname = 'crono_valores_nao_negativos'
+                   AND conrelid = 'crono'::regclass) THEN
+    ALTER TABLE crono
+      ADD CONSTRAINT crono_valores_nao_negativos CHECK (
+        crono_perc_atual >= 0 AND crono_hh_orc >= 0 AND crono_hh_real >= 0
+      ) NOT VALID;
+    RAISE NOTICE 'crono_valores_nao_negativos criada';
+  ELSE
+    RAISE NOTICE 'crono_valores_nao_negativos ja existia, nada feito';
+  END IF;
+END $$;
 
 
 -- =============================================================================
@@ -153,10 +225,24 @@ ALTER TABLE crono
 -- hora de baixo uso. Se a PARTE 1 voltou tudo 0, nao deve falhar nenhuma.
 -- =============================================================================
 
-ALTER TABLE carteira       VALIDATE CONSTRAINT carteira_valores_nao_negativos;
-ALTER TABLE precos_cliente VALIDATE CONSTRAINT precos_cliente_valores_nao_negativos;
-ALTER TABLE consumo_ana    VALIDATE CONSTRAINT consumo_ana_qtd_nao_negativa;
-ALTER TABLE crono          VALIDATE CONSTRAINT crono_valores_nao_negativos;
+-- Guardado por IF EXISTS pelo mesmo motivo da PARTE 2 (poder rodar de novo sem
+-- estourar). Revalidar constraint ja validada e no-op no Postgres, nao da erro --
+-- o guarda aqui e pro caso da constraint nao existir ainda.
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'carteira_valores_nao_negativos') THEN
+    ALTER TABLE carteira VALIDATE CONSTRAINT carteira_valores_nao_negativos;
+  END IF;
+  IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'precos_cliente_valores_nao_negativos') THEN
+    ALTER TABLE precos_cliente VALIDATE CONSTRAINT precos_cliente_valores_nao_negativos;
+  END IF;
+  IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'consumo_ana_qtd_nao_negativa') THEN
+    ALTER TABLE consumo_ana VALIDATE CONSTRAINT consumo_ana_qtd_nao_negativa;
+  END IF;
+  IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'crono_valores_nao_negativos') THEN
+    ALTER TABLE crono VALIDATE CONSTRAINT crono_valores_nao_negativos;
+  END IF;
+END $$;
 
 
 -- =============================================================================

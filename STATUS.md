@@ -1707,3 +1707,35 @@ tinha dado so na teoria sobre as URLs sem cliente.
 **Vale como padrao pra proximas levas**: PGlite no scratchpad e uma forma de testar SQL de producao
 (schema, constraint, trigger, view) sem credencial nenhuma e sem tocar no Supabase. Nao substitui o
 teste com o dado real, mas pega erro de sintaxe/semantica antes de mandar o script pro usuario.
+### Script de constraints: idempotencia e PARTE 0 de diagnostico (2026-08-25)
+
+Segundo defeito real do mesmo script, achado pelo usuario rodando: a PARTE 2 estourou
+`ERROR: 42710: constraint "carteira_valores_nao_negativos" for relation "carteira" already exists`.
+
+Diagnostico: na primeira execucao o usuario rodou o **arquivo inteiro**, nao so a PARTE 1 - entao a
+PARTE 2 (e provavelmente a 2B) ja tinham aplicado tudo, e a segunda execucao quebrou no primeiro
+`ALTER TABLE ... ADD CONSTRAINT`. Isso tambem explica por que so o ultimo `SELECT` apareceu no print
+da primeira vez. Consequencia boa: se a 2B rodou junto e nao falhou, o dado de producao **nao tem
+violacao** (o `VALIDATE CONSTRAINT` varre a tabela e falharia se tivesse) - a PARTE 0 nova confirma.
+
+Duas correcoes:
+
+- **PARTE 0 - ESTADO ATUAL** (nova, so leitura): consulta `pg_constraint` e diz, pra cada uma das 4
+  constraints, se existe e se `convalidated` e true. Serve pra saber de onde retomar: nao existe ->
+  falta a PARTE 2; existe com validada=false -> falta a PARTE 2B; validada=true -> nada a fazer.
+- **PARTE 2 e 2B idempotentes**: envolvidas em `DO $$ ... END $$` com `IF NOT EXISTS`/`IF EXISTS`
+  sobre `pg_constraint` (Postgres nao tem `ADD CONSTRAINT IF NOT EXISTS`). Deliberadamente **nao**
+  usei `DROP CONSTRAINT IF EXISTS` antes do ADD: isso jogaria fora a validacao ja feita pela 2B e
+  obrigaria outra varredura completa da `consumo_ana` (~256 mil linhas). A PARTE 2 agora emite
+  `RAISE NOTICE` dizendo se criou ou se ja existia.
+
+Testado de novo no PGlite, cobrindo exatamente o cenario que quebrou: PARTE 0 vazia no inicio,
+PARTE 2 rodando duas vezes seguidas sem erro, PARTE 0 mostrando validada=false depois da 2 e
+validada=true depois da 2B, PARTE 2B rodando duas vezes (revalidar constraint ja validada e no-op no
+Postgres, nao da erro), **o arquivo inteiro rodando de ponta a ponta com tudo ja aplicado sem
+estourar nada**, e a constraint continuando a barrar negativo no fim.
+
+**Licao pra proximas levas**: script de schema entregue pro usuario rodar tem que ser idempotente
+por padrao, nao "rodar uma vez e dar certo" - a pessoa vai reexecutar o arquivo (inteiro, e nao a
+parte que eu imaginei) quando algo parecer errado no meio. E util deixar sempre um bloco de
+diagnostico de estado no comeco do arquivo.
