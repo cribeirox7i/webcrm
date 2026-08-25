@@ -8,8 +8,11 @@ import { usePageTitle } from "../PageTitleContext";
 import { EditIcon } from "./icons";
 import { usePermissao } from "../auth/usePermissao";
 
-function formatMoney(v: number | null): string {
-  return v != null ? v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : "";
+// Célula de grid sem o "R$" (símbolo no cabeçalho da coluna), mesmo padrão das outras telas do
+// Financeiro. Esta tela não tem StatCards de dinheiro, então não sobrou uso pro formato com
+// símbolo -- o formatMoney que existia aqui foi removido junto.
+function formatValor(v: number | null): string {
+  return v != null ? v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "";
 }
 
 export type AlertaKey = "sem_valor" | "sem_indexador" | "cliente_inativo";
@@ -119,19 +122,19 @@ export function TabelaPrecosPage({ cartMesId, cartAnoMes, alertaInicial, onBack 
       { id: "detalhe", header: "Detalhe", value: produtoDetalhe, width: 180 },
       {
         id: "pc_vlr_franquia",
-        header: "Franquia",
+        header: "Franquia (R$)",
         value: (p) => p.pc_vlr_franquia,
-        width: 110,
+        width: 105,
         align: "right",
-        cell: (p) => formatMoney(p.pc_vlr_franquia),
+        cell: (p) => formatValor(p.pc_vlr_franquia),
       },
       {
         id: "pc_vlr_unit",
-        header: "Valor unitário",
+        header: "Valor unitário (R$)",
         value: (p) => p.pc_vlr_unit,
-        width: 120,
+        width: 115,
         align: "right",
-        cell: (p) => formatMoney(p.pc_vlr_unit),
+        cell: (p) => formatValor(p.pc_vlr_unit),
       },
       {
         id: "cliente_tip_vlr",

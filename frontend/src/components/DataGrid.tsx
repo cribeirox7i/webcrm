@@ -261,17 +261,36 @@ export function DataGrid<T>({
     return () => observer.disconnect();
   }, []);
 
-  // Colunas de seleção/ações têm largura de ícone e não devem esticar -- só as colunas de
-  // dado (fixedTotal excluído) recebem a largura extra, proporcionalmente ao que já tinham.
+  // Colunas de seleção/ações têm largura de ícone e não devem esticar nem encolher -- só as
+  // colunas de dado (fixedTotal excluído) absorvem a diferença, proporcionalmente ao que já
+  // tinham.
   const isFixedCol = (id: string) => id === "__selection" || id === "__actions";
   const naturalTotal = table.getTotalSize();
-  const fixedTotal = table
-    .getAllLeafColumns()
-    .reduce((sum, c) => (isFixedCol(c.id) ? sum + c.getSize() : sum), 0);
+  const leafCols = table.getAllLeafColumns();
+  const fixedTotal = leafCols.reduce((sum, c) => (isFixedCol(c.id) ? sum + c.getSize() : sum), 0);
   const scalableNatural = naturalTotal - fixedTotal;
-  const extra = availWidth - naturalTotal;
-  const scale = extra > 0 && scalableNatural > 0 ? (scalableNatural + extra) / scalableNatural : 1;
-  const tableWidth = extra > 0 ? availWidth : naturalTotal;
+
+  // Piso: soma dos minSize das colunas de dado. Abaixo disso não dá pra encolher sem deixar a
+  // célula ilegível, então aí sim a rolagem volta -- é o limite físico, não uma escolha.
+  const scalableMin = leafCols.reduce((sum, c) => (isFixedCol(c.id) ? sum : sum + (c.columnDef.minSize ?? 70)), 0);
+
+  // Espaço que as colunas de dado podem ocupar de fato. `availWidth === 0` no primeiro render
+  // (antes do ResizeObserver medir) -- nesse caso usa a largura natural, senão a grid pisca
+  // encolhida ao montar.
+  //
+  // GUARD_PX: medido no navegador que, pedindo exatamente a largura do container, ainda sobrava
+  // ~3px de rolagem (borda do .table-scroll + arredondamento do border-collapse sob zoom 80%).
+  // Sem essa folga a barra horizontal aparece por 3px, que é justamente o que se quer evitar.
+  const GUARD_PX = 4;
+  const scalableAvail = availWidth > 0 ? Math.floor(availWidth) - fixedTotal - GUARD_PX : scalableNatural;
+  const scalableTarget = Math.max(scalableMin, scalableAvail);
+
+  // Antes só esticava (scale > 1 quando sobrava espaço); agora também encolhe (scale < 1 quando
+  // falta), o que é o que garante "nunca rolar" sem depender de cada tela declarar largura que
+  // caiba na menor tela em uso. Encolher é proporcional, então coluna larga cede mais espaço
+  // absoluto que coluna estreita.
+  const scale = scalableNatural > 0 ? scalableTarget / scalableNatural : 1;
+  const tableWidth = fixedTotal + scalableTarget;
   const displaySize = (id: string, size: number) => (isFixedCol(id) ? size : size * scale);
 
   function exportRows() {
@@ -373,6 +392,9 @@ export function DataGrid<T>({
                     }}
                     className={header.column.getCanSort() ? "sortable" : ""}
                     onClick={header.column.getToggleSortingHandler()}
+                    // o header pode ser cortado por reticências quando a coluna encolhe (ver
+                    // `thead th` no index.css) -- o title garante o nome completo no hover
+                    title={typeof header.column.columnDef.header === "string" ? header.column.columnDef.header : undefined}
                   >
                     {flexRender(header.column.columnDef.header, header.getContext())}
                     {{ asc: " ▲", desc: " ▼" }[header.column.getIsSorted() as string] ?? ""}

@@ -10,6 +10,12 @@ function formatMoney(v: number | null): string {
   return v != null ? v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : "";
 }
 
+// Célula de grid sem o "R$" (o símbolo vai no cabeçalho da coluna) -- economiza ~19px por
+// coluna de dinheiro, e esta tela tem 4 delas. formatMoney continua em uso nos StatCards.
+function formatValor(v: number | null): string {
+  return v != null ? v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "";
+}
+
 function formatInt(v: number | null): string {
   return v != null ? v.toLocaleString("pt-BR") : "";
 }
@@ -75,28 +81,28 @@ export function CarteiraMesPage({ cartMesId, cartAnoMes, onBack }: CarteiraMesPa
       { id: "cliente", header: "Cliente", value: clienteNome, width: 260 },
       {
         id: "cart_vlr",
-        header: "Valor da carteira",
+        header: "Valor da carteira (R$)",
         value: (c) => c.cart_vlr,
-        width: 140,
+        width: 130,
         align: "right",
-        cell: (c) => formatMoney(c.cart_vlr),
+        cell: (c) => formatValor(c.cart_vlr),
       },
       { id: "cart_qtd", header: "Operações", value: (c) => c.cart_qtd, width: 100 },
       {
         id: "cart_pdd",
-        header: "Carteira em PDD",
+        header: "Carteira em PDD (R$)",
         value: (c) => c.cart_pdd,
-        width: 140,
+        width: 130,
         align: "right",
-        cell: (c) => formatMoney(c.cart_pdd),
+        cell: (c) => formatValor(c.cart_pdd),
       },
       {
         id: "cart_sem_pdd",
-        header: "Carteira sem PDD",
+        header: "Carteira sem PDD (R$)",
         value: (c) => c.cart_sem_pdd,
-        width: 140,
+        width: 130,
         align: "right",
-        cell: (c) => formatMoney(c.cart_sem_pdd),
+        cell: (c) => formatValor(c.cart_sem_pdd),
       },
       {
         id: "cart_qtd_mes",
@@ -108,11 +114,11 @@ export function CarteiraMesPage({ cartMesId, cartAnoMes, onBack }: CarteiraMesPa
       },
       {
         id: "cart_emprestimos_mes",
-        header: "Concessões no mês",
+        header: "Concessões no mês (R$)",
         value: (c) => c.cart_emprestimos_mes,
-        width: 150,
+        width: 130,
         align: "right",
-        cell: (c) => formatMoney(c.cart_emprestimos_mes),
+        cell: (c) => formatValor(c.cart_emprestimos_mes),
       },
       { id: "cart_prod", header: "Produto", value: (c) => c.cart_prod, width: 120 },
       { id: "cart_ult_def", header: "Último deferimento", value: (c) => c.cart_ult_def, width: 140, align: "center" },

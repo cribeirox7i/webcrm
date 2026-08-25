@@ -1784,3 +1784,76 @@ R$ 111.062,52 no mes 6.
 
 Mesma linha de raciocinio das 306 URLs sem cliente e das 7 linhas de `resp` orfas que ficaram fora
 da migracao: anomalia conhecida, documentada, nao "consertada" por conta propria.
+## Leva Rolagem Lateral no Financeiro (2026-08-25, mesma sessao da auditoria de seguranca)
+
+Pedido do usuario: reduzir os campos de valor da aba Financeiro pra nunca haver rolagem lateral.
+O print que o usuario mandou era da tela de **lista de meses** (`FinanceiroPage`), nao de
+Faturamento/Carteira como eu tinha calculado ao levantar o problema antes - a causa real era outra.
+
+### Causa raiz: a celula de acoes mentia sobre a propria largura
+
+Medido no navegador (injetando o markup real com o `index.css` carregado, em px logicos - o app
+roda com `zoom: 80%` no html): a celula de acoes da `FinanceiroPage` (2 grupos rotulados
+CARTEIRA/CONSUMO com 5 botoes de icone) mede **346px reais**, mas o codigo declarava
+`actionsWidth={280}`. O navegador nao consegue encolher uma celula abaixo do que o conteudo dela
+exige, entao a tabela renderizava ~66px alem do que o `DataGrid` tinha calculado - **rolagem por um
+erro de medida, nao por excesso de largura nas colunas de valor** (essas ate estavam sendo
+ESTICADAS pelo mecanismo de preenchimento adicionado em 24/08, porque sobrava espaco).
+
+Conferido que as outras 3 telas do Financeiro (`CarteiraMesPage` actionsWidth=60,
+`FaturamentoMesPage`=140, `TabelaPrecosPage`=60) tinham a largura declarada **honesta** (1 botao
+mede 54px real contra 60 declarado, 3 botoes 126 contra 140) - so a `FinanceiroPage` estava errada.
+Corrigido pra `actionsWidth={350}`.
+
+### Correcao estrutural no DataGrid: encolher, nao so esticar
+
+O mecanismo de preenchimento de 24/08 so fazia a tabela ESTICAR quando sobrava espaco (`scale > 1`).
+Nunca encolhia quando faltava - dependia de cada tela declarar larguras que coubessem na menor tela
+em uso, o que e fragil (proxima coluna adicionada em qualquer tela pode voltar a rolar). Generalizei
+a mesma formula pra tambem encolher (`scale < 1`) quando `availWidth` for menor que a soma natural
+das colunas, com um piso: nunca abaixo da soma dos `minSize` (default 70px) das colunas de dado -
+esse piso e agregado, nao por coluna individual, entao com colunas de tamanho muito desigual uma
+coluna estreita pode encolher um pouco alem do proprio minimo enquanto a soma total ainda respeita
+o piso (aceito: e so estetico, nao traz rolagem de volta, a coluna so fica mais apertada que a
+media). Isso e o que garante "nunca rolar" como propriedade do `DataGrid`, nao mais como promessa
+de cada tela acertar a largura certa.
+
+Foi preciso tambem travar `thead th` (`overflow: hidden; text-overflow: ellipsis`) no `index.css`:
+sem isso, o cabecalho em `nowrap` sem limite ("Concessoes no mes") virava o piso de largura da
+coluna e furava o calculo do DataGrid, trazendo a rolagem de volta por outro caminho. `title` no
+`th` mantem o nome completo acessivel no hover quando o texto e cortado.
+
+### Reducao dos campos de valor (o pedido original)
+
+`R$` retirado das celulas de dinheiro nas 4 telas (`FinanceiroPage`, `CarteiraMesPage`,
+`FaturamentoMesPage`, `TabelaPrecosPage`) - o simbolo foi pro cabecalho da coluna ("Total de
+carteira (R$)"), que so aparece uma vez, nao em toda linha. Medido: "R$ 22.910.039.233,15" ocupa
+125px logicos contra 106px sem o prefixo - ~19px por coluna de dinheiro, e a Carteira tem 4 dessas
+e o Faturamento 3. Novo helper `formatValor()` ao lado do `formatMoney()` existente em cada arquivo
+(mantido pros StatCards/relatorio PDF, onde ha espaco e o simbolo ainda ajuda a leitura). Larguras
+das colunas de dinheiro tambem reduzidas um pouco (140->130 na Carteira, 130->120 no Faturamento,
+110->105/120->115 nos Precos) - a folga ganha pelo `R$` permitiu isso sem cortar o valor.
+
+### Verificacao
+
+**Sem `DATABASE_URL` local, nao deu pra logar no app real** (limitacao ja conhecida) - a validacao
+foi em duas camadas complementares:
+1. **Formula do DataGrid replicada e testada** no navegador (Browser pane, via `javascript_tool`)
+   com os numeros reais de largura das 4 telas (extraidos do codigo apos a mudanca), simulando
+   `1280/1366/1440/1600/1920px` de tela fisica: **nenhum caso rola**. Testado tambem que o piso
+   fisico (quando genuinamente nao ha espaco) so aparece por volta de 1024px de largura de tela -
+   bem abaixo de qualquer desktop real, e o projeto ja documenta que nao tem layout responsivo pra
+   telas pequenas.
+2. **Markup real renderizado** no Browser pane redimensionado pra 1366x800 (o notebook mais
+   apertado citado), com as larguras JA escaladas pela formula e conteudo de teste no tamanho
+   maximo esperado (CNPJ, valor de 22 bilhoes, observacao longa): `scrollWidth === clientWidth`,
+   sem rolagem, confirmado por assercao no navegador.
+
+Achado real no meio da verificacao: a primeira tentativa de medir usou padding de pagina chutado
+(48px) sem confirmar no CSS - o valor real e 52px (`main { padding: 18px 26px }`, 26px dos dois
+lados). Corrigido antes de fechar a simulacao, mesma disciplina de "testar antes de entregar" que
+ja tinha virado padrao nesta sessao com o script de constraints SQL.
+
+`tsc -b` e `vite build` limpos no frontend. **Nao verificado com a tela renderizando dados reais**
+via login - proxima vez que alguem logar no app de verdade, vale confirmar visualmente a lista de
+meses, Carteira, Faturamento e Precos numa tela de notebook comum.

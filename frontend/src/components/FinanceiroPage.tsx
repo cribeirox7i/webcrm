@@ -13,8 +13,12 @@ type Drill =
   | { mode: "precos" | "carteira" | "consumo" | "faturamento"; cartMesId: number; cartAnoMes: string; alerta?: AlertaKey }
   | null;
 
-function formatMoney(v: number): string {
-  return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+// Sem o "R$" na célula: o símbolo vai no cabeçalho da coluna ("Total de carteira (R$)"), o que
+// economiza ~19px por coluna de dinheiro (medido no navegador: "R$ 22.910.039.233,15" ocupa
+// 125px contra 106px sem o prefixo) sem perder informação nenhuma. Nos StatCards o "R$"
+// continua, porque lá é número de destaque e sobra espaço.
+function formatValor(v: number): string {
+  return v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 export function FinanceiroPage() {
@@ -57,19 +61,19 @@ export function FinanceiroPage() {
       },
       {
         id: "total_carteira",
-        header: "Total de carteira",
+        header: "Total de carteira (R$)",
         value: (m) => m.total_carteira,
-        width: 150,
+        width: 140,
         align: "right",
-        cell: (m) => formatMoney(m.total_carteira),
+        cell: (m) => formatValor(m.total_carteira),
       },
       {
         id: "total_consumo",
-        header: "Total de consumo",
+        header: "Total de consumo (R$)",
         value: (m) => m.total_consumo,
-        width: 150,
+        width: 140,
         align: "right",
-        cell: (m) => formatMoney(m.total_consumo),
+        cell: (m) => formatValor(m.total_consumo),
       },
     ],
     []
@@ -123,7 +127,13 @@ export function FinanceiroPage() {
         searchPlaceholder="Buscar por ano/mês..."
         loading={loading}
         exportFilename="financeiro"
-        actionsWidth={280}
+        // 350, não 280: a célula de ações desta tela mede 346px reais (2 grupos rotulados
+        // CARTEIRA/CONSUMO + 5 botões de ícone, medido no navegador em px lógicos). Com 280
+        // declarados, o navegador não conseguia encolher a célula abaixo do conteúdo e a tabela
+        // renderizava ~66px além do que o DataGrid tinha calculado -- causa real da rolagem
+        // lateral nesta tela, e não a largura das colunas de valor (que aqui até sobra espaço:
+        // elas estavam sendo ESTICADAS pelo DataGrid).
+        actionsWidth={350}
         renderActions={(m) => (
           <div className="row-actions-columns">
             <span className="row-actions-group">

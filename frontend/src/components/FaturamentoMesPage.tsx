@@ -13,6 +13,12 @@ function formatMoney(v: number): string {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
+// Célula de grid sem o "R$" (símbolo no cabeçalho da coluna) -- esta é a tela mais larga do
+// Financeiro (11 colunas), então cada px conta. formatMoney segue em uso nos StatCards/relatório.
+function formatValor(v: number): string {
+  return v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
 function formatDate(iso: string | null): string {
   if (!iso) return "";
   const [y, m, d] = iso.split("-");
@@ -222,19 +228,19 @@ export function FaturamentoMesPage({ cartMesId, cartAnoMes, onBack }: Faturament
       },
       {
         id: "fat_vlr_liq",
-        header: "Valor Líquido",
+        header: "Valor Líquido (R$)",
         value: (f) => f.fat_vlr_liq,
-        width: 130,
+        width: 120,
         align: "right",
-        cell: (f) => formatMoney(f.fat_vlr_liq),
+        cell: (f) => formatValor(f.fat_vlr_liq),
       },
       {
         id: "fat_vlr_brt",
-        header: "Valor Bruto",
+        header: "Valor Bruto (R$)",
         value: (f) => f.fat_vlr_brt,
-        width: 130,
+        width: 120,
         align: "right",
-        cell: (f) => formatMoney(f.fat_vlr_brt),
+        cell: (f) => formatValor(f.fat_vlr_brt),
       },
       {
         id: "tipo",
@@ -249,11 +255,11 @@ export function FaturamentoMesPage({ cartMesId, cartAnoMes, onBack }: Faturament
       },
       {
         id: "valor_a_faturar",
-        header: "Valor a Faturar",
+        header: "Valor a Faturar (R$)",
         value: valorAFaturar,
-        width: 150,
+        width: 125,
         align: "right",
-        cell: (f) => formatMoney(valorAFaturar(f)),
+        cell: (f) => formatValor(valorAFaturar(f)),
       },
       { id: "fat_num_nfe", header: "Número NFE", value: (f) => f.fat_num_nfe, width: 130 },
       { id: "fat_num_rps", header: "Número RPS", value: (f) => f.fat_num_rps, width: 130 },

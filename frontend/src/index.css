@@ -541,6 +541,13 @@ thead th {
   color: var(--text-h);
   z-index: 1;
   white-space: nowrap;
+  /* Sem isto o cabeçalho vira o piso de largura da coluna: `nowrap` sem limite faz um header
+     longo ("Concessões no mês") esticar a coluna além da largura declarada, furando o cálculo
+     de largura do DataGrid e trazendo de volta a rolagem lateral que ele acabou de evitar.
+     Com overflow escondido, a coluna manda no header, não o contrário -- o texto só corta
+     quando o espaço aperta de verdade (o `title` no th mantém o nome completo acessível). */
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 th.sortable {
