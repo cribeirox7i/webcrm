@@ -36,6 +36,21 @@ function redactRows<T extends Record<string, unknown>>(resource: string, rows: T
   return REDACTED_COLUMNS[resource] ? rows.map((r) => redactRow(resource, r)) : rows;
 }
 
+// Erro do Postgres traz nome de constraint/coluna/tipo do schema interno -- útil pro dono do
+// sistema, mas é detalhe de implementação vazando pro cliente. Só a violação de constraint
+// (23xxx: unique, FK, NOT NULL, check) volta com a mensagem original, porque é a única que o
+// usuário consegue agir em cima ("CNPJ já cadastrado"); o resto vira mensagem genérica e o
+// detalhe fica no log do servidor.
+function responderErroEscrita(res: Response, resource: string, err: unknown) {
+  const codigo = (err as { code?: string }).code ?? "";
+  if (codigo.startsWith("23")) {
+    res.status(400).json({ error: (err as Error).message });
+    return;
+  }
+  console.error(`[resource] falha ao gravar em ${resource}:`, err);
+  res.status(400).json({ error: "não foi possível gravar os dados enviados" });
+}
+
 function getResourceOr404(req: Request, res: Response) {
   const info = catalog.get(req.params.resource);
   if (!info) {
@@ -129,7 +144,7 @@ resourceRouter.post("/:resource", enforceMenuPermission("perm_insercao", "resour
     );
     res.status(201).json(rows[0] ? redactRow(info.name, rows[0] as Record<string, unknown>) : { ok: true });
   } catch (err) {
-    res.status(400).json({ error: (err as Error).message });
+    responderErroEscrita(res, info.name, err);
   }
 });
 
@@ -170,7 +185,7 @@ resourceRouter.put("/:resource/:id", enforceMenuPermission("perm_edicao", "resou
     }
     res.json(redactRow(info.name, rows[0] as Record<string, unknown>));
   } catch (err) {
-    res.status(400).json({ error: (err as Error).message });
+    responderErroEscrita(res, info.name, err);
   }
 });
 

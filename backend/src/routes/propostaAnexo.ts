@@ -2,7 +2,7 @@ import { Router } from "express";
 import multer from "multer";
 import crypto from "node:crypto";
 import { query } from "../db";
-import { deleteObject, getSignedDownloadUrl, isStorageConfigured, uploadBuffer } from "../storage";
+import { contentTypeSeguro, deleteObject, erroTipoArquivo, getSignedDownloadUrl, isStorageConfigured, uploadBuffer } from "../storage";
 import { getPastaStorage } from "./parametrosStorage";
 import { bloqueado } from "../permissaoResource";
 
@@ -32,6 +32,11 @@ propostaAnexoRouter.post("/propostas/:id/anexo", upload.single("file"), async (r
     res.status(400).json({ error: "arquivo não enviado" });
     return;
   }
+  const erroTipo = erroTipoArquivo(file.originalname, file.mimetype ?? "");
+  if (erroTipo) {
+    res.status(400).json({ error: erroTipo });
+    return;
+  }
   const { rows } = await query<PropostaRow>("SELECT proposta_id, proposta_anexo FROM propostas WHERE proposta_id = $1", [
     req.params.id,
   ]);
@@ -48,7 +53,7 @@ propostaAnexoRouter.post("/propostas/:id/anexo", upload.single("file"), async (r
   )}`;
 
   try {
-    await uploadBuffer(objectPath, file.buffer, file.mimetype || "application/octet-stream");
+    await uploadBuffer(objectPath, file.buffer, contentTypeSeguro());
     if (proposta.proposta_anexo && !/^https?:\/\//i.test(proposta.proposta_anexo)) {
       await deleteObject(proposta.proposta_anexo);
     }

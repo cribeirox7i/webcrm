@@ -2,7 +2,7 @@ import { Router } from "express";
 import multer from "multer";
 import crypto from "node:crypto";
 import { query } from "../db";
-import { deleteObject, getSignedDownloadUrl, isStorageConfigured, uploadBuffer } from "../storage";
+import { contentTypeSeguro, deleteObject, erroTipoArquivo, getSignedDownloadUrl, isStorageConfigured, uploadBuffer } from "../storage";
 import { getPastaStorage } from "./parametrosStorage";
 import { bloqueado } from "../permissaoResource";
 
@@ -36,6 +36,11 @@ anexosRouter.post("/anexos/upload", upload.single("file"), async (req, res) => {
     res.status(400).json({ error: "arquivo não enviado" });
     return;
   }
+  const erroTipo = erroTipoArquivo(file.originalname, file.mimetype ?? "");
+  if (erroTipo) {
+    res.status(400).json({ error: erroTipo });
+    return;
+  }
   const clienteId = req.body.cliente_id ? Number(req.body.cliente_id) : null;
   const fornecedorId = req.body.fornecedor_id ? Number(req.body.fornecedor_id) : null;
   if (!clienteId && !fornecedorId) {
@@ -53,7 +58,7 @@ anexosRouter.post("/anexos/upload", upload.single("file"), async (req, res) => {
   const nome = (req.body.anexo_nome as string | undefined)?.trim() || file.originalname;
 
   try {
-    await uploadBuffer(objectPath, file.buffer, file.mimetype || "application/octet-stream");
+    await uploadBuffer(objectPath, file.buffer, contentTypeSeguro());
     const { rows } = await query(
       `INSERT INTO anexos (cliente_id, fornecedor_id, anexo_nome, anexo_data, anexo_arquivo) VALUES ($1, $2, $3, $4, $5) RETURNING *`,
       [clienteId, fornecedorId, nome, new Date().toISOString().slice(0, 10), objectPath]

@@ -24,6 +24,8 @@ const corsOrigins = (process.env.CORS_ORIGINS ?? "http://localhost:5183")
   .filter(Boolean);
 
 const app = express();
+// não anunciar o framework/versão na resposta -- só facilita procurar exploit conhecido
+app.disable("x-powered-by");
 app.use(
   cors({
     origin(origin, callback) {
@@ -38,6 +40,20 @@ app.use(
 );
 app.use(express.json());
 
+// Headers de segurança básicos em toda resposta -- sem isso a tela de login/admin (protegida
+// só por PIN, sem 2FA) podia ser embutida num <iframe> de terceiro (clickjacking), e faltava
+// a camada de defesa em profundidade dos demais headers padrão contra XSS/sniffing. Vale pra
+// toda resposta da API, incluindo dev local (`npm run dev`), que não passa pelo `headers` do
+// `vercel.json` (esse aqui é aplicado direto pelo Express).
+app.use((_req, res, next) => {
+  res.setHeader("X-Frame-Options", "DENY");
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+  res.setHeader("Strict-Transport-Security", "max-age=63072000; includeSubDomains");
+  res.setHeader("Content-Security-Policy", "frame-ancestors 'none'");
+  next();
+});
+
 app.get("/health", (_req, res) => res.json({ ok: true }));
 
 app.use("/api/admin", adminRouter);
@@ -47,6 +63,14 @@ app.use("/api/auth", authRouter);
 // usuarios/usuarios_permissoes_menu guardam senha/PIN/permissões -- só acessíveis com o PIN mestre
 app.use("/api/usuarios", requireAdmin);
 app.use("/api/usuarios_permissoes_menu", requireAdmin);
+// usuario_sessoes guarda o token de sessão (bearer) de todo usuário -- antes deste fix, essa
+// tabela não estava em nenhum mapa de permissão (permissaoResource.ts) nem tinha mount próprio
+// aqui, então caía no comportamento padrão do roteador genérico de "libera se não tem menu
+// mapeado": qualquer usuário autenticado, mesmo sem nenhuma permissão de menu, conseguia listar
+// (GET) o token de sessão de TODOS os usuários -- inclusive admins -- e reutilizá-lo para
+// assumir a identidade de outra conta (escalada de privilégio completa). Igual às tabelas
+// acima, só o PIN mestre pode ler/escrever aqui via API genérica agora.
+app.use("/api/usuario_sessoes", requireAdmin);
 app.use("/api/parametros_storage_menu", requireAdmin);
 // importação da planilha de medição -> carteira (apaga e regrava o mês inteiro): só com o PIN
 app.use("/api/admin/importar-carteira", requireAdmin);

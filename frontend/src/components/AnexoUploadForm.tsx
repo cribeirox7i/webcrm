@@ -28,6 +28,9 @@ export function AnexoUploadForm({ saving, error, onCancel, onSubmit }: AnexoUplo
           <input
             id="anexo_arquivo"
             type="file"
+            // espelha a whitelist do backend (storage.ts) -- aqui é só UX, quem barra de
+            // verdade é o backend
+            accept=".pdf,.doc,.docx,.xls,.xlsx,.xlsm,.csv,.ppt,.pptx,.txt,.png,.jpg,.jpeg,.gif,.webp,.zip,.msg,.eml"
             required
             onChange={(e) => setFile(e.target.files?.[0] ?? null)}
           />
