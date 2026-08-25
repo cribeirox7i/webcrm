@@ -5,10 +5,17 @@
 > roteador genérico deixava qualquer usuário autenticado ler o token de sessão de todos os
 > outros. Ver "Leva Auditoria de Segurança #2" no fim do arquivo.
 >
-> **Duas coisas esperando você** nessa leva: (1) rodar
-> `backend/scripts/check-constraints-valores.sql` no Supabase (PARTE 1 confere, PARTE 2 aplica);
-> (2) decidir o que fazer com **1 linha de carteira sem cliente vinculado** (`cart_id` 1980,
-> R$ 111.062,52, `escfacil_webesc`) - valor real que hoje não entra em relatório de cliente nenhum.
+> **Estado no fim da leva**: as 4 CHECK constraints de valor não-negativo estão **aplicadas e
+> validadas em produção** (confirmado pela PARTE 0 do script, `convalidated = true` nas 4) - e como
+> o `VALIDATE CONSTRAINT` varre a tabela inteira e passou, está **provado que o dado real de
+> produção não tem valor negativo** nas colunas cobertas. As correções de código também **já estão
+> em produção**: o push no `main` disparou deploy automático nos dois projetos Vercel, e os headers
+> novos foram conferidos por `curl` nos dois domínios (`webcrm-mu.vercel.app` e
+> `crmevertec.vercel.app`).
+>
+> **Uma decisão ainda esperando você**: o que fazer com **1 linha de carteira sem cliente
+> vinculado** (`cart_id` 1980, R$ 111.062,52, `escfacil_webesc`) - valor real que hoje não entra em
+> relatório de cliente nenhum. As constraints não afetam essa linha (CHECK passa com NULL).
 >
 > **Atenção**: as levas de 2026-08-16, 08-17 e 08-24 (Importação de Carteira, card Carteira no
 > dashboard, modal de subgrid expandida, automação da data de bloqueio, campos novos de URL,
@@ -1739,3 +1746,26 @@ estourar nada**, e a constraint continuando a barrar negativo no fim.
 por padrao, nao "rodar uma vez e dar certo" - a pessoa vai reexecutar o arquivo (inteiro, e nao a
 parte que eu imaginei) quando algo parecer errado no meio. E util deixar sempre um bloco de
 diagnostico de estado no comeco do arquivo.
+### Fechamento da leva: constraints validadas e codigo em producao (2026-08-25)
+
+PARTE 0 rodada pelo usuario no Supabase devolveu as **4 constraints com `validada = true`**. Como o
+`VALIDATE CONSTRAINT` faz varredura completa da tabela e nao falhou, isso e prova de que o dado real
+de producao nao tem valor negativo em nenhuma das colunas cobertas (carteira, precos_cliente,
+consumo_ana com ~256 mil linhas, crono) - confirma no Postgres real o que a copia local do SQLite
+tinha indicado. Item 22 fechado nas duas camadas: validacao no backend (`erroDominio` em
+`resource.ts`) e constraint no banco.
+
+**As correcoes de codigo ja estao em producao**, nao esperando promocao: o push no `main` disparou
+deploy automatico nos dois projetos Vercel. Conferido por `curl` nos dois dominios de producao:
+- `webcrm-mu.vercel.app/health` -> `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`,
+  `Strict-Transport-Security`, `Content-Security-Policy: frame-ancestors 'none'`, e **sem**
+  `X-Powered-By`.
+- `crmevertec.vercel.app/` -> CSP completa (`default-src 'self'`, `script-src 'self'`, `worker-src
+  'self' blob:` etc.) e `X-Frame-Options: DENY`.
+
+Ou seja, a inversao pra **fail-closed** do roteador generico esta valendo em producao agora. A
+recomendacao anterior de "conferir em Preview antes de promover" ficou sem efeito - o que vale e
+navegar no app real e confirmar que nenhuma tela quebrou com 403. Se aparecer 403 em alguma tela,
+o primeiro lugar a olhar e `MENU_BY_RESOURCE`/`REFERENCIA_SOMENTE_LEITURA` em `permissaoResource.ts`
+(recurso que o `grep` do frontend nao pegou). **Nao validado por mim no navegador com sessao real**
+(sem `DATABASE_URL` local), continua sendo o unico ponto sem verificacao direta desta leva.
