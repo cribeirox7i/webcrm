@@ -13,6 +13,7 @@ import { authRouter } from "./routes/auth";
 import { usuariosRouter } from "./routes/usuarios";
 import { requireAdmin } from "./adminAuth";
 import { requireUserAuth, requireUserOrAdminAuth } from "./mainAuth";
+import { apiRateLimiter } from "./rateLimit";
 
 // CORS_ORIGINS: lista separada por vírgula das origens que podem chamar a API (ex.:
 // "https://webcrm.evertec.com.br,https://webcrm-staging.evertec.com.br" em produção).
@@ -54,7 +55,14 @@ app.use((_req, res, next) => {
   next();
 });
 
+// /health fora do rate limit de propósito -- é o que a Vercel/monitoramento bate, e não
+// devolve dado nenhum.
 app.get("/health", (_req, res) => res.json({ ok: true }));
+
+// Teto geral de requisições em tudo sob /api (ver comentário em rateLimit.ts). Montado antes
+// dos routers, então vale também pras rotas de login -- que continuam com o limiter próprio,
+// bem mais restrito, por cima deste.
+app.use("/api", apiRateLimiter);
 
 app.use("/api/admin", adminRouter);
 // login do app principal (e-mail+senha, convite por e-mail) -- mecanismo independente do PIN mestre

@@ -36,6 +36,47 @@ function redactRows<T extends Record<string, unknown>>(resource: string, rows: T
   return REDACTED_COLUMNS[resource] ? rows.map((r) => redactRow(resource, r)) : rows;
 }
 
+// Colunas que não aceitam valor negativo: quantidade, valor monetário e percentual de progresso.
+// O roteador genérico só checava "a coluna existe" + "o usuário tem a permissão do menu", então
+// quem tem perm_edicao em Financeiro gravava -50000 em cart_vlr ou preço unitário negativo sem
+// nada barrar. Validado aqui (não só por CHECK no banco) pra devolver mensagem clara ao usuário
+// e pra valer mesmo onde a constraint ainda não foi aplicada em produção.
+//
+// Lista explícita por recurso, não regra por prefixo de nome: é o mesmo motivo do
+// MENU_BY_RESOURCE em permissaoResource.ts -- adivinhar por padrão de nome erra em coluna nova.
+// `null`/`undefined`/string vazia passam de propósito: "não informado" é diferente de "negativo",
+// e a obrigatoriedade quem decide é o NOT NULL do schema.
+const COLUNAS_NAO_NEGATIVAS: Record<string, string[]> = {
+  carteira: [
+    "cart_qtd", "cart_vlr", "cart_pdd", "cart_sem_pdd", "cart_fat",
+    "cart_qtd_mes", "cart_emprestimos_mes",
+  ],
+  precos_cliente: [
+    "pc_vlr_franquia", "pc_vlr_unit",
+    "pc_fx1_lim", "pc_fx2_lim", "pc_fx3_lim", "pc_fx4_lim", "pc_fx5_lim",
+    "pc_fx1_vlr", "pc_fx2_vlr", "pc_fx3_vlr", "pc_fx4_vlr", "pc_fx5_vlr",
+  ],
+  consumo_ana: ["consumo_qtd"],
+  // crono_replan/crono_inicio/crono_fim são TEXT (data), não entram aqui. crono_perc_atual é
+  // percentual e hh_orc/hh_real são horas -- nenhum dos três faz sentido negativo.
+  crono: ["crono_perc_atual", "crono_hh_orc", "crono_hh_real"],
+};
+
+/** Valida domínio de negócio das colunas gravadas. Devolve a mensagem de erro, ou `null` se
+ * está tudo bem. Roda antes do INSERT/UPDATE, sobre as entradas já filtradas pelo catálogo. */
+export function erroDominio(resource: string, entries: [string, unknown][]): string | null {
+  const naoNegativas = COLUNAS_NAO_NEGATIVAS[resource];
+  if (!naoNegativas) return null;
+  for (const [coluna, valor] of entries) {
+    if (!naoNegativas.includes(coluna)) continue;
+    if (valor === null || valor === undefined || valor === "") continue;
+    const n = typeof valor === "number" ? valor : Number(valor);
+    if (Number.isNaN(n)) return `${coluna}: valor inválido (esperado número)`;
+    if (n < 0) return `${coluna}: não aceita valor negativo`;
+  }
+  return null;
+}
+
 // Erro do Postgres traz nome de constraint/coluna/tipo do schema interno -- útil pro dono do
 // sistema, mas é detalhe de implementação vazando pro cliente. Só a violação de constraint
 // (23xxx: unique, FK, NOT NULL, check) volta com a mensagem original, porque é a única que o
@@ -133,6 +174,12 @@ resourceRouter.post("/:resource", enforceMenuPermission("perm_insercao", "resour
     return;
   }
 
+  const erroDom = erroDominio(info.name, entries);
+  if (erroDom) {
+    res.status(400).json({ error: erroDom });
+    return;
+  }
+
   const cols = entries.map(([key]) => quoteIdent(key)).join(", ");
   const placeholders = entries.map((_, i) => `$${i + 1}`).join(", ");
   const values = entries.map(([, value]) => value as string | number | null);
@@ -167,6 +214,12 @@ resourceRouter.put("/:resource/:id", enforceMenuPermission("perm_edicao", "resou
   );
   if (!entries.length) {
     res.status(400).json({ error: "corpo vazio ou sem colunas válidas" });
+    return;
+  }
+
+  const erroDom = erroDominio(info.name, entries);
+  if (erroDom) {
+    res.status(400).json({ error: erroDom });
     return;
   }
 

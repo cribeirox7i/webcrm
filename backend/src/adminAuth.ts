@@ -21,10 +21,22 @@ if (!configuredPin) {
 // admin no frontend. Com o mesmo ADMIN_PIN, toda instância calcula o mesmo SESSION_TOKEN.
 export const SESSION_TOKEN = crypto.createHash("sha256").update(`webcrm-admin-session:${ADMIN_PIN}`).digest("hex");
 
+/** Comparação de tempo constante pra segredo (PIN, token de sessão do admin) -- `!==` sai no
+ * primeiro byte diferente, então o tempo de resposta vaza quantos caracteres do começo estão
+ * certos. Mesmo cuidado que `authCrypto.ts` já tomava pra senha, que faltava aqui.
+ * O hash SHA-256 dos dois lados serve pra igualar o comprimento antes do `timingSafeEqual`
+ * (que joga exceção se os buffers tiverem tamanhos diferentes -- e o tamanho do que chegou
+ * também não deve influenciar o caminho de código). */
+export function segredoConfere(recebido: string, esperado: string): boolean {
+  const a = crypto.createHash("sha256").update(recebido).digest();
+  const b = crypto.createHash("sha256").update(esperado).digest();
+  return crypto.timingSafeEqual(a, b);
+}
+
 export function requireAdmin(req: Request, res: Response, next: NextFunction) {
   const auth = req.header("authorization") ?? "";
   const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
-  if (!token || token !== SESSION_TOKEN) {
+  if (!token || !segredoConfere(token, SESSION_TOKEN)) {
     res.status(401).json({ error: "não autenticado" });
     return;
   }

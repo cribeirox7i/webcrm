@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { query } from "../db";
-import { requireAdmin, SESSION_TOKEN } from "../adminAuth";
+import { requireAdmin, SESSION_TOKEN, segredoConfere } from "../adminAuth";
 import { getUsuarioDaSessao } from "../mainAuth";
 
 // parametros_gerais precisa ser lido tanto pela tela de Admin (PIN mestre, sem sessão de
@@ -13,7 +13,7 @@ export const parametrosRouter = Router();
 parametrosRouter.get("/parametros_gerais/1", async (req, res) => {
   const auth = req.header("authorization") ?? "";
   const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
-  const isAdmin = token === SESSION_TOKEN;
+  const isAdmin = !!token && segredoConfere(token, SESSION_TOKEN);
   const usuario = !isAdmin && token ? await getUsuarioDaSessao(token) : null;
   if (!isAdmin && !usuario) {
     res.status(401).json({ error: "não autenticado" });

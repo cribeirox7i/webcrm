@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import { query } from "./db";
 import { generateToken } from "./authCrypto";
-import { SESSION_TOKEN } from "./adminAuth";
+import { SESSION_TOKEN, segredoConfere } from "./adminAuth";
 
 const SESSION_TTL_DIAS = Number(process.env.SESSION_TTL_DIAS) || 5;
 
@@ -88,7 +88,7 @@ export async function requireUserAuth(req: Request, res: Response, next: NextFun
 export async function requireUserOrAdminAuth(req: Request, res: Response, next: NextFunction): Promise<void> {
   const auth = req.header("authorization") ?? "";
   const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
-  if (token === SESSION_TOKEN) {
+  if (token && segredoConfere(token, SESSION_TOKEN)) {
     req.isAdmin = true;
     next();
     return;

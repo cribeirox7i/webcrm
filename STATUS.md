@@ -5,6 +5,11 @@
 > roteador genérico deixava qualquer usuário autenticado ler o token de sessão de todos os
 > outros. Ver "Leva Auditoria de Segurança #2" no fim do arquivo.
 >
+> **Duas coisas esperando você** nessa leva: (1) rodar
+> `backend/scripts/check-constraints-valores.sql` no Supabase (PARTE 1 confere, PARTE 2 aplica);
+> (2) decidir o que fazer com **1 linha de carteira sem cliente vinculado** (`cart_id` 1980,
+> R$ 111.062,52, `escfacil_webesc`) - valor real que hoje não entra em relatório de cliente nenhum.
+>
 > **Atenção**: as levas de 2026-08-16, 08-17 e 08-24 (Importação de Carteira, card Carteira no
 > dashboard, modal de subgrid expandida, automação da data de bloqueio, campos novos de URL,
 > colunas Responsável/Ambiente, DataGrid esticando colunas) **não estão registradas aqui** -
@@ -1570,3 +1575,109 @@ dados enviados" e o detalhe vai pro `console.error` do servidor.
   metadado, nenhum dado real - risco baixo, mas é reconhecimento de graça pra quem já tem uma conta.
 - **Comparação de PIN/token de admin ainda não é constant-time** (`adminAuth.ts`) - pendência
   herdada de 2026-08-11, segue com a mesma avaliação de risco prático baixíssimo.
+
+### Itens de risco baixo, corrigidos na sequência (mesma leva, 2026-08-25)
+
+Depois das 3 correções acima, o usuário pediu pra fechar também os itens de risco baixo que eu
+tinha deixado registrados como pendência. Todos os 4 foram feitos:
+
+**Rate limiting geral da API** (`rateLimit.ts` + `server.ts`) - `apiRateLimiter`, 600 req/min por
+IP em tudo sob `/api`, montado antes dos routers (as rotas de login continuam com o limiter
+próprio, bem mais restrito, por cima deste). `/health` ficou de fora de propósito, é o que o
+monitoramento bate. O teto é alto porque as telas disparam levas de requisições paralelas (o
+dashboard do cliente sozinho faz ~6, o `listAll` do frontend pagina `consumo_ana` em ~13 páginas
+de 20 mil, "Marcar todas as permissões" no Admin dispara ~15) - o objetivo é cortar scraping
+automatizado, não uso legítimo. Janela de 1 minuto, não 15, pra quem esbarrar destravar rápido.
+
+**Ressalva importante, registrada pra não virar falsa sensação de segurança**: `trust proxy` do
+Express **não** está ligado, então atrás do proxy da Vercel o `req.ip` é o do proxy, não o do
+cliente final. Na prática isso funciona como um teto **global** de tráfego da API, não como um teto
+por cliente. Não liguei `trust proxy` porque isso faria o Express confiar no header
+`X-Forwarded-For`, que pode ser forjado justamente pra furar o limite. Se um dia precisar ser por
+usuário de verdade, o caminho é `keyGenerator` chaveando por `req.usuario.user_id`.
+
+**`GET /api/_meta` restrito ao PIN** (`routes/meta.ts`) - o catálogo lista toda tabela/view do
+schema com todos os nomes de coluna (inclusive `usuarios`, com `user_senha_hash`). Era acessível a
+qualquer usuário autenticado. Único consumidor é a tela de Admin (`adminClient.ts`, token do PIN),
+confirmado por `grep`, então restringir não tirou nada do app principal.
+
+**Comparação de segredo em tempo constante** (`adminAuth.ts`) - pendência herdada da auditoria de
+2026-08-11. Nova função `segredoConfere()` (SHA-256 dos dois lados pra igualar o comprimento, depois
+`crypto.timingSafeEqual`), aplicada nos **4** pontos que comparavam segredo com `!==`/`===`, não só
+no que estava registrado: `requireAdmin` (`adminAuth.ts`), `POST /api/admin/login`
+(`routes/admin.ts`, comparação do PIN em si), `requireUserOrAdminAuth` (`mainAuth.ts`) e o GET de
+`parametros_gerais` (`routes/parametros.ts`). O `grep` por `ADMIN_PIN|SESSION_TOKEN` foi o que
+revelou que eram 4 e não 1.
+
+**Validação de domínio de negócio no CRUD genérico** (`routes/resource.ts`) - item 22, o que estava
+classificado como BAIXO-MÉDIO. `COLUNAS_NAO_NEGATIVAS` + `erroDominio()`, rodando antes do
+INSERT/UPDATE: quantidade, valor monetário, percentual e horas não aceitam negativo em `carteira`,
+`precos_cliente`, `consumo_ana` e `crono`. Lista explícita por recurso, não regra por padrão de
+nome de coluna (mesmo raciocínio do `MENU_BY_RESOURCE`: adivinhar por prefixo erra em coluna nova).
+`null`/`undefined`/string vazia passam de propósito - "não informado" é diferente de "negativo", e
+obrigatoriedade quem decide é o `NOT NULL` do schema.
+
+**Errei duas colunas no primeiro chute e corrigi conferindo o schema**: tinha listado `crono_perc`
+e `portfolios.port_perc`, que **não existem**, e `crono_replan`, que é TEXT (data), não número. O
+certo é `crono_perc_atual`, `crono_hh_orc` e `crono_hh_real`; `portfolios` saiu da lista.
+
+**Risco de regressão checado antes de fechar**: se o frontend enviasse número em formato brasileiro
+como string (`"1.234,56"`), o validador rejeitaria gravação legítima com "valor inválido". Conferido
+nos forms (`PrecoClienteForm.tsx`, `CronoForm.tsx`): todos passam por `Number(...)` antes de montar
+o payload, então chega JSON numérico de verdade. Sem regressão.
+
+### CHECK constraints no Postgres: `backend/scripts/check-constraints-valores.sql`
+
+Script novo, **não aplicado** - é pro usuário rodar no Supabase SQL Editor (padrão estabelecido pra
+mudança em produção). Estruturado em partes: PARTE 1 só consulta e conta violações, PARTE 2 aplica
+as constraints como `NOT VALID` (barra escrita nova na hora, sem varrer a tabela inteira e sem lock
+longo em `consumo_ana`, ~256 mil linhas), PARTE 2B promove pra validada, PARTE 3 documenta o que
+ficou de fora.
+
+As constraints são a rede de baixo da validação que o backend já faz: pegam também escrita por SQL
+manual, script de migração e a importação de carteira, que não passam pelo `resource.ts`.
+
+**Pergunta do usuário que motivou uma conferência importante**: "temos URLs sem cliente associado,
+isso não seria problema?". Resposta: não, e o motivo é técnico - em Postgres um CHECK passa quando a
+expressão dá NULL (a condição fica "unknown", não "false"), então linha com valor NULL não viola
+nenhuma dessas constraints, e nenhuma delas torna coluna obrigatória. Nada no script mexe com
+`cliente_id`. O que **quebraria** é um `NOT NULL`/FK obrigatória em `urls.cliente_id`, e isso não
+está proposto em lugar nenhum.
+
+**Números reais conferidos na cópia local do SQLite** (`backend/data/webcrm.sqlite`, snapshot
+pré-migração - em produção os sentinelas "0" já viraram NULL de verdade):
+- `urls`: 2429 linhas, **306 sem cliente** (o sentinela "0" da planilha original, já documentado).
+- `carteira`: 5488 linhas, **1 sem cliente** - `cart_id` 1980, mês 6, `cart_qtd` 13,
+  `cart_vlr` **R$ 111.062,52**, `cart_db` `escfacil_webesc`, `cart_prod` "Módulo Esc".
+- **Zero valor negativo** em todas as colunas que as constraints cobrem (carteira, precos_cliente,
+  consumo_ana com 256.329 linhas). Ou seja, o dado real não viola nada - mas a PARTE 1 do script
+  existe justamente pra confirmar isso no Postgres de produção, que já recebeu reimportação de
+  carteira desde o snapshot local.
+
+**Anomalia de integridade a decidir** (não decidi por conta própria): aquela 1 linha de carteira sem
+cliente tem valor real de R$ 111 mil e não está atribuída a ninguém, então não entra em nenhum
+relatório por cliente e não aparece no card Carteira de cliente nenhum. Diferente das 306 URLs, que
+são plausivelmente URLs mesmo sem dono, uma linha de **medição financeira** órfã parece erro de
+origem. Opções: descobrir o cliente pelo `cart_db` (`escfacil_webesc`) e vincular, ou deixar como
+está e assumir que fica fora dos relatórios. **Pendente de decisão do usuário.**
+
+### Verificação desta parte
+
+- `segredoConfere` testado com 7 casos (igual, diferente, comprimentos diferentes, vazio dos dois
+  lados, 64 chars, acento UTF-8) - todos ok, nenhuma exceção do `timingSafeEqual`. Esse teste
+  importava porque um erro ali trancaria o admin fora do painel.
+- `erroDominio` testado com 13 casos (negativo, positivo, NULL, string vazia, string não numérica,
+  coluna de texto, coluna fora da lista, recurso sem lista) - todos ok.
+- Rate limit confirmado por `curl`: `/api/clientes` devolve `RateLimit-Policy: 600;w=60` e
+  `RateLimit-Remaining` decrescente; `/health` sem header nenhum de rate limit.
+- `/api/_meta` sem token → 401. `tsc --noEmit` limpo no backend, `tsc -b` limpo no frontend.
+- Segue sem validação de navegador com sessão real (sem `DATABASE_URL` local).
+
+### O que a importação de carteira continua sem validar (decisão consciente)
+
+A gravação (`routes/importarCarteira.ts`) confia nos `linhas`/`correcoes` que a tela devolve, sem
+re-conferir contra a planilha original, e **não** passa pelo `erroDominio` do `resource.ts`. Não
+mexi: a rota já exige PIN de admin, e bloquear valor negativo ali poderia barrar um mês de ajuste/
+estorno legítimo - não sei se isso acontece no negócio. Se as constraints da PARTE 2 forem
+aplicadas, o próprio banco passa a barrar, e aí é bom saber que o erro pode aparecer como falha de
+importação.
