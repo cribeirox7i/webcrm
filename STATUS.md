@@ -13,9 +13,9 @@
 > novos foram conferidos por `curl` nos dois domínios (`webcrm-mu.vercel.app` e
 > `crmevertec.vercel.app`).
 >
-> **Uma decisão ainda esperando você**: o que fazer com **1 linha de carteira sem cliente
-> vinculado** (`cart_id` 1980, R$ 111.062,52, `escfacil_webesc`) - valor real que hoje não entra em
-> relatório de cliente nenhum. As constraints não afetam essa linha (CHECK passa com NULL).
+> **Nada pendente de decisão**: a linha de carteira sem cliente vinculado (`cart_id` 1980,
+> R$ 111.062,52, `escfacil_webesc`) fica **como está**, por decisão do usuário - não excluir nem
+> vincular. As constraints não afetam essa linha (CHECK passa com NULL).
 >
 > **Atenção**: as levas de 2026-08-16, 08-17 e 08-24 (Importação de Carteira, card Carteira no
 > dashboard, modal de subgrid expandida, automação da data de bloqueio, campos novos de URL,
@@ -1769,3 +1769,18 @@ navegar no app real e confirmar que nenhuma tela quebrou com 403. Se aparecer 40
 o primeiro lugar a olhar e `MENU_BY_RESOURCE`/`REFERENCIA_SOMENTE_LEITURA` em `permissaoResource.ts`
 (recurso que o `grep` do frontend nao pegou). **Nao validado por mim no navegador com sessao real**
 (sem `DATABASE_URL` local), continua sendo o unico ponto sem verificacao direta desta leva.
+### Decisao: linha de carteira orfa fica como esta (2026-08-25)
+
+A linha `cart_id` 1980 da `carteira` (mes 6, `cart_qtd` 13, `cart_vlr` R$ 111.062,52, `cart_db`
+`escfacil_webesc`, `cart_prod` "Modulo Esc") esta sem `cliente_id` e **vai ficar assim** - decisao
+explicita do usuario. O usuario chegou a considerar excluir a linha e voltou atras na mesma hora;
+**nao excluir e nao vincular a nenhum cliente**.
+
+Consequencia pratica, pra ninguem estranhar depois: essa linha nao aparece no card Carteira de
+cliente nenhum, nem em relatorio agrupado por cliente, mas **continua contando** em qualquer total
+geral da tabela `carteira` (ex.: soma do mes sem filtro de cliente). Se um dia aparecer relato de
+"o total do mes nao fecha com a soma dos clientes", essa e a explicacao - diferenca de exatamente
+R$ 111.062,52 no mes 6.
+
+Mesma linha de raciocinio das 306 URLs sem cliente e das 7 linhas de `resp` orfas que ficaram fora
+da migracao: anomalia conhecida, documentada, nao "consertada" por conta propria.
