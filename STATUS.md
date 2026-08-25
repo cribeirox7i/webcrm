@@ -1,6 +1,12 @@
 # WEBCRM - Status do Projeto
 
-> Documento de retomada. Última atualização: **2026-08-25** - auditoria de segurança #2
+> Documento de retomada. Última atualização: **2026-08-25** - **piloto de responsividade mobile**
+> (só a tela de Clientes, ver "Leva Responsividade Mobile - Piloto" no fim do arquivo) **ainda não
+> commitado nem enviado ao `main`** - `tsc`/`vite build` limpos e verificado estruturalmente (CSS/
+> classes reais), mas sem confirmação com login real (sem `DATABASE_URL` local). Antes de continuar
+> a partir daqui, `git status`/`git diff` pra ver o que ainda está pendente de commit.
+>
+> Contexto anterior: auditoria de segurança #2
 > (checklist de 22 itens), com um achado **crítico** corrigido: `usuario_sessoes` exposta pelo
 > roteador genérico deixava qualquer usuário autenticado ler o token de sessão de todos os
 > outros. Ver "Leva Auditoria de Segurança #2" no fim do arquivo.
@@ -1886,3 +1892,104 @@ faturamento nulo, pra confirmar que sai como string vazia no arquivo, nao `null`
 cabecalhos/linhas saem na ordem certa: colunas visiveis primeiro, as 4 novas depois. `tsc -b`
 limpo. Nao verificado visualmente o XLSX/PDF gerado de fato (abrir o arquivo baixado) -- proxima
 vez que alguem exportar a Tabela de Precos com login real, vale abrir o arquivo e confirmar.
+## Leva Responsividade Mobile - Piloto (2026-08-25)
+
+Pedido do usuario: "Podemos fazer o WEBCRM responsivo para mobile?". Antes de codar, expliquei o
+tamanho real do trabalho (44 componentes, 22 usam DataGrid com grids densas de 4-11 colunas, 14
+modais, shell inteiro em grid fixo) e perguntei escopo via AskUserQuestion (caso de uso, tratamento
+de grid densa, piloto vs. planejamento completo) - o usuario dispensou as perguntas e disse "vamos
+fazer", entao segui pela opcao que eu tinha marcado como recomendada em cada uma: piloto pequeno
+primeiro, grids viram cartao, uso de consulta no campo. Antes disso, o usuario perguntou se as
+mudancas podiam impactar o desktop - expliquei que regra dentro de `@media` e aditiva por
+construcao, mas que componente compartilhado (DataGrid, App.tsx) carrega risco de verdade, e que eu
+trataria isso testando o desktop depois de cada mudanca, nao so o mobile.
+
+### Contexto que motivou o piloto, nao o escopo total
+
+Em 2026-08-12 ("Leva Bloqueio de acesso mobile"), a decisao tinha sido bloquear o celular por
+inteiro com um aviso, deliberadamente, "fica pra um projeto futuro, se algum dia for necessario".
+Essa leva e esse "algum dia". Escopo do piloto: só **Clientes** (lista + dashboard do cliente) ganha
+layout mobile de verdade. O resto do app continua funcionando normal em desktop; no celular, mostra
+um aviso inline em vez do conteudo (nao bloqueio de tela inteira).
+
+### Arquitetura
+
+**`useIsMobile()`** (`frontend/src/lib/useIsMobile.ts`, novo) - hook com `matchMedia` no mesmo
+breakpoint que ja bloqueava tudo (`max-width: 767px`), dispara só quando cruza o limite (nao a cada
+pixel de resize).
+
+**`MobileOnlyGate`** (`frontend/src/components/MobileOnlyGate.tsx`, novo) - substitui o antigo
+`#mobile-block` estatico (fora da arvore React, em `index.html`/`index.css`) por um componente.
+Usado em `main.tsx` envolvendo `AdminApp` e `DefinirSenhaPage` - **os dois continuam bloqueados por
+inteiro no celular**, comportamento identico ao anterior, so que agora dentro do React (necessario
+pra poder liberar so o app principal por tela, ja que os tres SPAs compartilham o mesmo `index.html`
+e so se diferenciam por `window.location.pathname` dentro de `main.tsx`).
+
+**`App.tsx`**: `MOBILE_READY_TABS = new Set(["clientes"])`. `isMobile && !MOBILE_READY_TABS.has(tab)`
+mostra `.mobile-not-ready` (aviso inline, nao tela cheia) no lugar do conteudo da aba - sidebar/
+topbar continuam ativos pra trocar de tela. Sidebar virou drawer: `sidebarOpen` (estado novo) +
+botao hamburguer na topbar (so renderizado quando `isMobile`), fecha ao selecionar item ou tocar no
+fundo escurecido.
+
+**`Sidebar.tsx`**: ganhou `mobileOpen`/`onClose` opcionais. Em desktop nunca recebe `mobileOpen=true`
+(so setado quando `isMobile`), entao o novo `<div className="sidebar-backdrop">` condicional nunca
+existe no DOM em desktop.
+
+**`DataGrid.tsx`**: ganhou `useIsMobile()` e um branch de render alternativo (`.datagrid-cards`) no
+lugar de `<table>`. Toda a logica ANTES do render final (filtro, ordenacao, `tableColumns`, calculo
+de largura/encolhimento) continua identica e compartilhada pelos dois modos - só o JSX final se
+bifurca, pra minimizar risco no caminho de desktop (nada na logica de dado foi tocado, so a ultima
+parte do componente). Modo cartao: cada linha vira um bloco com rotulo/valor empilhado (mesmos
+`columns` da versao desktop, sem duplicar definicao), sem virtualizacao (aceitavel pro volume das
+telas ja liberadas; revisar se algum dia entrar lista de milhares de linhas em modo mobile).
+
+### Decisao deliberada: zoom de 80% mantido tambem no celular
+
+Varias medidas da UI ja compensam esse zoom explicitamente (`.modal { max-height: calc(90vh / 0.8) }`,
+o `GUARD_PX` do `DataGrid.tsx`). Desligar o zoom so no celular quebraria essas contas em vez de
+simplificar - exigiria caçar e corrigir cada calculo dependente. Registrado no proprio CSS: se o
+zoom deixar texto/toque pequenos demais num celular real, e um ajuste separado a pedir antes de
+fazer, nao decisao unilateral.
+
+### Verificacao (sem DATABASE_URL local, sem login real - limitacao ja conhecida)
+
+- `/admin` em 375px: confirmado que `MobileOnlyGate` ainda bloqueia por inteiro (`.mobile-gate` no
+  DOM, mesma mensagem de antes).
+- Tela de login (`/`, sem `usuario`) em 375px: renderiza normal, **sem** `.mobile-gate` (era
+  bloqueada antes, agora funciona - bonus nao pedido, mas correto), sem rolagem lateral
+  (`scrollWidth === clientWidth`).
+- Desktop (1440px) apos as mudancas: `.app-shell` continua `grid-template-columns: 224px 1fr` (nao
+  virou coluna unica), sidebar continua `position: static; transform: none` - **zero regressao**
+  confirmada via markup real com as classes do projeto, nao suposicao.
+- Mobile (375px): `.app-shell` vira coluna unica, sidebar vira `position: fixed` com a classe
+  `.sidebar.sidebar-open` aplicando `transform: translateX(0)` corretamente (confirmado via CSSOM -
+  a regra existe, tem a especificidade certa, um elemento fresco com as duas classes desde a
+  criacao mostra a transformacao certa).
+- `tsc -b` e `vite build` limpos; `dist/index.html` sem `#mobile-block` (confirmado que o build de
+  producao nao carrega mais o aviso estatico).
+
+**Achado de ferramenta, registrado pra nao confundir a proxima verificacao**: tentar confirmar a
+ANIMACAO da transicao do drawer (`classList.add` -> aguardar -> ler `getComputedStyle`) deu
+resultado inconsistente (preso no valor "fechado" mesmo com a classe certa aplicada, `.matches()`
+true, e ate `!important` inline nao surtindo efeito). Isolado como artefato do Browser pane nao
+compositando frames quando esta oculto/nao exibido (mesmo erro que o `screenshot` acusou
+explicitamente: "the Browser pane is not displayed, so the page is not compositing frames") - CSS
+transitions/rAF nao rodam sem compositor ativo. A prova correta e estatica: criar o elemento JA com
+as duas classes (sem depender da transicao rodar) e ler o computed style uma vez so, o que
+confirmou a regra correta. Vale lembrar disso em qualquer verificacao futura de algo que dependa de
+`transition`/`animation` neste ambiente.
+
+### O que NAO foi testado (pendente pra quando houver login real)
+
+- O app autenticado de verdade: sidebar abrindo/fechando por toque, DataGrid em modo cartao com
+  dado real de Clientes (601 clientes), o dashboard do cliente com os 3 sub-grids em cartao dentro
+  dos `.dashboard-card`, o aviso "tela nao disponivel" ao tocar num item do menu fora de Clientes.
+- Toque real (o teste foi por classe CSS/JS, nao por gesto de touch simulado).
+- `ClienteForm`/`PrecoClienteForm` etc. em modal no celular - a CSS existente (`.modal { max-width:
+  100% }`, `.form-row` em coluna) sugere que ja funciona sem mudanca, mas nao foi confirmado com
+  formulario real aberto.
+
+**Proximo passo natural**: o usuario testar no celular real (pratica ja estabelecida no projeto -
+ver [[user-carlos]]) assim que houver uma forma de autenticar (producao, ou `DATABASE_URL` local) e
+reportar o que quebrar. Ampliar `MOBILE_READY_TABS` conforme cada tela ganhar sua propria revisao -
+nao virar todas de uma vez sem o piloto ser validado primeiro.

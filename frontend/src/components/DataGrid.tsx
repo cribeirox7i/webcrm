@@ -11,6 +11,7 @@ import {
 } from "@tanstack/react-table";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { exportToCsv, exportToPdf, exportToXlsx, shareExport, type ExportCell } from "../lib/export";
+import { useIsMobile } from "../lib/useIsMobile";
 import { CsvIcon, PdfIcon, ShareIcon, XlsIcon } from "./icons";
 
 export interface DataGridColumn<T> {
@@ -103,6 +104,12 @@ export function DataGrid<T>({
   const [filterValues, setFilterValues] = useState<Record<string, string>>(defaultFilterValues ?? {});
   const [sorting, setSorting] = useState<SortingState>([]);
   const [columnSizing, setColumnSizing] = useState<ColumnSizingState>({});
+  // Só decide o RENDER final (cartão vs. tabela, no fim do componente) -- toda a lógica acima
+  // (filtro, ordenação, tableColumns, cálculo de largura) é a mesma nos dois modos, calculada
+  // do mesmo jeito mesmo quando o resultado não é usado pelo lado cartão. Isso é intencional:
+  // manter os dois caminhos compartilhando a mesma lógica de dado evita a tabela e o cartão
+  // divergirem (ex.: um aplicar o filtro e o outro não).
+  const isMobile = useIsMobile();
 
   // As páginas passam `searchValue`/`getRowId`/`renderActions`/`selection` inline (identidade
   // nova a cada render). Guardar em ref e ler no momento da chamada mantém o valor sempre
@@ -391,72 +398,116 @@ export function DataGrid<T>({
         </>
       )}
 
-      <div className="table-scroll" ref={scrollRef}>
-        <table style={{ width: tableWidth }}>
-          <thead>
-            {table.getHeaderGroups().map((hg) => (
-              <tr key={hg.id}>
-                {hg.headers.map((header) => (
-                  <th
-                    key={header.id}
-                    style={{
-                      width: displaySize(header.column.id, header.getSize()),
-                      textAlign: alignById[header.column.id],
-                    }}
-                    className={header.column.getCanSort() ? "sortable" : ""}
-                    onClick={header.column.getToggleSortingHandler()}
-                    // o header pode ser cortado por reticências quando a coluna encolhe (ver
-                    // `thead th` no index.css) -- o title garante o nome completo no hover
-                    title={typeof header.column.columnDef.header === "string" ? header.column.columnDef.header : undefined}
-                  >
-                    {flexRender(header.column.columnDef.header, header.getContext())}
-                    {{ asc: " ▲", desc: " ▼" }[header.column.getIsSorted() as string] ?? ""}
-                    {header.column.getCanResize() && (
-                      <div
-                        onMouseDown={header.getResizeHandler()}
-                        onTouchStart={header.getResizeHandler()}
-                        onClick={(e) => e.stopPropagation()}
-                        className={`col-resizer ${header.column.getIsResizing() ? "resizing" : ""}`}
-                      />
-                    )}
-                  </th>
-                ))}
-              </tr>
-            ))}
-          </thead>
-          <tbody>
-            {paddingTop > 0 && (
-              <tr>
-                <td style={{ height: paddingTop }} colSpan={tableColumns.length} />
-              </tr>
-            )}
-            {virtualRows.map((virtualRow) => {
-              const row = rows[virtualRow.index];
-              const rowClasses = [rowClassName?.(row.original as T), onRowClick ? "clickable-row" : undefined]
+      {isMobile ? (
+        <div className="datagrid-cards" ref={scrollRef}>
+          {filtered.length === 0 ? (
+            <p className="dashboard-empty">Nenhum registro encontrado.</p>
+          ) : (
+            filtered.map((row) => {
+              const id = getRowId(row);
+              const rowClasses = ["datagrid-card", rowClassName?.(row), onRowClick ? "clickable-row" : undefined]
                 .filter(Boolean)
                 .join(" ");
               return (
-                <tr
-                  key={row.id}
-                  className={rowClasses || undefined}
-                  onClick={onRowClick ? () => onRowClick(row.original as T) : undefined}
+                <div
+                  key={String(id)}
+                  className={rowClasses}
+                  onClick={onRowClick ? () => onRowClick(row) : undefined}
                 >
-                  {row.getVisibleCells().map((cell) => (
-                    <td key={cell.id} style={{ width: displaySize(cell.column.id, cell.column.getSize()) }}>
-                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                    </td>
+                  {selection && (
+                    <label className="datagrid-card-select" onClick={(e) => e.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        checked={selection.selectedIds.has(id)}
+                        onChange={() => selection.onToggle(id)}
+                        aria-label="Selecionar"
+                      />
+                    </label>
+                  )}
+                  {columns.map((col) => (
+                    <div key={col.id} className="datagrid-card-field">
+                      <span className="datagrid-card-label">{col.header}</span>
+                      <span className="datagrid-card-value">{col.cell ? col.cell(row) : (col.value(row) ?? "")}</span>
+                    </div>
+                  ))}
+                  {renderActions && (
+                    <div className="datagrid-card-actions" onClick={(e) => e.stopPropagation()}>
+                      {renderActions(row)}
+                    </div>
+                  )}
+                </div>
+              );
+            })
+          )}
+        </div>
+      ) : (
+        <div className="table-scroll" ref={scrollRef}>
+          <table style={{ width: tableWidth }}>
+            <thead>
+              {table.getHeaderGroups().map((hg) => (
+                <tr key={hg.id}>
+                  {hg.headers.map((header) => (
+                    <th
+                      key={header.id}
+                      style={{
+                        width: displaySize(header.column.id, header.getSize()),
+                        textAlign: alignById[header.column.id],
+                      }}
+                      className={header.column.getCanSort() ? "sortable" : ""}
+                      onClick={header.column.getToggleSortingHandler()}
+                      // o header pode ser cortado por reticências quando a coluna encolhe (ver
+                      // `thead th` no index.css) -- o title garante o nome completo no hover
+                      title={typeof header.column.columnDef.header === "string" ? header.column.columnDef.header : undefined}
+                    >
+                      {flexRender(header.column.columnDef.header, header.getContext())}
+                      {{ asc: " ▲", desc: " ▼" }[header.column.getIsSorted() as string] ?? ""}
+                      {header.column.getCanResize() && (
+                        <div
+                          onMouseDown={header.getResizeHandler()}
+                          onTouchStart={header.getResizeHandler()}
+                          onClick={(e) => e.stopPropagation()}
+                          className={`col-resizer ${header.column.getIsResizing() ? "resizing" : ""}`}
+                        />
+                      )}
+                    </th>
                   ))}
                 </tr>
-              );
-            })}
-            {paddingBottom > 0 && (
-              <tr>
-                <td style={{ height: paddingBottom }} colSpan={tableColumns.length} />
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+              ))}
+            </thead>
+            <tbody>
+              {paddingTop > 0 && (
+                <tr>
+                  <td style={{ height: paddingTop }} colSpan={tableColumns.length} />
+                </tr>
+              )}
+              {virtualRows.map((virtualRow) => {
+                const row = rows[virtualRow.index];
+                const rowClasses = [rowClassName?.(row.original as T), onRowClick ? "clickable-row" : undefined]
+                  .filter(Boolean)
+                  .join(" ");
+                return (
+                  <tr
+                    key={row.id}
+                    className={rowClasses || undefined}
+                    onClick={onRowClick ? () => onRowClick(row.original as T) : undefined}
+                  >
+                    {row.getVisibleCells().map((cell) => (
+                      <td key={cell.id} style={{ width: displaySize(cell.column.id, cell.column.getSize()) }}>
+                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      </td>
+                    ))}
+                  </tr>
+                );
+              })}
+              {paddingBottom > 0 && (
+                <tr>
+                  <td style={{ height: paddingBottom }} colSpan={tableColumns.length} />
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }

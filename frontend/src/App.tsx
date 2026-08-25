@@ -19,6 +19,7 @@ import { FinanceiroPage } from "./components/FinanceiroPage";
 import { PortfolioPage } from "./components/PortfolioPage";
 import { Sidebar, type NavItem } from "./components/Sidebar";
 import { getParametrosGerais } from "./lib/parametros";
+import { useIsMobile } from "./lib/useIsMobile";
 import {
   ClientesIcon,
   UrlsIcon,
@@ -32,6 +33,7 @@ import {
   ProjetosIcon,
   WalletIcon,
   PropostasIcon,
+  MenuIcon,
 } from "./components/icons";
 
 type Tab =
@@ -47,6 +49,13 @@ type Tab =
   | "pagadoria"
   | "financeiro"
   | "projetos";
+
+// Piloto da responsividade mobile (2026-08-25): só Clientes (lista + dashboard do cliente) tem
+// layout pensado pra celular até agora. As outras telas continuam funcionando normalmente em
+// desktop -- no celular, mostram um aviso inline em vez do conteúdo (ver `renderTabContent`),
+// com a sidebar/topbar ainda usáveis pra trocar de tela. Ampliar esta lista conforme cada tela
+// ganhar sua própria versão mobile (grid densa -> cartão, formulário -> modal tocável etc.).
+const MOBILE_READY_TABS = new Set<Tab>(["clientes"]);
 
 const NAV_ITEMS: NavItem[] = [
   {
@@ -101,6 +110,8 @@ function App() {
   const [selectedFornecedorId, setSelectedFornecedorId] = useState<number | null>(null);
   const [pageTitle, setPageTitle] = useState<string | null>(null);
   const [logoEscuroUrl, setLogoEscuroUrl] = useState<string | null>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const isMobile = useIsMobile();
 
   useEffect(() => {
     if (!usuario) return;
@@ -147,6 +158,10 @@ function App() {
     );
   }
 
+  // No celular, tela ainda sem layout mobile mostra um aviso em vez do conteúdo -- sidebar/
+  // topbar continuam ali pra trocar de tela (diferente do MobileOnlyGate, que é tela cheia).
+  const bloqueadaNoMobile = isMobile && !MOBILE_READY_TABS.has(tab);
+
   return (
     <div className="app-shell">
       <Sidebar
@@ -154,6 +169,8 @@ function App() {
         active={tab}
         onSelect={handleSelect}
         logoUrl={logoEscuroUrl}
+        mobileOpen={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
         footer={
           <div className="sidebar-user">
             <span className="sidebar-user-nome">{usuario.nome}</span>
@@ -165,9 +182,26 @@ function App() {
       />
       <div className="app-content">
         <header className="app-topbar">
+          {isMobile && (
+            <button
+              className="topbar-menu-btn"
+              aria-label="Abrir menu"
+              onClick={() => setSidebarOpen(true)}
+            >
+              <MenuIcon />
+            </button>
+          )}
           <h1>{pageTitle ?? TITLES[tab]}</h1>
         </header>
         <main>
+          {bloqueadaNoMobile ? (
+            <div className="mobile-not-ready">
+              <p>
+                A tela "{TITLES[tab]}" ainda não tem layout pra celular. Use o menu para abrir
+                Clientes, ou acesse por um desktop.
+              </p>
+            </div>
+          ) : (
           <PageTitleContext.Provider value={setPageTitle}>
             {tab === "clientes" &&
               (selectedClienteId != null ? (
@@ -192,6 +226,7 @@ function App() {
             {tab === "financeiro" && <FinanceiroPage />}
             {tab === "projetos" && <PortfolioPage />}
           </PageTitleContext.Provider>
+          )}
         </main>
       </div>
     </div>
