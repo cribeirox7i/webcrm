@@ -15,6 +15,15 @@ function formatValor(v: number | null): string {
   return v != null ? v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "";
 }
 
+// pc_dat_niver vem do input type="date" (PrecoClienteForm.tsx), formato ISO yyyy-mm-dd -- mesmo
+// padrão de formatDate replicado em UrlsPage.tsx/CronogramaDetalhadoPage.tsx/PortfolioPage.tsx
+// etc. (cada arquivo tem sua própria cópia, não é uma função compartilhada no projeto).
+function formatDataBr(iso: string | null): string {
+  if (!iso) return "";
+  const [y, m, d] = iso.split("-");
+  return d && m && y ? `${d}/${m}/${y}` : iso;
+}
+
 export type AlertaKey = "sem_valor" | "sem_indexador" | "cliente_inativo";
 
 export const ALERTA_LABEL: Record<AlertaKey, string> = {
@@ -151,6 +160,24 @@ export function TabelaPrecosPage({ cartMesId, cartAnoMes, alertaInicial, onBack 
     [produtoById]
   );
 
+  // Só entram no XLS/PDF/CSV, nunca na tela -- pedido explícito do usuário pra não apertar a
+  // grid, que já tem 7 colunas. CNPJ/CNPJ Faturamento vêm de `clientes`; índice de reajuste
+  // (pc_cod_index) e aniversário do contrato (pc_dat_niver) já existem em `precos_cliente` e já
+  // são usados hoje só pro alerta "Clientes sem Indexador" -- saem como estão guardados (índice
+  // como texto, data como dd/mm/aaaa, mesmo padrão das outras colunas de data da grid).
+  const extraExportColumns = useMemo(
+    () => [
+      { header: "CNPJ do Cliente", value: (p: PrecosCliente) => clienteById.get(p.cliente_id)?.cliente_cnpj ?? "" },
+      {
+        header: "CNPJ de Faturamento",
+        value: (p: PrecosCliente) => clienteById.get(p.cliente_id)?.cliente_cnpj_fat ?? "",
+      },
+      { header: "Índice de Reajuste", value: (p: PrecosCliente) => p.pc_cod_index ?? "" },
+      { header: "Aniversário do Contrato", value: (p: PrecosCliente) => formatDataBr(p.pc_dat_niver) },
+    ],
+    [clienteById]
+  );
+
   const idsSemValor = useMemo(
     () => new Set(precosMesAtual.filter((p) => p.pc_alerta_preco === "S").map((p) => p.pc_id)),
     [precosMesAtual]
@@ -216,6 +243,7 @@ export function TabelaPrecosPage({ cartMesId, cartAnoMes, alertaInicial, onBack 
         filters={filters}
         loading={loading}
         exportFilename={`tabela_precos_${cartAnoMes.replace("/", "-")}`}
+        extraExportColumns={extraExportColumns}
         renderActions={
           podeEditar
             ? (p) => (

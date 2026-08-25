@@ -1857,3 +1857,32 @@ ja tinha virado padrao nesta sessao com o script de constraints SQL.
 `tsc -b` e `vite build` limpos no frontend. **Nao verificado com a tela renderizando dados reais**
 via login - proxima vez que alguem logar no app de verdade, vale confirmar visualmente a lista de
 meses, Carteira, Faturamento e Precos numa tela de notebook comum.
+## Leva Colunas Extra na Exportacao da Tabela de Precos (2026-08-25)
+
+Pedido do usuario: incluir CNPJ do Cliente, CNPJ de Faturamento, indice de reajuste e aniversario
+do contrato na exportacao XLS/PDF da Tabela de Precos (Financeiro > Consumo > Tabela de precos),
+sem mexer na grid da tela (perguntei antes de implementar - a tela ja tem 7 colunas e o usuario
+confirmou "so na exportacao").
+
+**Mecanismo novo no DataGrid**, porque antes nao existia essa separacao: `columns` (prop) alimentava
+tanto a grid renderizada quanto os 4 botoes de exportacao (XLS/PDF/CSV/compartilhar) ao mesmo tempo
+-- nao dava pra adicionar campo a um sem adicionar ao outro. Novo prop opcional
+`extraExportColumns` (`Pick<DataGridColumn<T>, "header" | "value">[]`, so os dois campos que fazem
+sentido pra algo que nunca e renderizado) entra **so** dentro de `exportRows()`, apendado depois das
+colunas visiveis. `useReactTable`/`th`/`td` continuam vendo somente `columns` -- confirmado por
+grep que `extraExportColumns` so aparece nos 3 pontos da assinatura/default e dentro de
+`exportRows`, nada na malha de renderizacao da tabela.
+
+Em `TabelaPrecosPage.tsx`: os 4 campos ja existiam no modelo, sem precisar mudar backend nem schema.
+CNPJ e CNPJ de Faturamento vem de `clientes` (via `clienteById`, mesmo mapa ja usado pra Regime).
+Indice de reajuste (`pc_cod_index`) e aniversario do contrato (`pc_dat_niver`) sao colunas de
+`precos_cliente` que ja existiam e ja alimentavam o alerta "Clientes sem Indexador" -- saem como
+estao guardados (indice como texto, data convertida de ISO pra dd/mm/aaaa com a mesma funcao local
+replicada em outras telas, `formatDataBr`).
+
+**Verificacao**: sem `DATABASE_URL` local nao deu pra gerar um XLSX real com dado de producao --
+simulei a mesma logica de `exportRows()` em Node com dado de exemplo (incluindo um CNPJ de
+faturamento nulo, pra confirmar que sai como string vazia no arquivo, nao `null` cru) e os
+cabecalhos/linhas saem na ordem certa: colunas visiveis primeiro, as 4 novas depois. `tsc -b`
+limpo. Nao verificado visualmente o XLSX/PDF gerado de fato (abrir o arquivo baixado) -- proxima
+vez que alguem exportar a Tabela de Precos com login real, vale abrir o arquivo e confirmar.

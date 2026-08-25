@@ -64,6 +64,12 @@ interface DataGridProps<T> {
   defaultFilterValues?: Record<string, string>;
   /** Ativa a coluna de checkbox (seleção múltipla) -- omitir pra grid sem seleção (padrão). */
   selection?: DataGridSelection;
+  /** Colunas que só entram no XLS/PDF/CSV/compartilhar -- nunca aparecem na tela. Útil pra dado
+   * que o usuário quer no relatório mas que deixaria a grid apertada demais (ex.: CNPJ + CNPJ de
+   * faturamento + índice de reajuste + aniversário do contrato na Tabela de Preços). Só `header`
+   * e `value` são usados; `width`/`cell`/`align`/`minWidth` não fazem sentido pra algo que não é
+   * renderizado. Aparecem no arquivo depois das colunas visíveis, na ordem em que forem passadas. */
+  extraExportColumns?: Pick<DataGridColumn<T>, "header" | "value">[];
 }
 
 const columnHelper = createColumnHelper<Record<string, unknown>>();
@@ -71,6 +77,7 @@ const columnHelper = createColumnHelper<Record<string, unknown>>();
 /** Identidade estável pro default de `filters` -- `filters = []` no destructuring criaria um
  * array novo a cada render, invalidando os useMemo que dependem dele sem nenhum motivo real. */
 const NO_FILTERS: DataGridFilter<never>[] = [];
+const NO_EXTRA_EXPORT: Pick<DataGridColumn<never>, "header" | "value">[] = [];
 
 export function DataGrid<T>({
   data,
@@ -90,6 +97,7 @@ export function DataGrid<T>({
   onExportPdf,
   defaultFilterValues,
   selection,
+  extraExportColumns = NO_EXTRA_EXPORT as unknown as Pick<DataGridColumn<T>, "header" | "value">[],
 }: DataGridProps<T>) {
   const [search, setSearch] = useState("");
   const [filterValues, setFilterValues] = useState<Record<string, string>>(defaultFilterValues ?? {});
@@ -294,10 +302,15 @@ export function DataGrid<T>({
   const displaySize = (id: string, size: number) => (isFixedCol(id) ? size : size * scale);
 
   function exportRows() {
-    const headers = columns.map((c) => c.header);
+    // extraExportColumns vai depois das colunas visíveis, na ordem em que foi passado -- nunca
+    // participa do que é renderizado na tela (grid/th/td), só do arquivo gerado.
+    const headers = [...columns.map((c) => c.header), ...extraExportColumns.map((c) => c.header)];
     return {
       headers,
-      rows: filtered.map((row) => columns.map((c) => c.value(row))),
+      rows: filtered.map((row) => [
+        ...columns.map((c) => c.value(row)),
+        ...extraExportColumns.map((c) => c.value(row)),
+      ]),
     };
   }
 
