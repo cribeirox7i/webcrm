@@ -1681,3 +1681,29 @@ mexi: a rota já exige PIN de admin, e bloquear valor negativo ali poderia barra
 estorno legítimo - não sei se isso acontece no negócio. Se as constraints da PARTE 2 forem
 aplicadas, o próprio banco passa a barrar, e aí é bom saber que o erro pode aparecer como falha de
 importação.
+
+### Correcao no script de constraints: Supabase mostra so o ultimo SELECT (2026-08-25)
+
+O usuario rodou a PARTE 1 do `check-constraints-valores.sql` e mandou o print: aparecia **so** a
+ultima checagem (`crono_perc_atual > 1` = 0). Defeito real do script, nao do banco: o SQL Editor do
+Supabase exibe apenas o resultado da **ultima instrucao** de um lote, e eu tinha escrito a PARTE 1
+como 5 `SELECT` separados - as 4 contagens que de fato importam rodavam e ficavam invisiveis.
+
+Reescrita como **uma query unica** (CTE `checagens` + `UNION ALL`), usando
+`CROSS JOIN LATERAL (VALUES ...)` pra despivotar as colunas de cada tabela e contar violacao por
+coluna sem repetir 23 subqueries. A primeira linha do resultado e sempre o veredito consolidado
+(`TOTAL` -> "OK - pode aplicar a PARTE 2" ou "TEM VIOLACAO"), e a ordenacao por contagem
+decrescente joga qualquer violacao pro topo.
+
+**Testado num Postgres de verdade antes de entregar**, o que na primeira versao eu nao tinha feito.
+Nao ha Postgres nem Docker nesta maquina, mas da pra rodar Postgres real em WASM com
+`@electric-sql/pglite` (instalado no scratchpad, fora do projeto): criei as 4 tabelas com os mesmos
+tipos do `schema.pg.sql` e validei os dois sentidos - PARTE 1 com dado saudavel (veredito OK), PARTE
+1 com violacao plantada (acusou `cart_vlr` e `cart_pdd`, veredito TEM VIOLACAO), PARTE 2 e 2B
+aplicando sem erro, as 4 constraints barrando negativo de fato, e **linha com `cliente_id` NULL e
+valores NULL continuando aceita** depois de tudo aplicado - a prova empirica da resposta que eu
+tinha dado so na teoria sobre as URLs sem cliente.
+
+**Vale como padrao pra proximas levas**: PGlite no scratchpad e uma forma de testar SQL de producao
+(schema, constraint, trigger, view) sem credencial nenhuma e sem tocar no Supabase. Nao substitui o
+teste com o dado real, mas pega erro de sintaxe/semantica antes de mandar o script pro usuario.

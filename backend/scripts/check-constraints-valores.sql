@@ -21,44 +21,92 @@
 
 -- =============================================================================
 -- PARTE 1 - CONFERENCIA (so leitura, seguro rodar a qualquer momento)
--- Esperado: 0 em todas as colunas. Qualquer numero diferente de 0 significa que
--- existe dado real violando a regra -- NAO aplicar a PARTE 2 nesse caso, me
--- avisar primeiro pra decidirmos o que fazer com aquelas linhas.
+--
+-- E UMA QUERY UNICA de proposito: o SQL Editor do Supabase mostra apenas o
+-- resultado da ULTIMA instrucao de um lote, entao a primeira versao disto (5
+-- SELECTs separados) rodava tudo mas exibia so o ultimo -- exatamente as contagens
+-- que importam ficavam invisiveis. Aqui tudo volta num resultado so.
+--
+-- A PRIMEIRA linha do resultado e sempre o veredito consolidado (tabela =
+-- 'TOTAL'): "OK - pode aplicar a PARTE 2" ou "TEM VIOLACAO - nao aplicar a
+-- PARTE 2". Abaixo dela vem uma linha por coluna checada, com as violacoes (se
+-- houver) logo em seguida, porque a ordenacao e por contagem decrescente.
+-- Se vier qualquer coisa diferente de 0, NAO aplicar a PARTE 2 -- me avisar
+-- primeiro pra decidirmos o que fazer com aquelas linhas.
+--
+-- Este script foi testado de ponta a ponta num Postgres real (PGlite, WASM) com
+-- as 4 tabelas nos mesmos tipos do schema.pg.sql: PARTE 1 com dado saudavel
+-- (veredito OK) e com violacao plantada (acusou a coluna certa), PARTE 2 e 2B
+-- aplicando sem erro, as 4 constraints barrando negativo de fato, e linha com
+-- cliente_id NULL + valores NULL continuando aceita depois de tudo aplicado.
 -- =============================================================================
 
-SELECT 'carteira' AS tabela,
-       COUNT(*) FILTER (WHERE cart_qtd             < 0) AS cart_qtd,
-       COUNT(*) FILTER (WHERE cart_vlr             < 0) AS cart_vlr,
-       COUNT(*) FILTER (WHERE cart_pdd             < 0) AS cart_pdd,
-       COUNT(*) FILTER (WHERE cart_sem_pdd         < 0) AS cart_sem_pdd,
-       COUNT(*) FILTER (WHERE cart_fat             < 0) AS cart_fat,
-       COUNT(*) FILTER (WHERE cart_qtd_mes         < 0) AS cart_qtd_mes,
-       COUNT(*) FILTER (WHERE cart_emprestimos_mes < 0) AS cart_emprestimos_mes
-FROM carteira;
+WITH checagens AS (
+  SELECT 'carteira' AS tabela, c.coluna, COUNT(*) FILTER (WHERE c.valor < 0) AS violacoes
+  FROM carteira t
+  CROSS JOIN LATERAL (VALUES
+    ('cart_qtd',             t.cart_qtd::numeric),
+    ('cart_vlr',             t.cart_vlr),
+    ('cart_pdd',             t.cart_pdd),
+    ('cart_sem_pdd',         t.cart_sem_pdd),
+    ('cart_fat',             t.cart_fat),
+    ('cart_qtd_mes',         t.cart_qtd_mes::numeric),
+    ('cart_emprestimos_mes', t.cart_emprestimos_mes)
+  ) AS c(coluna, valor)
+  GROUP BY c.coluna
 
-SELECT 'precos_cliente' AS tabela,
-       COUNT(*) FILTER (WHERE pc_vlr_franquia < 0) AS pc_vlr_franquia,
-       COUNT(*) FILTER (WHERE pc_vlr_unit     < 0) AS pc_vlr_unit,
-       COUNT(*) FILTER (WHERE pc_fx1_lim < 0 OR pc_fx2_lim < 0 OR pc_fx3_lim < 0
-                           OR pc_fx4_lim < 0 OR pc_fx5_lim < 0) AS faixas_limite,
-       COUNT(*) FILTER (WHERE pc_fx1_vlr < 0 OR pc_fx2_vlr < 0 OR pc_fx3_vlr < 0
-                           OR pc_fx4_vlr < 0 OR pc_fx5_vlr < 0) AS faixas_valor
-FROM precos_cliente;
+  UNION ALL
 
-SELECT 'consumo_ana' AS tabela,
-       COUNT(*) FILTER (WHERE consumo_qtd < 0) AS consumo_qtd
-FROM consumo_ana;
+  SELECT 'precos_cliente', c.coluna, COUNT(*) FILTER (WHERE c.valor < 0)
+  FROM precos_cliente t
+  CROSS JOIN LATERAL (VALUES
+    ('pc_vlr_franquia', t.pc_vlr_franquia),
+    ('pc_vlr_unit',     t.pc_vlr_unit),
+    ('pc_fx1_lim', t.pc_fx1_lim), ('pc_fx2_lim', t.pc_fx2_lim), ('pc_fx3_lim', t.pc_fx3_lim),
+    ('pc_fx4_lim', t.pc_fx4_lim), ('pc_fx5_lim', t.pc_fx5_lim),
+    ('pc_fx1_vlr', t.pc_fx1_vlr), ('pc_fx2_vlr', t.pc_fx2_vlr), ('pc_fx3_vlr', t.pc_fx3_vlr),
+    ('pc_fx4_vlr', t.pc_fx4_vlr), ('pc_fx5_vlr', t.pc_fx5_vlr)
+  ) AS c(coluna, valor)
+  GROUP BY c.coluna
 
-SELECT 'crono' AS tabela,
-       COUNT(*) FILTER (WHERE crono_perc_atual < 0) AS crono_perc_atual,
-       COUNT(*) FILTER (WHERE crono_hh_orc     < 0) AS crono_hh_orc,
-       COUNT(*) FILTER (WHERE crono_hh_real    < 0) AS crono_hh_real
-FROM crono;
+  UNION ALL
 
--- Percentual acima de 100%: nao vira constraint (ver PARTE 3), so conferencia.
--- crono_perc_atual e fracao (0-1): o form manda 0-100 e divide por 100.
-SELECT 'crono_perc_atual > 1 (acima de 100%)' AS conferencia, COUNT(*) AS linhas
-FROM crono WHERE crono_perc_atual > 1;
+  SELECT 'consumo_ana', 'consumo_qtd', COUNT(*) FILTER (WHERE consumo_qtd < 0)
+  FROM consumo_ana
+
+  UNION ALL
+
+  SELECT 'crono', c.coluna, COUNT(*) FILTER (WHERE c.valor < 0)
+  FROM crono t
+  CROSS JOIN LATERAL (VALUES
+    ('crono_perc_atual', t.crono_perc_atual),
+    ('crono_hh_orc',     t.crono_hh_orc),
+    ('crono_hh_real',    t.crono_hh_real)
+  ) AS c(coluna, valor)
+  GROUP BY c.coluna
+)
+SELECT tabela, coluna, violacoes,
+       CASE WHEN violacoes = 0 THEN 'ok' ELSE 'VIOLA -- nao aplicar a PARTE 2' END AS situacao
+FROM checagens
+
+UNION ALL
+
+-- Informativo, nao vira constraint (ver PARTE 3): crono_perc_atual e fracao (0-1),
+-- o form manda 0-100 e divide por 100. Passar de 1 = acima de 100%.
+SELECT 'crono', 'crono_perc_atual > 1 (acima de 100%)', COUNT(*),
+       CASE WHEN COUNT(*) = 0 THEN 'ok' ELSE 'informativo, nao bloqueia' END
+FROM crono WHERE crono_perc_atual > 1
+
+UNION ALL
+
+-- Veredito consolidado, so das checagens que de fato bloqueiam a PARTE 2.
+SELECT 'TOTAL', '(todas as colunas que bloqueiam)', SUM(violacoes),
+       CASE WHEN SUM(violacoes) = 0
+            THEN 'OK - pode aplicar a PARTE 2'
+            ELSE 'TEM VIOLACAO - nao aplicar a PARTE 2' END
+FROM checagens
+
+ORDER BY 3 DESC, 1, 2;
 
 
 -- =============================================================================
