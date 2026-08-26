@@ -21,7 +21,10 @@ function toFormValues(cr: Crono | null): CronoFormValues {
   return {
     crono_atividade: cr?.crono_atividade ?? "",
     crono_tipo: cr?.crono_tipo ?? "T",
-    crono_grupo: cr?.crono_grupo != null ? String(cr.crono_grupo) : "0",
+    // "" (não "0") pra atividade nova: 0 não é um grupo real, e como string não-vazia passaria
+    // pelo `required` do seletor de tipo T sem o usuário escolher nada -- editando uma atividade
+    // existente, mantém o valor de verdade salvo (inclusive 0, se algum dado legado tiver isso).
+    crono_grupo: cr?.crono_grupo != null ? String(cr.crono_grupo) : "",
     crono_topico: cr?.crono_topico != null ? String(cr.crono_topico) : "0",
     crono_inicio: cr?.crono_inicio ?? "",
     crono_fim: cr?.crono_fim ?? "",
@@ -66,6 +69,10 @@ export function valuesToPayload(values: CronoFormValues, portId: number): Record
 interface CronoFormProps {
   crono: Crono | null;
   respostaveis: ListRespCrono[];
+  /** Atividades tipo "A" (grupos) já cadastradas neste portfólio -- vira o seletor de Grupo pra
+   * tipo T, em vez de digitar o número livre e arriscar apontar pra um grupo que não existe.
+   * Ordenado por número do grupo pelo chamador (`CronogramaDetalhadoPage.tsx`). */
+  gruposDisponiveis: Pick<Crono, "crono_grupo" | "crono_atividade">[];
   saving: boolean;
   error: string | null;
   onCancel: () => void;
@@ -74,7 +81,7 @@ interface CronoFormProps {
 
 const STATUS_OPTIONS = ["A FAZER", "EM ANDAMENTO", "HOMOLOGAÇÃO", "CONCLUÍDO", "SUSPENSO", "IMPEDIDO", "CANCELADO"];
 
-export function CronoForm({ crono, respostaveis, saving, error, onCancel, onSubmit }: CronoFormProps) {
+export function CronoForm({ crono, respostaveis, gruposDisponiveis, saving, error, onCancel, onSubmit }: CronoFormProps) {
   const [values, setValues] = useState<CronoFormValues>(() => toFormValues(crono));
   const ehAgregacao = values.crono_tipo === "A";
 
@@ -120,17 +127,53 @@ export function CronoForm({ crono, respostaveis, saving, error, onCancel, onSubm
           </div>
         </div>
 
-        <div className="form-row">
-          <label htmlFor="crono_grupo">Grupo *</label>
-          <input
-            id="crono_grupo"
-            type="number"
-            required
-            min={0}
-            value={values.crono_grupo}
-            onChange={(e) => set("crono_grupo", e.target.value)}
-          />
-        </div>
+        {ehAgregacao ? (
+          // Tipo A é quem CRIA o grupo -- número livre, não um seletor (não existe ainda uma
+          // lista de grupos pra escolher quando você está definindo um novo).
+          <div className="form-row">
+            <label htmlFor="crono_grupo">Grupo *</label>
+            <input
+              id="crono_grupo"
+              type="number"
+              required
+              min={0}
+              value={values.crono_grupo}
+              onChange={(e) => set("crono_grupo", e.target.value)}
+            />
+          </div>
+        ) : (
+          // Tipo T pertence a um grupo já existente (tipo A) -- seletor em vez de número livre,
+          // pra não digitar um grupo que não existe e a atividade ficar órfã (sem cabeçalho,
+          // sem entrar no % médio/datas de nenhum grupo). Se o valor salvo não bater com nenhum
+          // grupo cadastrado (dado legado, ou o grupo foi excluído depois), mantém como opção
+          // extra em vez de trocar o valor sozinho ao abrir o formulário.
+          <div className="form-row">
+            <label htmlFor="crono_grupo">Grupo *</label>
+            <select
+              id="crono_grupo"
+              required
+              value={values.crono_grupo}
+              onChange={(e) => set("crono_grupo", e.target.value)}
+            >
+              <option value="">(selecione um grupo)</option>
+              {gruposDisponiveis.map((g) => (
+                <option key={g.crono_grupo} value={g.crono_grupo ?? ""}>
+                  {g.crono_grupo} - {g.crono_atividade}
+                </option>
+              ))}
+              {values.crono_grupo &&
+                !gruposDisponiveis.some((g) => String(g.crono_grupo) === values.crono_grupo) && (
+                  <option value={values.crono_grupo}>{values.crono_grupo} (grupo não encontrado)</option>
+                )}
+            </select>
+            {gruposDisponiveis.length === 0 && (
+              <span className="form-hint">
+                Nenhuma atividade tipo A (grupo) cadastrada ainda neste cronograma -- cadastre o
+                grupo primeiro.
+              </span>
+            )}
+          </div>
+        )}
 
         {ehAgregacao ? (
           // Tipo A = agregação (ex.: grupo 3 resume as atividades 3.1, 3.2, 3.3...), só um

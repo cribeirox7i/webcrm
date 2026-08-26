@@ -2096,3 +2096,32 @@ claramente nao-intencional; sinalizado ao usuario) e Tipo/Grupo (os 2 campos que
 "so" existem pra agregadora).
 
 `tsc -b` e `vite build` limpos.
+
+
+### Cronograma: campo Grupo vira seletor pra atividade tipo T (2026-08-26)
+
+Pedido do usuario: pra tipo T, o campo Grupo deveria ser um seletor com os grupos (atividade tipo
+A) ja cadastrados naquele projeto, em vez de numero livre.
+
+`CronogramaDetalhadoPage.tsx`: novo `gruposDisponiveis` (useMemo), filtra a lista de crono ja
+carregada (`crono_calculado`, por portfolio) pra tipo A com `crono_grupo` nao-nulo, ordenado por
+numero do grupo. Passado como prop nova pro `CronoForm`.
+
+`CronoForm.tsx`: o campo Grupo agora se bifurca por tipo -
+- **Tipo A** continua numero livre (e quem CRIA o grupo -- nao ha lista pra escolher quando voce
+  esta definindo um novo).
+- **Tipo T** vira `<select>` com as opcoes de `gruposDisponiveis` (rotulo "3 - Homologacao"). Se o
+  valor salvo nao bater com nenhum grupo cadastrado (dado legado, ou o grupo foi excluido depois),
+  mantem como opcao extra ("7 (grupo nao encontrado)") em vez de trocar o valor sozinho ao abrir o
+  formulario. Aviso extra quando a lista esta vazia ("cadastre o grupo primeiro").
+
+**Ajuste relacionado, achado no meio da implementacao**: o valor padrao de `crono_grupo` pra
+atividade NOVA era `"0"` (nao vazio) -- como "0" passa pelo `required` do HTML sem o usuario
+escolher nada, uma atividade tipo T nova seria submetida silenciosamente pro "grupo 0" (que nao
+existe) se o usuario nao tocasse no campo. Trocado o default pra `""` (vazio) em `toFormValues`
+pra registro novo -- editar um registro existente continua usando o valor real salvo, mesmo que
+seja 0 legado.
+
+**Verificacao**: logica do seletor (placeholder, grupo existente, grupo orfao) simulada em Node com
+3 cenarios antes de fechar -- todos batem com o esperado. `tsc -b` e `vite build` limpos. Nao
+testado com login real.

@@ -60,6 +60,17 @@ export function CronogramaDetalhadoPage({ portfolio, clienteNome, onBack }: Cron
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [portfolio.port_id]);
 
+  const gruposDisponiveis = useMemo(
+    () =>
+      crono
+        // crono_grupo é obrigatório no formulário pra tipo A, mas o tipo (`number | null`)
+        // permite null -- filtra fora por segurança (evita opção de grupo sem número no
+        // seletor, ou key duplicada se mais de uma linha tiver null).
+        .filter((c) => c.crono_tipo === "A" && c.crono_grupo != null)
+        .sort((a, b) => (a.crono_grupo ?? 0) - (b.crono_grupo ?? 0)),
+    [crono]
+  );
+
   const cronoOrdenado = useMemo(
     () =>
       [...crono].sort((a, b) => {
@@ -245,6 +256,7 @@ export function CronogramaDetalhadoPage({ portfolio, clienteNome, onBack }: Cron
         <CronoForm
           crono={editing === "new" ? null : editing}
           respostaveis={respostaveis}
+          gruposDisponiveis={gruposDisponiveis}
           saving={saving}
           error={formError}
           onCancel={() => {
