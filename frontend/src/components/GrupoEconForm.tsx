@@ -25,7 +25,7 @@ export function GrupoEconForm({ grupo, saving, error, onCancel, onSubmit }: Grup
   const [values, setValues] = useState<GrupoEconFormValues>(() => toFormValues(grupo));
 
   return (
-    <div className="modal-backdrop" onClick={onCancel}>
+    <div className="modal-backdrop">
       <form
         className="modal"
         onClick={(e) => e.stopPropagation()}

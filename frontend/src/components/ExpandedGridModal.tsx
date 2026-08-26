@@ -40,7 +40,7 @@ export function ExpandedGridModal<T>({
   headerExtra,
 }: ExpandedGridModalProps<T>) {
   return (
-    <div className="modal-backdrop" onClick={onClose}>
+    <div className="modal-backdrop">
       <div className="modal modal-fullscreen" onClick={(e) => e.stopPropagation()}>
         <div className="dashboard-card-header">
           <h2>{title}</h2>

@@ -61,7 +61,7 @@ export function PrecoClienteForm({
   const produtoLabel = produto ? `${produto.produto_nome} - ${produto.produto_detalhe ?? ""}` : "";
 
   return (
-    <div className="modal-backdrop" onClick={onCancel}>
+    <div className="modal-backdrop">
       <form
         className="modal"
         onClick={(e) => e.stopPropagation()}

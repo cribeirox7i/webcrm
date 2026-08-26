@@ -51,7 +51,7 @@ export function ContatoForm({ contato, clientes, saving, error, onCancel, onSubm
   const clienteOptions = clientes.map((c) => ({ value: String(c.cliente_id), label: c.cliente_nome }));
 
   return (
-    <div className="modal-backdrop" onClick={onCancel}>
+    <div className="modal-backdrop">
       <form
         className="modal"
         onClick={(e) => e.stopPropagation()}

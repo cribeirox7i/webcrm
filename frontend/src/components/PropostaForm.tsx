@@ -114,7 +114,7 @@ export function PropostaForm({ proposta, clientes, saving, error, onCancel, onSu
   }
 
   return (
-    <div className="modal-backdrop" onClick={onCancel}>
+    <div className="modal-backdrop">
       <form
         className="modal"
         onClick={(e) => e.stopPropagation()}

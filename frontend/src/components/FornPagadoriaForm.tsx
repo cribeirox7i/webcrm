@@ -98,7 +98,7 @@ export function FornPagadoriaForm({
   const fornecedorOptions = (fornecedores ?? []).map((f) => ({ value: String(f.fornecedor_id), label: f.fornecedor_nome }));
 
   return (
-    <div className="modal-backdrop" onClick={onCancel}>
+    <div className="modal-backdrop">
       <form
         className="modal modal-wide"
         onClick={(e) => e.stopPropagation()}

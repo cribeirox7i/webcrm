@@ -78,7 +78,7 @@ export function FornContratoForm({ contrato, pessoas, saving, error, onCancel, o
   const pessoaOptions = pessoas.map((p) => ({ value: String(p.pessoa_id), label: p.pessoa_nome }));
 
   return (
-    <div className="modal-backdrop" onClick={onCancel}>
+    <div className="modal-backdrop">
       <form
         className="modal modal-wide"
         onClick={(e) => e.stopPropagation()}

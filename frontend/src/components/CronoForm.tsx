@@ -36,16 +36,23 @@ function toFormValues(cr: Crono | null): CronoFormValues {
 }
 
 export function valuesToPayload(values: CronoFormValues, portId: number): Record<string, unknown> {
+  // Atividade tipo "A" (agregação, ex.: grupo 3 resume 3.1/3.2/3.3) tem Início/Término/Replan/
+  // % Atual sempre recalculados pela view (`crono_calculado`, ver views.pg.sql) a partir do MIN/
+  // MAX/AVG das atividades do mesmo `crono_grupo` -- o valor bruto salvo aqui nunca é lido de
+  // volta pra tipo A. Gravar `null` em vez do que o formulário mostrar evita dado morto/
+  // enganoso na tabela (alguém abrindo o registro direto no banco veria um valor que parece
+  // real mas não é usado em lugar nenhum).
+  const ehAgregacao = values.crono_tipo === "A";
   return {
     port_id: portId,
     crono_atividade: values.crono_atividade.trim(),
     crono_tipo: values.crono_tipo,
     crono_grupo: values.crono_grupo ? Number(values.crono_grupo) : null,
     crono_topico: values.crono_topico ? Number(values.crono_topico) : null,
-    crono_inicio: values.crono_inicio || null,
-    crono_fim: values.crono_fim || null,
-    crono_replan: values.crono_replan || null,
-    crono_perc_atual: values.crono_perc_atual ? Number(values.crono_perc_atual) / 100 : 0,
+    crono_inicio: ehAgregacao ? null : values.crono_inicio || null,
+    crono_fim: ehAgregacao ? null : values.crono_fim || null,
+    crono_replan: ehAgregacao ? null : values.crono_replan || null,
+    crono_perc_atual: ehAgregacao ? null : (values.crono_perc_atual ? Number(values.crono_perc_atual) / 100 : 0),
     crono_status: values.crono_status || null,
     resp_id: values.resp_id ? Number(values.resp_id) : null,
     crono_demanda_1: values.crono_demanda_1.trim() || null,
@@ -67,13 +74,14 @@ const STATUS_OPTIONS = ["A FAZER", "EM ANDAMENTO", "HOMOLOGAÇÃO", "CONCLUÍDO"
 
 export function CronoForm({ crono, respostaveis, saving, error, onCancel, onSubmit }: CronoFormProps) {
   const [values, setValues] = useState<CronoFormValues>(() => toFormValues(crono));
+  const ehAgregacao = values.crono_tipo === "A";
 
   function set<K extends keyof CronoFormValues>(key: K, value: CronoFormValues[K]) {
     setValues((prev) => ({ ...prev, [key]: value }));
   }
 
   return (
-    <div className="modal-backdrop" onClick={onCancel}>
+    <div className="modal-backdrop">
       <form
         className="modal"
         onClick={(e) => e.stopPropagation()}
@@ -134,45 +142,58 @@ export function CronoForm({ crono, respostaveis, saving, error, onCancel, onSubm
           />
         </div>
 
-        <div className="form-row">
-          <label htmlFor="crono_inicio">Início *</label>
-          <input
-            id="crono_inicio"
-            type="date"
-            required
-            value={values.crono_inicio}
-            onChange={(e) => set("crono_inicio", e.target.value)}
-          />
-        </div>
+        {ehAgregacao ? (
+          // Tipo A = agregação (ex.: grupo 3 resume as atividades 3.1, 3.2, 3.3...). Início,
+          // Término e % Atual são sempre recalculados pela view a partir do MIN/MAX/média das
+          // atividades do mesmo grupo -- pedir esses campos aqui só daria a falsa impressão de
+          // que o valor digitado importa. Ver `valuesToPayload`: pra tipo A eles vão como null.
+          <p className="form-hint">
+            Início, Término e % Atual são calculados automaticamente a partir das atividades do
+            grupo {values.crono_grupo || "?"} (menor início, maior término, média de % atual).
+          </p>
+        ) : (
+          <>
+            <div className="form-row">
+              <label htmlFor="crono_inicio">Início *</label>
+              <input
+                id="crono_inicio"
+                type="date"
+                required
+                value={values.crono_inicio}
+                onChange={(e) => set("crono_inicio", e.target.value)}
+              />
+            </div>
 
-        <div className="form-row">
-          <label htmlFor="crono_fim">Término *</label>
-          <input
-            id="crono_fim"
-            type="date"
-            required
-            value={values.crono_fim}
-            onChange={(e) => set("crono_fim", e.target.value)}
-          />
-        </div>
+            <div className="form-row">
+              <label htmlFor="crono_fim">Término *</label>
+              <input
+                id="crono_fim"
+                type="date"
+                required
+                value={values.crono_fim}
+                onChange={(e) => set("crono_fim", e.target.value)}
+              />
+            </div>
 
-        <div className="form-row">
-          <label htmlFor="crono_replan">Replan</label>
-          <input id="crono_replan" type="date" value={values.crono_replan} onChange={(e) => set("crono_replan", e.target.value)} />
-        </div>
+            <div className="form-row">
+              <label htmlFor="crono_replan">Replan</label>
+              <input id="crono_replan" type="date" value={values.crono_replan} onChange={(e) => set("crono_replan", e.target.value)} />
+            </div>
 
-        <div className="form-row">
-          <label htmlFor="crono_perc_atual">% Atual *</label>
-          <input
-            id="crono_perc_atual"
-            type="number"
-            required
-            min={0}
-            max={100}
-            value={values.crono_perc_atual}
-            onChange={(e) => set("crono_perc_atual", e.target.value)}
-          />
-        </div>
+            <div className="form-row">
+              <label htmlFor="crono_perc_atual">% Atual *</label>
+              <input
+                id="crono_perc_atual"
+                type="number"
+                required
+                min={0}
+                max={100}
+                value={values.crono_perc_atual}
+                onChange={(e) => set("crono_perc_atual", e.target.value)}
+              />
+            </div>
+          </>
+        )}
 
         <div className="form-row">
           <label htmlFor="crono_status">Status *</label>

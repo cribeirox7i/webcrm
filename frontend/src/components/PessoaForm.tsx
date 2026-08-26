@@ -73,7 +73,7 @@ export function PessoaForm({ pessoa, pessoas, saving, error, onCancel, onSubmit 
     .map((p) => ({ value: String(p.pessoa_id), label: p.pessoa_nome }));
 
   return (
-    <div className="modal-backdrop" onClick={onCancel}>
+    <div className="modal-backdrop">
       <form
         className="modal"
         onClick={(e) => e.stopPropagation()}

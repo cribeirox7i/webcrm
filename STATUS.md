@@ -1,12 +1,18 @@
 # WEBCRM - Status do Projeto
 
-> Documento de retomada. Última atualização: **2026-08-25** - **piloto de responsividade mobile**
-> (só a tela de Clientes, ver "Leva Responsividade Mobile - Piloto" no fim do arquivo) **ainda não
-> commitado nem enviado ao `main`** - `tsc`/`vite build` limpos e verificado estruturalmente (CSS/
-> classes reais), mas sem confirmação com login real (sem `DATABASE_URL` local). Antes de continuar
-> a partir daqui, `git status`/`git diff` pra ver o que ainda está pendente de commit.
+> Documento de retomada. Última atualização: **2026-08-26** - 3 mudanças pedidas numa mensagem só
+> (ver "Leva Cronograma, Modais Fixos e Dúvida de Segurança" no fim do arquivo): atividade tipo A
+> do Cronograma parou de exigir Início/Término/% Atual (já eram ignorados pela view, o formulário
+> que estava errado); todo modal do app principal parou de fechar ao clicar fora (generalizando o
+> que o Admin já tinha); e uma dúvida do usuário sobre senha visível no DevTools, respondida (é
+> normal, não é vulnerabilidade). **Ainda não commitado nem enviado ao `main`** - `tsc` limpo, sem
+> confirmação com login real. Tem também uma pergunta em aberto sem resposta do usuário: se
+> `port_fim` (nível de portfólio) deve parar de considerar `crono_replan` no cálculo.
 >
-> Contexto anterior: auditoria de segurança #2
+> Contexto anterior: **piloto de responsividade mobile** (só a tela de Clientes, ver "Leva
+> Responsividade Mobile - Piloto" no fim do arquivo, commit `478ff7b`).
+>
+> Contexto anterior a esse: auditoria de segurança #2
 > (checklist de 22 itens), com um achado **crítico** corrigido: `usuario_sessoes` exposta pelo
 > roteador genérico deixava qualquer usuário autenticado ler o token de sessão de todos os
 > outros. Ver "Leva Auditoria de Segurança #2" no fim do arquivo.
@@ -1993,3 +1999,78 @@ confirmou a regra correta. Vale lembrar disso em qualquer verificacao futura de 
 ver [[user-carlos]]) assim que houver uma forma de autenticar (producao, ou `DATABASE_URL` local) e
 reportar o que quebrar. Ampliar `MOBILE_READY_TABS` conforme cada tela ganhar sua propria revisao -
 nao virar todas de uma vez sem o piloto ser validado primeiro.
+
+## Leva Cronograma, Modais Fixos e Duvida de Seguranca (2026-08-26)
+
+Pedido do usuario, 3 itens numa mensagem so.
+
+### 1. Cronograma: datas de atividade tipo A herdadas do grupo
+
+O pedido original ("data inicio deve ser a menor data de inicio das atividades daquele crono, data
+fim a maior data fim") ficou ambiguo entre nivel de PORTFOLIO (view `portfolios_progresso.
+port_inicio/port_fim`, ja existente) e nivel de GRUPO dentro do cronograma (atividade tipo "A" -
+agregacao, ex.: grupo 3 resume 3.1/3.2/3.3). Perguntei via AskUserQuestion sobre o nivel de
+portfolio (se o `crono_replan` deveria continuar entrando no MAX de `port_fim`) e a pergunta foi
+dispensada sem resposta - **continua aberta**, nao decidi por conta propria. O usuario mandou um
+print (tela de cadastro de atividade) sem legenda no meio disso; pedi contexto e ele explicou: era
+sobre a tela de Atividade do Cronograma, e o ponto real era o nivel de GRUPO.
+
+**Achado real, corrigido**: a view `crono_calculado` (`views.pg.sql`) ja fazia exatamente o que o
+usuario descreveu para tipo A - `crono_inicio_calc` = MIN(crono_inicio) das atividades do mesmo
+`crono_grupo`, `crono_fim_calc` = MAX(crono_fim), `crono_perc_atual_calc` = AVG(crono_perc_atual)
+das atividades tipo T do grupo. **O SQL sempre esteve certo.** O bug era no formulario
+(`CronoForm.tsx`): pra tipo A, Inicio/Termino/% Atual continuavam **obrigatorios e editaveis**,
+mesmo sendo ignorados pela view na leitura - o usuario preenchia um valor que nunca aparecia em
+lugar nenhum, o que e confuso e pode passar a impressao errada de que o sistema nao esta calculando
+certo.
+
+Corrigido em duas partes:
+- `valuesToPayload()`: pra tipo A, `crono_inicio`/`crono_fim`/`crono_replan`/`crono_perc_atual`
+  vao como `null` (nenhuma dessas colunas e `NOT NULL` no schema, confirmado antes de mudar).
+- Formulario: pra tipo A, os 4 campos saem e entra um aviso (`.form-hint`, classe CSS nova) dizendo
+  que sao calculados a partir das atividades do grupo. Tipo T continua exatamente como estava.
+
+**Efeito colateral aceito, nao uma migracao**: registros tipo A criados ANTES desta correcao podem
+ter valor morto (nao-null) gravado em `crono_inicio`/`crono_fim`/`crono_perc_atual` - inofensivo pra
+exibicao (a tela e o PDF sempre leem `_calc`, confirmado em `CronogramaDetalhadoPage.tsx` e
+`lib/cronogramaPdf.ts`), so ficaria visivel pra quem abrir a tabela `crono` direto no banco. Nao
+propus limpeza retroativa por conta propria - se o usuario quiser, e um `UPDATE crono SET
+crono_inicio=NULL, crono_fim=NULL, crono_replan=NULL, crono_perc_atual=NULL WHERE crono_tipo='A'`
+simples, rodado por ele no Supabase.
+
+**Pendente**: a pergunta original sobre `port_inicio`/`port_fim` (nivel de portfolio, se o
+`crono_replan` deve continuar entrando no MAX) - nao respondida ainda, nao mudei nada la.
+
+### 2. Modais fixos em todo o app principal (nao so Admin)
+
+Desde 2026-08-11 os modais do Admin ja nao fechavam ao clicar fora (pedido explicito da epoca); os
+do app principal continuavam fechando. Pedido de hoje generaliza isso pra todo o app. Removido
+`onClick={onCancel}`/`onClick={onClose}` do `<div className="modal-backdrop">` nos 17 componentes
+do app principal que tinham esse comportamento (`AnexoUploadForm`, `ClienteForm`, `ContatoForm`,
+`CronoForm`, `ExpandedGridModal`, `FaturamentoForm`, `FornContratoForm`, `FornPagadoriaForm`,
+`FornecedorForm`, `GrupoEconForm`, `PessoaForm`, `PortfolioForm`, `PrecoClienteForm`, `ProdutoForm`,
+`PropostaForm`, `ServidorForm`, `UrlForm`). Os 5 do Admin ja estavam assim, nao precisaram de nada.
+Botao Cancelar/Fechar continua fechando normal (`onClick={onCancel}` no botao, so o backdrop mudou).
+
+### 3. Duvida de seguranca: senha visivel no DevTools
+
+Usuario mandou print do inspetor de elementos mostrando a estrutura HTML do campo de senha (label +
+input + botao de mostrar/esconder) e perguntou se e normal conseguir ver a senha assim.
+
+**Resposta dada**: sim, e normal e nao e vulnerabilidade do WebCRM - e assim em qualquer site.
+O print mostra so a ESTRUTURA HTML (o React controla `value` como propriedade viva do DOM, nao como
+atributo escrito no markup, entao nao aparece na aba Elements). O que de fato revela a senha e
+`document.querySelector('input[type=password]').value` no Console, ou o proprio botao de
+mostrar/esconder ja existente em `PasswordInput.tsx` - qualquer JS rodando na mesma pagina precisa
+poder ler o valor do campo pra validar/enviar o formulario, entao nenhum site consegue impedir isso
+via DevTools. So e risco real se outra pessoa tiver acesso fisico/remoto ao computador do usuario
+enquanto ele digita - nao e algo explorável remotamente. Nao muda nada sobre transporte (HTTPS) ou
+armazenamento (scrypt+salt, ja confirmado na auditoria de seguranca).
+
+### Verificacao
+
+`tsc -b` limpo. Mudancas de modal e formulario sao JSX/logica simples (conditional render, remocao
+de um handler), revisadas por leitura do diff - nao testado com login real (sem `DATABASE_URL`
+local, limitacao ja conhecida). Vale conferir no navegador real: abrir uma atividade tipo A no
+Cronograma e confirmar que o aviso aparece no lugar dos 4 campos, e que clicar fora de qualquer
+modal do app principal nao fecha mais.
