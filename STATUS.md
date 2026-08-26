@@ -2125,3 +2125,31 @@ seja 0 legado.
 **Verificacao**: logica do seletor (placeholder, grupo existente, grupo orfao) simulada em Node com
 3 cenarios antes de fechar -- todos batem com o esperado. `tsc -b` e `vite build` limpos. Nao
 testado com login real.
+
+
+### Consumo: valores da tabela de preco ao lado dos realizados (2026-08-26)
+
+Pedido do usuario: na tela Financeiro > Consumo, mostrar tambem o preco unitario e a franquia
+CONTRATADOS (tabela de precos do cliente) junto com os ja exibidos (franquia/valor realizados no
+mes).
+
+`ConsumoMesPage.tsx` ja carregava os dois conjuntos separadamente -- `precos_cliente_mes_atual`
+(so os valores REALIZADOS no mes, sem `pc_vlr_unit`/`pc_vlr_franquia`) e `precos_cliente` (a tabela
+de precos em si, com `pc_vlr_unit`/`pc_vlr_franquia`, ja usada pros alertas de indexador) -- so
+faltava cruzar os dois. Ambos sao buscados com o mesmo `cart_mes_id`, entao compartilham o mesmo
+`pc_id` pra cada linha de contrato no mesmo periodo.
+
+Novo `precoClienteById` (Map por `pc_id`, useMemo). Mini-tabela de cada grupo ganhou 2 colunas
+novas -- "Franquia (tabela)" e "Vlr unit. (tabela)" -- posicionadas do lado das ja existentes
+("Franquia realizada"/"Vlr unit. realizado") pra comparacao direta. Larguras da `mini-table-fixed`
+redistribuidas (24/9/9/14/14/15/15 = 100%). Linha sem correspondencia em `precos_cliente` (caso
+raro, dado orfao) mostra vazio em vez de quebrar.
+
+**Fora do escopo desta mudanca**: a exportacao (XLS/CSV/PDF/compartilhar) desta tela e por GRUPO
+(cliente+produto agregado), nao por linha/SKU -- um grupo pode ter varias linhas com precos de
+tabela diferentes (SKUs distintos), entao os 2 valores novos nao entraram no export, que continua
+igual. Se o usuario quiser esses valores tambem no arquivo exportado, precisa reestruturar o
+export pra nivel de linha, nao de grupo -- avisar antes de assumir.
+
+Verificado: `tsc -b`/`vite build` limpos, cruzamento pc_id simulado em Node com 3 casos (2 linhas
+com correspondencia, 1 orfa) antes de fechar.

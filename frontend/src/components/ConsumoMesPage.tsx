@@ -82,6 +82,16 @@ export function ConsumoMesPage({ cartMesId, cartAnoMes, onBack, onAbrirAlertaPre
     return map;
   }, [produtos]);
 
+  // precos_cliente_mes_atual (usado nas linhas abaixo) só traz os valores REALIZADOS no mês
+  // (franquia/excedente já apurados); o preço unitário e a franquia CONTRATADOS ficam em
+  // precos_cliente, mesmo pc_id (os dois já são buscados com o mesmo cart_mes_id, então
+  // correspondem à mesma linha de contrato no mesmo período).
+  const precoClienteById = useMemo(() => {
+    const map = new Map<number, PrecosCliente>();
+    precosCliente.forEach((pc) => map.set(pc.pc_id, pc));
+    return map;
+  }, [precosCliente]);
+
   const grupos = useMemo<ConsumoGrupo[]>(() => {
     const map = new Map<string, ConsumoGrupo>();
     for (const pc of precos) {
@@ -327,40 +337,55 @@ export function ConsumoMesPage({ cartMesId, cartAnoMes, onBack, onAbrirAlertaPre
             <table className="mini-table mini-table-fixed">
               <thead>
                 <tr>
-                  <th style={{ width: "42%" }}>Detalhe</th>
-                  <th style={{ width: "13%" }}>SKU</th>
-                  <th style={{ width: "13%" }} className="text-right">
+                  <th style={{ width: "24%" }}>Detalhe</th>
+                  <th style={{ width: "9%" }}>SKU</th>
+                  <th style={{ width: "9%" }} className="text-right">
                     # Transações
                   </th>
-                  <th style={{ width: "16%" }} className="text-right">
+                  <th style={{ width: "14%" }} className="text-right">
+                    Franquia (tabela)
+                  </th>
+                  <th style={{ width: "14%" }} className="text-right">
                     Franquia realizada
                   </th>
-                  <th style={{ width: "16%" }} className="text-right">
+                  <th style={{ width: "15%" }} className="text-right">
+                    Vlr unit. (tabela)
+                  </th>
+                  <th style={{ width: "15%" }} className="text-right">
                     Vlr unit. realizado
                   </th>
                 </tr>
               </thead>
               <tbody>
-                {g.linhas.map(({ pc, produto }) => (
-                  <tr
-                    key={pc.pc_id}
-                    className={`clickable-row ${pc.pc_alerta_preco === "S" ? "row-alerta" : ""}`}
-                    onClick={() =>
-                      setDetalhe({
-                        clienteId: pc.cliente_id,
-                        clienteNome: g.clienteNome,
-                        produtoId: pc.produto_id,
-                        produtoNome: produto?.produto_nome ?? "",
-                      })
-                    }
-                  >
-                    <td>{produto?.produto_detalhe ?? ""}</td>
-                    <td>{produto?.produto_sku ?? ""}</td>
-                    <td className="text-right">{pc.pc_mes_atu_qtd_consumo}</td>
-                    <td className="text-right">{formatMoney(pc.pc_mes_atu_vlr_franquia ?? 0)}</td>
-                    <td className="text-right">{formatMoney(pc.pc_mes_atu_vlr_exced ?? 0)}</td>
-                  </tr>
-                ))}
+                {g.linhas.map(({ pc, produto }) => {
+                  const precoTabela = precoClienteById.get(pc.pc_id);
+                  return (
+                    <tr
+                      key={pc.pc_id}
+                      className={`clickable-row ${pc.pc_alerta_preco === "S" ? "row-alerta" : ""}`}
+                      onClick={() =>
+                        setDetalhe({
+                          clienteId: pc.cliente_id,
+                          clienteNome: g.clienteNome,
+                          produtoId: pc.produto_id,
+                          produtoNome: produto?.produto_nome ?? "",
+                        })
+                      }
+                    >
+                      <td>{produto?.produto_detalhe ?? ""}</td>
+                      <td>{produto?.produto_sku ?? ""}</td>
+                      <td className="text-right">{pc.pc_mes_atu_qtd_consumo}</td>
+                      <td className="text-right">
+                        {precoTabela?.pc_vlr_franquia != null ? formatMoney(precoTabela.pc_vlr_franquia) : ""}
+                      </td>
+                      <td className="text-right">{formatMoney(pc.pc_mes_atu_vlr_franquia ?? 0)}</td>
+                      <td className="text-right">
+                        {precoTabela?.pc_vlr_unit != null ? formatMoney(precoTabela.pc_vlr_unit) : ""}
+                      </td>
+                      <td className="text-right">{formatMoney(pc.pc_mes_atu_vlr_exced ?? 0)}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
