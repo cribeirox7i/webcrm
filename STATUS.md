@@ -5,9 +5,11 @@
 > do Cronograma parou de exigir Início/Término/% Atual (já eram ignorados pela view, o formulário
 > que estava errado); todo modal do app principal parou de fechar ao clicar fora (generalizando o
 > que o Admin já tinha); e uma dúvida do usuário sobre senha visível no DevTools, respondida (é
-> normal, não é vulnerabilidade). **Ainda não commitado nem enviado ao `main`** - `tsc` limpo, sem
-> confirmação com login real. Tem também uma pergunta em aberto sem resposta do usuário: se
-> `port_fim` (nível de portfólio) deve parar de considerar `crono_replan` no cálculo.
+> normal, não é vulnerabilidade). Já commitado e enviado ao `main` (`2d16899`).
+>
+> **Pergunta sobre `port_fim` respondida (2026-08-26): manter `crono_replan` no cálculo.**
+> Confirmado pelo usuário - a view `portfolios_progresso.port_fim` fica exatamente como está
+> (`MAX` entre `crono_fim` e `crono_replan`, o que for mais tarde). Nenhuma mudança de código.
 >
 > Contexto anterior: **piloto de responsividade mobile** (só a tela de Clientes, ver "Leva
 > Responsividade Mobile - Piloto" no fim do arquivo, commit `478ff7b`).
@@ -2074,3 +2076,23 @@ de um handler), revisadas por leitura do diff - nao testado com login real (sem 
 local, limitacao ja conhecida). Vale conferir no navegador real: abrir uma atividade tipo A no
 Cronograma e confirmar que o aviso aparece no lugar dos 4 campos, e que clicar fora de qualquer
 modal do app principal nao fecha mais.
+
+
+### Correcao no mesmo dia: agregadora esconde mais campos (2026-08-26)
+
+O usuario mandou print da tela em producao confirmando que a correcao anterior funcionou (aviso
+aparece, Inicio/Termino/% Atual escondidos), mas apontou que faltava esconder mais coisa:
+"Agregadora so tem tipo e codigo de grupo". Confirmado que nenhuma view usa `crono_topico`,
+`crono_status`, `resp_id` ou `crono_demanda_1/2/3` de forma agregada pra tipo A (grep em
+`views.pg.sql` sem nenhuma ocorrencia) - sao conceito de atividade individual (tipo T), sem sentido
+pedidos pro cabeçalho do grupo.
+
+`CronoForm.tsx` ajustado: pra tipo A, alem de Inicio/Termino/% Atual (ja escondidos), agora tambem
+escondem Topico, Status, Responsavel e Demanda 1/2/3 - o aviso (`.form-hint`) foi ampliado pra
+mencionar isso. `valuesToPayload` grava `null` nos 7 campos pra tipo A (Topico incluso, que antes
+so ficava escondido nas datas/percentual). Continuam visiveis pra tipo A: Atividade (nome/titulo do
+grupo - mantido por decisao propria, nao pedido explicitamente, mas um cabecalho sem nome pareceu
+claramente nao-intencional; sinalizado ao usuario) e Tipo/Grupo (os 2 campos que o usuario disse que
+"so" existem pra agregadora).
+
+`tsc -b` e `vite build` limpos.

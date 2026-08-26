@@ -36,28 +36,30 @@ function toFormValues(cr: Crono | null): CronoFormValues {
 }
 
 export function valuesToPayload(values: CronoFormValues, portId: number): Record<string, unknown> {
-  // Atividade tipo "A" (agregação, ex.: grupo 3 resume 3.1/3.2/3.3) tem Início/Término/Replan/
-  // % Atual sempre recalculados pela view (`crono_calculado`, ver views.pg.sql) a partir do MIN/
-  // MAX/AVG das atividades do mesmo `crono_grupo` -- o valor bruto salvo aqui nunca é lido de
-  // volta pra tipo A. Gravar `null` em vez do que o formulário mostrar evita dado morto/
-  // enganoso na tabela (alguém abrindo o registro direto no banco veria um valor que parece
-  // real mas não é usado em lugar nenhum).
+  // Atividade tipo "A" (agregação, ex.: grupo 3 resume 3.1/3.2/3.3) é só um cabeçalho de grupo --
+  // segundo o usuário, "agregadora só tem tipo e código de grupo". Início/Término/% Atual já
+  // eram recalculados pela view (`crono_calculado`, ver views.pg.sql) a partir do MIN/MAX/AVG das
+  // atividades do grupo, então o valor bruto salvo aqui nunca é lido de volta. Tópico/Status/
+  // Responsável/Demandas são conceitos de atividade individual (tipo T), sem uso nem exibição
+  // agregada em nenhuma view -- não fazem sentido pedidos pro cabeçalho do grupo. Gravar `null`
+  // em vez do que o formulário mostrar (ou já mostrou antes desta leva) evita dado morto/
+  // enganoso na tabela.
   const ehAgregacao = values.crono_tipo === "A";
   return {
     port_id: portId,
     crono_atividade: values.crono_atividade.trim(),
     crono_tipo: values.crono_tipo,
     crono_grupo: values.crono_grupo ? Number(values.crono_grupo) : null,
-    crono_topico: values.crono_topico ? Number(values.crono_topico) : null,
+    crono_topico: ehAgregacao ? null : values.crono_topico ? Number(values.crono_topico) : null,
     crono_inicio: ehAgregacao ? null : values.crono_inicio || null,
     crono_fim: ehAgregacao ? null : values.crono_fim || null,
     crono_replan: ehAgregacao ? null : values.crono_replan || null,
     crono_perc_atual: ehAgregacao ? null : (values.crono_perc_atual ? Number(values.crono_perc_atual) / 100 : 0),
-    crono_status: values.crono_status || null,
-    resp_id: values.resp_id ? Number(values.resp_id) : null,
-    crono_demanda_1: values.crono_demanda_1.trim() || null,
-    crono_demanda_2: values.crono_demanda_2.trim() || null,
-    crono_demanda_3: values.crono_demanda_3.trim() || null,
+    crono_status: ehAgregacao ? null : values.crono_status || null,
+    resp_id: ehAgregacao ? null : values.resp_id ? Number(values.resp_id) : null,
+    crono_demanda_1: ehAgregacao ? null : values.crono_demanda_1.trim() || null,
+    crono_demanda_2: ehAgregacao ? null : values.crono_demanda_2.trim() || null,
+    crono_demanda_3: ehAgregacao ? null : values.crono_demanda_3.trim() || null,
   };
 }
 
@@ -130,29 +132,32 @@ export function CronoForm({ crono, respostaveis, saving, error, onCancel, onSubm
           />
         </div>
 
-        <div className="form-row">
-          <label htmlFor="crono_topico">Tópico *</label>
-          <input
-            id="crono_topico"
-            type="number"
-            required
-            min={0}
-            value={values.crono_topico}
-            onChange={(e) => set("crono_topico", e.target.value)}
-          />
-        </div>
-
         {ehAgregacao ? (
-          // Tipo A = agregação (ex.: grupo 3 resume as atividades 3.1, 3.2, 3.3...). Início,
-          // Término e % Atual são sempre recalculados pela view a partir do MIN/MAX/média das
-          // atividades do mesmo grupo -- pedir esses campos aqui só daria a falsa impressão de
-          // que o valor digitado importa. Ver `valuesToPayload`: pra tipo A eles vão como null.
+          // Tipo A = agregação (ex.: grupo 3 resume as atividades 3.1, 3.2, 3.3...), só um
+          // cabeçalho de grupo -- confirmado pelo usuário: "agregadora só tem tipo e código de
+          // grupo". Tópico, Início/Término/% Atual, Status, Responsável e Demandas são conceito
+          // de atividade individual (tipo T); pra tipo A, os 3 primeiros já eram recalculados
+          // pela view (ver comentário em `valuesToPayload`) e os outros 4 não têm uso nem
+          // exibição agregada em nenhuma view. Todos vão como null no payload.
           <p className="form-hint">
             Início, Término e % Atual são calculados automaticamente a partir das atividades do
             grupo {values.crono_grupo || "?"} (menor início, maior término, média de % atual).
+            Tópico, Status, Responsável e Demandas não se aplicam a uma agregação.
           </p>
         ) : (
           <>
+            <div className="form-row">
+              <label htmlFor="crono_topico">Tópico *</label>
+              <input
+                id="crono_topico"
+                type="number"
+                required
+                min={0}
+                value={values.crono_topico}
+                onChange={(e) => set("crono_topico", e.target.value)}
+              />
+            </div>
+
             <div className="form-row">
               <label htmlFor="crono_inicio">Início *</label>
               <input
@@ -192,67 +197,67 @@ export function CronoForm({ crono, respostaveis, saving, error, onCancel, onSubm
                 onChange={(e) => set("crono_perc_atual", e.target.value)}
               />
             </div>
+
+            <div className="form-row">
+              <label htmlFor="crono_status">Status *</label>
+              <select
+                id="crono_status"
+                required
+                value={values.crono_status}
+                onChange={(e) => set("crono_status", e.target.value)}
+              >
+                <option value="">(nenhum)</option>
+                {STATUS_OPTIONS.map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="form-row">
+              <label htmlFor="resp_id">Responsável</label>
+              <select id="resp_id" value={values.resp_id} onChange={(e) => set("resp_id", e.target.value)}>
+                <option value="">(nenhum)</option>
+                {respostaveis.map((r) => (
+                  <option key={r.resp_id} value={r.resp_id}>
+                    {r.resp_nome}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="form-row">
+              <label htmlFor="crono_demanda_1">Demanda 1</label>
+              <input
+                id="crono_demanda_1"
+                placeholder="http://"
+                value={values.crono_demanda_1}
+                onChange={(e) => set("crono_demanda_1", e.target.value)}
+              />
+            </div>
+
+            <div className="form-row">
+              <label htmlFor="crono_demanda_2">Demanda 2</label>
+              <input
+                id="crono_demanda_2"
+                placeholder="http://"
+                value={values.crono_demanda_2}
+                onChange={(e) => set("crono_demanda_2", e.target.value)}
+              />
+            </div>
+
+            <div className="form-row">
+              <label htmlFor="crono_demanda_3">Demanda 3</label>
+              <input
+                id="crono_demanda_3"
+                placeholder="http://"
+                value={values.crono_demanda_3}
+                onChange={(e) => set("crono_demanda_3", e.target.value)}
+              />
+            </div>
           </>
         )}
-
-        <div className="form-row">
-          <label htmlFor="crono_status">Status *</label>
-          <select
-            id="crono_status"
-            required
-            value={values.crono_status}
-            onChange={(e) => set("crono_status", e.target.value)}
-          >
-            <option value="">(nenhum)</option>
-            {STATUS_OPTIONS.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div className="form-row">
-          <label htmlFor="resp_id">Responsável</label>
-          <select id="resp_id" value={values.resp_id} onChange={(e) => set("resp_id", e.target.value)}>
-            <option value="">(nenhum)</option>
-            {respostaveis.map((r) => (
-              <option key={r.resp_id} value={r.resp_id}>
-                {r.resp_nome}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div className="form-row">
-          <label htmlFor="crono_demanda_1">Demanda 1</label>
-          <input
-            id="crono_demanda_1"
-            placeholder="http://"
-            value={values.crono_demanda_1}
-            onChange={(e) => set("crono_demanda_1", e.target.value)}
-          />
-        </div>
-
-        <div className="form-row">
-          <label htmlFor="crono_demanda_2">Demanda 2</label>
-          <input
-            id="crono_demanda_2"
-            placeholder="http://"
-            value={values.crono_demanda_2}
-            onChange={(e) => set("crono_demanda_2", e.target.value)}
-          />
-        </div>
-
-        <div className="form-row">
-          <label htmlFor="crono_demanda_3">Demanda 3</label>
-          <input
-            id="crono_demanda_3"
-            placeholder="http://"
-            value={values.crono_demanda_3}
-            onChange={(e) => set("crono_demanda_3", e.target.value)}
-          />
-        </div>
 
         {error && <p className="form-error">{error}</p>}
 
