@@ -1,17 +1,26 @@
 # WEBCRM - Status do Projeto
 
-> Documento de retomada. Última atualização: **2026-08-26** - 3 mudanças pedidas numa mensagem só
-> (ver "Leva Cronograma, Modais Fixos e Dúvida de Segurança" no fim do arquivo): atividade tipo A
-> do Cronograma parou de exigir Início/Término/% Atual (já eram ignorados pela view, o formulário
-> que estava errado); todo modal do app principal parou de fechar ao clicar fora (generalizando o
-> que o Admin já tinha); e uma dúvida do usuário sobre senha visível no DevTools, respondida (é
-> normal, não é vulnerabilidade). Já commitado e enviado ao `main` (`2d16899`).
+> Documento de retomada. Última atualização: **2026-08-27** - o resize manual de coluna (existe
+> desde 2026-08-07) estava sendo anulado pelo mecanismo de "nunca rolar" adicionado em 2026-08-25:
+> arrastar a borda de uma coluna competia com o auto-encolhimento a cada pixel, cancelando o
+> gesto do usuário quase por inteiro. Corrigido: a partir do primeiro resize manual, o `DataGrid`
+> para de forçar o encaixe automático (encolher/esticar) e passa a usar os tamanhos naturais --
+> pode passar da largura disponível, e aí a rolagem lateral volta a aparecer de propósito. O
+> comportamento de abertura de tela (nunca rolar no estado original) continua igual. Ver "Leva
+> Resize de Coluna vs. Auto-fit" no fim do arquivo.
+>
+> Contexto anterior: 2026-08-26, 3 mudanças pedidas numa mensagem só (ver "Leva Cronograma,
+> Modais Fixos e Dúvida de Segurança" no fim do arquivo): atividade tipo A do Cronograma parou de
+> exigir Início/Término/% Atual (já eram ignorados pela view, o formulário que estava errado);
+> todo modal do app principal parou de fechar ao clicar fora (generalizando o que o Admin já
+> tinha); e uma dúvida do usuário sobre senha visível no DevTools, respondida (é normal, não é
+> vulnerabilidade). Já commitado e enviado ao `main` (`2d16899`).
 >
 > **Pergunta sobre `port_fim` respondida (2026-08-26): manter `crono_replan` no cálculo.**
 > Confirmado pelo usuário - a view `portfolios_progresso.port_fim` fica exatamente como está
 > (`MAX` entre `crono_fim` e `crono_replan`, o que for mais tarde). Nenhuma mudança de código.
 >
-> Contexto anterior: **piloto de responsividade mobile** (só a tela de Clientes, ver "Leva
+> Contexto anterior a esse: **piloto de responsividade mobile** (só a tela de Clientes, ver "Leva
 > Responsividade Mobile - Piloto" no fim do arquivo, commit `478ff7b`).
 >
 > Contexto anterior a esse: auditoria de segurança #2
@@ -2153,3 +2162,65 @@ export pra nivel de linha, nao de grupo -- avisar antes de assumir.
 
 Verificado: `tsc -b`/`vite build` limpos, cruzamento pc_id simulado em Node com 3 casos (2 linhas
 com correspondencia, 1 orfa) antes de fechar.
+
+## Leva Resize de Coluna vs. Auto-fit (2026-08-27)
+
+Pedido do usuario: o pedido original (nenhuma grid rolar lateralmente no estado inicial, leva
+"Rolagem Lateral no Financeiro" de 2026-08-25) tinha ficado correto, mas o redimensionamento
+manual de coluna (existe desde 2026-08-07, `columnResizeMode: "onChange"` do TanStack) parou de
+funcionar de verdade depois disso. Regra pedida agora: no estado original da tela a grid nunca
+rola lateralmente (mantido); as colunas continuam redimensionaveis; **se** o usuario redimensionar
+manualmente, a partir dai a grid pode ficar mais larga que a tela e rolar lateralmente.
+
+### Causa raiz
+
+O mecanismo de encolher/esticar de 2026-08-25 (`DataGrid.tsx`) recalcula `scale` a cada render como
+`scalableTarget / scalableNatural`, onde `scalableTarget` e travado em `availWidth` (a largura do
+container) e `scalableNatural` e a soma das larguras "naturais" das colunas -- que passa a incluir
+qualquer override gravado em `columnSizing` pelo proprio resize. Ou seja: o usuario arrasta uma
+borda, `columnSizing` muda, `scalableNatural` cresce, e o `scale` cai na mesma proporcao pra manter
+a soma dentro de `availWidth` -- o auto-fit cancelava o proprio gesto do usuario quase por
+completo a cada pixel arrastado. Sintoma relatado ("redimensionamento se perdeu") batia
+exatamente com esse comportamento: a borda ate se movia um pouco, mas a coluna "voltava" quase na
+hora.
+
+### Correcao
+
+`DataGrid.tsx`: `hasManualResize = Object.keys(columnSizing).length > 0` -- `columnSizing` (estado
+do TanStack) so deixa de ser `{}` depois que uma coluna e de fato redimensionada (mousedown sozinho,
+sem arrastar, nao muda o estado). Enquanto `hasManualResize` for `false`, nada muda: mesmo
+`scale`/encolhe-e-estica de 2026-08-25, grid nunca rola no estado original. A partir do primeiro
+resize, `scale` fica fixo em `1` e `tableWidth` passa a ser a soma natural (`naturalTotal`, ja
+com o override do resize incluso) em vez de forcada a caber em `availWidth` -- exatamente o TanStack
+"puro", sem competicao. Dai em diante a rolagem lateral pode aparecer, de proposito.
+
+**Efeito colateral aceito, nao escondido**: no instante do primeiro resize, TODAS as colunas (nao
+so a que esta sendo arrastada) pulam do tamanho encolhido/esticado pro tamanho natural declarado
+de uma vez -- e um salto visual unico, mas e o que garante nao competir mais com o usuario dali pra
+frente, e o proprio ato de segurar a borda e um gesto continuo (mousedown -> arrastar), entao o
+salto acontece junto do inicio do arraste, nao como uma surpresa separada. Nao construi um
+"congelamento" dos tamanhos exibidos no momento do grab (capturar o pixel exato de cada coluna
+antes de trocar de modo) por ser bem mais complexo pro TanStack (o resize handler calcula o delta
+a partir do `getSize()` cru, nao do valor escalado exibido) e o resultado pratico (rolagem
+liberada, coluna arrastada com o tamanho certo) e o mesmo.
+
+**Nao ha volta pro modo auto-fit** depois do primeiro resize (dentro da mesma sessao da tela) --
+`columnSizing` so zera se o componente `DataGrid` remontar (trocar de aba, reabrir a tela). Nao foi
+pedido um botao de "resetar largura", entao nao implementei.
+
+### Verificacao
+
+Sem `DATABASE_URL` local (limitacao ja conhecida), verificacao foi em duas camadas:
+- `tsc -b` e `npm run build` (`vite build`) limpos no frontend.
+- Formula (`scale`/`tableWidth`/`displaySize`) replicada em Node com 4 cenarios: (1) tela estreita
+  sem resize -- encolhe, cabe no `availWidth`, igual a antes; (2) mesma tela, resize manual
+  arrastando uma coluna de 220 pra 400 -- a coluna arrastada fica exatamente em 400 (nao e
+  encolhida de volta), as outras voltam ao tamanho natural declarado, `tableWidth` passa a exceder
+  `availWidth` (rolagem esperada); (3) tela larga sem resize -- continua esticando pra preencher,
+  sem regressao; (4) tela larga com resize manual -- para de esticar, usa tamanhos naturais. Os 4
+  bateram o esperado.
+
+Nao verificado no navegador com grid renderizada de verdade (sem sessao autenticada local) -- vale
+conferir numa tela real (ex. Financeiro ou Clientes): abrir a tela, confirmar sem rolagem lateral;
+arrastar a borda de uma coluna pra mais larga; confirmar que a coluna cresce de verdade e que a
+rolagem lateral aparece quando a soma passa da tela.

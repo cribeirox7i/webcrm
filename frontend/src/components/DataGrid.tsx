@@ -300,13 +300,25 @@ export function DataGrid<T>({
   const scalableAvail = availWidth > 0 ? Math.floor(availWidth) - fixedTotal - GUARD_PX : scalableNatural;
   const scalableTarget = Math.max(scalableMin, scalableAvail);
 
+  // Depois que o usuário arrasta a borda de QUALQUER coluna (`columnSizing` deixa de ser `{}`),
+  // o ajuste automático de largura abaixo (encolher/esticar pra nunca rolar) para de agir --
+  // senão o próprio resize se anula sozinho: aumentar uma coluna faz `scalableNatural` crescer,
+  // o que reduz `scale` na mesma proporção pra manter a soma dentro de `availWidth`, cancelando
+  // o gesto do usuário quase por completo (bug real reportado: arrastar a borda "não fazia
+  // nada" -- na verdade fazia, só que o auto-fit competia com o resize a cada pixel arrastado).
+  // A partir do primeiro resize, a grid passa a usar os tamanhos naturais (declarados + o que
+  // foi arrastado) sem nenhum encolhimento/esticamento -- pode passar da largura disponível, e
+  // aí a rolagem lateral volta a aparecer de propósito, exatamente o comportamento pedido: nunca
+  // rolar no estado original da tela, mas poder rolar depois de redimensionar manualmente.
+  const hasManualResize = Object.keys(columnSizing).length > 0;
+
   // Antes só esticava (scale > 1 quando sobrava espaço); agora também encolhe (scale < 1 quando
   // falta), o que é o que garante "nunca rolar" sem depender de cada tela declarar largura que
   // caiba na menor tela em uso. Encolher é proporcional, então coluna larga cede mais espaço
-  // absoluto que coluna estreita.
-  const scale = scalableNatural > 0 ? scalableTarget / scalableNatural : 1;
-  const tableWidth = fixedTotal + scalableTarget;
-  const displaySize = (id: string, size: number) => (isFixedCol(id) ? size : size * scale);
+  // absoluto que coluna estreita. Só vale enquanto não houver resize manual (ver acima).
+  const scale = hasManualResize ? 1 : scalableNatural > 0 ? scalableTarget / scalableNatural : 1;
+  const tableWidth = hasManualResize ? naturalTotal : fixedTotal + scalableTarget;
+  const displaySize = (id: string, size: number) => (isFixedCol(id) || hasManualResize ? size : size * scale);
 
   function exportRows() {
     // extraExportColumns vai depois das colunas visíveis, na ordem em que foi passado -- nunca
