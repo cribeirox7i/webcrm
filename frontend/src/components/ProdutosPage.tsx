@@ -68,7 +68,7 @@ export function ProdutosPage() {
     () => [
       { id: "produto_id", header: "ID", value: (p) => p.produto_id, width: 70, minWidth: 60 },
       { id: "produto_nome", header: "Nome", value: (p) => p.produto_nome, width: 240 },
-      { id: "produto_area", header: "Área", value: (p) => p.produto_area, width: 140 },
+      { id: "produto_detalhe", header: "Detalhe", value: (p) => p.produto_detalhe, width: 180 },
       { id: "produto_suite", header: "Suíte", value: (p) => p.produto_suite, width: 140 },
       { id: "produto_sku", header: "SKU", value: (p) => p.produto_sku, width: 120 },
       {
@@ -85,7 +85,6 @@ export function ProdutosPage() {
 
   const filters: DataGridFilter<Produto>[] = useMemo(
     () => [
-      { id: "produto_area", label: "Área", value: (p) => p.produto_area ?? "" },
       { id: "produto_suite", label: "Suíte", value: (p) => p.produto_suite ?? "" },
       { id: "produto_recorrencia", label: "Recorrência", value: (p) => p.produto_recorrencia ?? "" },
     ],
@@ -106,8 +105,8 @@ export function ProdutosPage() {
         data={produtos}
         columns={columns}
         getRowId={(p) => p.produto_id}
-        searchValue={(p) => `${p.produto_nome} ${p.produto_area ?? ""} ${p.produto_suite ?? ""} ${p.produto_sku ?? ""}`}
-        searchPlaceholder="Buscar por nome, área, suíte, SKU..."
+        searchValue={(p) => `${p.produto_nome} ${p.produto_detalhe ?? ""} ${p.produto_suite ?? ""} ${p.produto_sku ?? ""}`}
+        searchPlaceholder="Buscar por nome, detalhe, suíte, SKU..."
         filters={filters}
         loading={loading}
         exportFilename="produtos"

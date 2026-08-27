@@ -1,6 +1,11 @@
 # WEBCRM - Status do Projeto
 
-> Documento de retomada. Última atualização: **2026-08-27** - cards de contagem (`StatCards`) no
+> Documento de retomada. Última atualização: **2026-08-27** - grid de Produtos trocou a coluna/
+> filtro Área pela coluna Detalhe (`produto_detalhe`, ex. "BV PJ", "BV PJ PLUS") -- só a listagem,
+> o campo Área continua no formulário de cadastro. Ver "Leva Ajuste na grid de Produtos" no fim do
+> arquivo.
+>
+> Contexto anterior: 2026-08-27, cards de contagem (`StatCards`) no
 > topo das telas de listagem ganharam interatividade: clicar num card filtra a grid abaixo por
 > aquele valor (ex.: "Ativos" mostra só clientes ativos), clicar de novo desliga o filtro, e
 > "Total" limpa. Aplicado em 8 telas que já tinham um filtro de dropdown correspondente ao campo
@@ -2324,3 +2329,16 @@ Sem `DATABASE_URL` local (limitação já conhecida), verificação em camadas:
 vale conferir numa tela real (ex. Clientes): clicar em "Ativos"/"Inativos" e confirmar que a grid
 filtra e o card fica realçado, clicar de novo pra desligar, e conferir que o dropdown "Status" (que
 já existia) mostra o mesmo valor que o card ativou.
+
+## Leva Ajuste na grid de Produtos (2026-08-27)
+
+Pedido do usuário, `ProdutosPage.tsx`: trocar a coluna/filtro **Área** (`produto_area`) pela
+coluna **Detalhe** (`produto_detalhe` -- valores tipo "BV PJ", "BV PJ PLUS", já existia no
+formulário de cadastro, só nunca tinha sido exposto na grid). Aplicado nos 3 lugares que citavam
+`produto_area`: coluna da grid, dropdown de filtro e busca por texto (`searchValue`/placeholder).
+
+**Não alterado**: `ProdutoForm.tsx` continua com o campo Área no cadastro -- o pedido foi só pra
+listagem ("a tela"), não pra remover o dado ou impedir de editá-lo.
+
+Verificado: `tsc -b`, `vite build` e `oxlint` limpos. Login carregado no Browser pane sem erro de
+console (mesma limitação de sempre pra testar a grid com dado real, sem `DATABASE_URL` local).
