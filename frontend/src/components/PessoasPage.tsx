@@ -6,6 +6,7 @@ import { StatCards } from "./StatCards";
 import { DataGrid, type DataGridColumn, type DataGridFilter } from "./DataGrid";
 import { EditIcon, TrashIcon } from "./icons";
 import { usePermissao } from "../auth/usePermissao";
+import { clearFilterKeys, toggleFilterValue } from "../lib/filterValues";
 
 export function PessoasPage() {
   const { podeInserir, podeEditar, podeExcluir } = usePermissao("pessoas");
@@ -16,6 +17,10 @@ export function PessoasPage() {
   const [editing, setEditing] = useState<Pessoa | null | "new">(null);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+
+  // Filtro do DataGrid levantado pra cá (controlado) pra os cards de StatCards poderem
+  // alternar o mesmo filtro que o dropdown "Status" já mostra.
+  const [filterValues, setFilterValues] = useState<Record<string, string>>({});
 
   async function loadAll() {
     setLoading(true);
@@ -106,9 +111,27 @@ export function PessoasPage() {
     <div className="page">
       <StatCards
         stats={[
-          { label: "Total de pessoas", value: pessoas.length, tone: "accent" },
-          { label: "Ativas", value: pessoas.filter((p) => p.pessoa_status === "ATIVO").length, tone: "green" },
-          { label: "Inativas", value: pessoas.filter((p) => p.pessoa_status === "INATIVO").length, tone: "red" },
+          {
+            label: "Total de pessoas",
+            value: pessoas.length,
+            tone: "accent",
+            onClick: () => setFilterValues((prev) => clearFilterKeys(prev, ["pessoa_status"])),
+            active: !filterValues.pessoa_status,
+          },
+          {
+            label: "Ativas",
+            value: pessoas.filter((p) => p.pessoa_status === "ATIVO").length,
+            tone: "green",
+            onClick: () => setFilterValues((prev) => toggleFilterValue(prev, "pessoa_status", "ATIVO")),
+            active: filterValues.pessoa_status === "ATIVO",
+          },
+          {
+            label: "Inativas",
+            value: pessoas.filter((p) => p.pessoa_status === "INATIVO").length,
+            tone: "red",
+            onClick: () => setFilterValues((prev) => toggleFilterValue(prev, "pessoa_status", "INATIVO")),
+            active: filterValues.pessoa_status === "INATIVO",
+          },
         ]}
       />
 
@@ -127,6 +150,8 @@ export function PessoasPage() {
         filters={filters}
         loading={loading}
         exportFilename="pessoas"
+        filterValues={filterValues}
+        onFilterValuesChange={setFilterValues}
         actionsWidth={100}
         renderActions={
           podeEditar || podeExcluir

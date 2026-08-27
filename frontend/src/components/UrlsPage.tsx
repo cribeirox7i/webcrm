@@ -6,6 +6,7 @@ import { StatCards } from "./StatCards";
 import { DataGrid, type DataGridColumn, type DataGridFilter } from "./DataGrid";
 import { EditIcon, TrashIcon } from "./icons";
 import { usePermissao } from "../auth/usePermissao";
+import { clearFilterKeys, toggleFilterValue } from "../lib/filterValues";
 
 function formatDate(iso: string | null): string {
   if (!iso) return "";
@@ -34,6 +35,10 @@ export function UrlsPage() {
   const [editing, setEditing] = useState<Url | null | "new">(null);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+
+  // Filtro do DataGrid levantado pra cá (controlado) pra os cards de StatCards poderem
+  // alternar o mesmo filtro que o dropdown "Status" já mostra.
+  const [filterValues, setFilterValues] = useState<Record<string, string>>({});
 
   async function loadAll() {
     setLoading(true);
@@ -180,9 +185,27 @@ export function UrlsPage() {
     <div className="page">
       <StatCards
         stats={[
-          { label: "Total de URLs", value: urls.length, tone: "accent" },
-          { label: "Ativas", value: urls.filter((u) => u.url_status === "ATIVO").length, tone: "green" },
-          { label: "Bloqueadas", value: urls.filter((u) => u.url_status === "BLOQUEADO").length, tone: "red" },
+          {
+            label: "Total de URLs",
+            value: urls.length,
+            tone: "accent",
+            onClick: () => setFilterValues((prev) => clearFilterKeys(prev, ["url_status"])),
+            active: !filterValues.url_status,
+          },
+          {
+            label: "Ativas",
+            value: urls.filter((u) => u.url_status === "ATIVO").length,
+            tone: "green",
+            onClick: () => setFilterValues((prev) => toggleFilterValue(prev, "url_status", "ATIVO")),
+            active: filterValues.url_status === "ATIVO",
+          },
+          {
+            label: "Bloqueadas",
+            value: urls.filter((u) => u.url_status === "BLOQUEADO").length,
+            tone: "red",
+            onClick: () => setFilterValues((prev) => toggleFilterValue(prev, "url_status", "BLOQUEADO")),
+            active: filterValues.url_status === "BLOQUEADO",
+          },
         ]}
       />
 
@@ -203,6 +226,8 @@ export function UrlsPage() {
         filters={filters}
         loading={loading}
         exportFilename="urls"
+        filterValues={filterValues}
+        onFilterValuesChange={setFilterValues}
         actionsWidth={100}
         renderActions={
           podeEditar || podeExcluir

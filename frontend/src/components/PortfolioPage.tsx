@@ -9,6 +9,7 @@ import { paceDoPortfolio } from "../lib/pace";
 import { gerarPdfCronograma } from "../lib/cronogramaPdf";
 import { EditIcon, ExternalLinkIcon, PdfIcon } from "./icons";
 import { usePermissao } from "../auth/usePermissao";
+import { clearFilterKeys, toggleFilterValue } from "../lib/filterValues";
 
 function formatDate(iso: string | null): string {
   if (!iso) return "";
@@ -40,6 +41,10 @@ export function PortfolioPage() {
   const [gerandoPdfId, setGerandoPdfId] = useState<number | null>(null);
 
   const [openPortId, setOpenPortId] = useState<number | null>(null);
+
+  // Filtro do DataGrid levantado pra cá (controlado) pra os cards de StatCards poderem
+  // alternar o mesmo filtro que o dropdown "Status" já mostra.
+  const [filterValues, setFilterValues] = useState<Record<string, string>>({ port_status: "ANDAMENTO" });
 
   async function loadAll() {
     setLoading(true);
@@ -179,10 +184,34 @@ export function PortfolioPage() {
     <div className="page">
       <StatCards
         stats={[
-          { label: "Total de projetos", value: portfolios.length, tone: "accent" },
-          { label: "Em andamento", value: portfolios.filter((p) => p.port_status === "ANDAMENTO").length, tone: "green" },
-          { label: "Concluídos", value: portfolios.filter((p) => p.port_status === "CONCLUÍDO").length, tone: "gray" },
-          { label: "Cancelados", value: portfolios.filter((p) => p.port_status === "CANCELADO").length, tone: "red" },
+          {
+            label: "Total de projetos",
+            value: portfolios.length,
+            tone: "accent",
+            onClick: () => setFilterValues((prev) => clearFilterKeys(prev, ["port_status"])),
+            active: !filterValues.port_status,
+          },
+          {
+            label: "Em andamento",
+            value: portfolios.filter((p) => p.port_status === "ANDAMENTO").length,
+            tone: "green",
+            onClick: () => setFilterValues((prev) => toggleFilterValue(prev, "port_status", "ANDAMENTO")),
+            active: filterValues.port_status === "ANDAMENTO",
+          },
+          {
+            label: "Concluídos",
+            value: portfolios.filter((p) => p.port_status === "CONCLUÍDO").length,
+            tone: "gray",
+            onClick: () => setFilterValues((prev) => toggleFilterValue(prev, "port_status", "CONCLUÍDO")),
+            active: filterValues.port_status === "CONCLUÍDO",
+          },
+          {
+            label: "Cancelados",
+            value: portfolios.filter((p) => p.port_status === "CANCELADO").length,
+            tone: "red",
+            onClick: () => setFilterValues((prev) => toggleFilterValue(prev, "port_status", "CANCELADO")),
+            active: filterValues.port_status === "CANCELADO",
+          },
         ]}
       />
 
@@ -199,7 +228,8 @@ export function PortfolioPage() {
         searchValue={(p) => `${p.port_nome ?? ""} ${clienteNome(p)} ${p.port_pm ?? ""}`}
         searchPlaceholder="Buscar por projeto, cliente ou PM..."
         filters={filters}
-        defaultFilterValues={{ port_status: "ANDAMENTO" }}
+        filterValues={filterValues}
+        onFilterValuesChange={setFilterValues}
         loading={loading}
         exportFilename="portfolio_completo"
         actionsWidth={140}

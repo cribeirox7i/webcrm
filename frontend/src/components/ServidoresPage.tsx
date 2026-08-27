@@ -6,6 +6,7 @@ import { StatCards } from "./StatCards";
 import { DataGrid, type DataGridColumn, type DataGridFilter } from "./DataGrid";
 import { EditIcon, TrashIcon } from "./icons";
 import { usePermissao } from "../auth/usePermissao";
+import { clearFilterKeys, toggleFilterValue } from "../lib/filterValues";
 
 function slugify(value: string): string {
   return value
@@ -24,6 +25,11 @@ export function ServidoresPage() {
   const [editing, setEditing] = useState<Servidor | null | "new">(null);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+
+  // Filtro do DataGrid levantado pra cá (controlado) pra os cards de StatCards poderem
+  // alternar o mesmo filtro que os dropdowns "Status"/"Ambiente" já mostram. "Família" (3º
+  // dropdown, sem card correspondente) não é tocado pelo clique nos cards.
+  const [filterValues, setFilterValues] = useState<Record<string, string>>({});
 
   async function loadAll() {
     setLoading(true);
@@ -103,9 +109,27 @@ export function ServidoresPage() {
     <div className="page">
       <StatCards
         stats={[
-          { label: "Total de servidores", value: servidores.length, tone: "accent" },
-          { label: "Ativos", value: servidores.filter((s) => s.server_status === "ATIVO").length, tone: "green" },
-          { label: "Produção", value: servidores.filter((s) => s.server_ambiente === "PROD").length, tone: "gray" },
+          {
+            label: "Total de servidores",
+            value: servidores.length,
+            tone: "accent",
+            onClick: () => setFilterValues((prev) => clearFilterKeys(prev, ["server_status", "server_ambiente"])),
+            active: !filterValues.server_status && !filterValues.server_ambiente,
+          },
+          {
+            label: "Ativos",
+            value: servidores.filter((s) => s.server_status === "ATIVO").length,
+            tone: "green",
+            onClick: () => setFilterValues((prev) => toggleFilterValue(prev, "server_status", "ATIVO")),
+            active: filterValues.server_status === "ATIVO",
+          },
+          {
+            label: "Produção",
+            value: servidores.filter((s) => s.server_ambiente === "PROD").length,
+            tone: "gray",
+            onClick: () => setFilterValues((prev) => toggleFilterValue(prev, "server_ambiente", "PROD")),
+            active: filterValues.server_ambiente === "PROD",
+          },
         ]}
       />
 
@@ -124,6 +148,8 @@ export function ServidoresPage() {
         filters={filters}
         loading={loading}
         exportFilename="servidores"
+        filterValues={filterValues}
+        onFilterValuesChange={setFilterValues}
         actionsWidth={100}
         renderActions={
           podeEditar || podeExcluir

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type SetStateAction } from "react";
 import {
   createColumnHelper,
   flexRender,
@@ -61,8 +61,14 @@ interface DataGridProps<T> {
   onRowClick?: (row: T) => void;
   /** Sobrescreve o ícone padrão "Exportar PDF" da toolbar com uma exportação customizada (ex.: relatório com capa). */
   onExportPdf?: () => void;
-  /** Valores iniciais dos dropdowns de filtro (ex.: abrir Portfólio já filtrado em "ANDAMENTO"). */
+  /** Valores iniciais dos dropdowns de filtro (ex.: abrir Portfólio já filtrado em "ANDAMENTO").
+   * Ignorado se `filterValues` (controlado) for passado. */
   defaultFilterValues?: Record<string, string>;
+  /** Torna os filtros de dropdown controlados de fora (ex.: StatCards clicável mudando o mesmo
+   * filtro que o dropdown já mostra) -- omitir os dois mantém o DataGrid gerenciando o próprio
+   * estado internamente, como sempre foi. Os dois precisam vir juntos. */
+  filterValues?: Record<string, string>;
+  onFilterValuesChange?: (next: Record<string, string>) => void;
   /** Ativa a coluna de checkbox (seleção múltipla) -- omitir pra grid sem seleção (padrão). */
   selection?: DataGridSelection;
   /** Colunas que só entram no XLS/PDF/CSV/compartilhar -- nunca aparecem na tela. Útil pra dado
@@ -97,11 +103,26 @@ export function DataGrid<T>({
   onRowClick,
   onExportPdf,
   defaultFilterValues,
+  filterValues: controlledFilterValues,
+  onFilterValuesChange,
   selection,
   extraExportColumns = NO_EXTRA_EXPORT as unknown as Pick<DataGridColumn<T>, "header" | "value">[],
 }: DataGridProps<T>) {
   const [search, setSearch] = useState("");
-  const [filterValues, setFilterValues] = useState<Record<string, string>>(defaultFilterValues ?? {});
+  const [internalFilterValues, setInternalFilterValues] = useState<Record<string, string>>(
+    defaultFilterValues ?? {}
+  );
+  // Controlado (StatCards clicável, por ex.) quando a tela passa `filterValues`/
+  // `onFilterValuesChange` -- senão o DataGrid segue gerenciando o próprio estado, como sempre.
+  const filterValues = controlledFilterValues ?? internalFilterValues;
+  const setFilterValues = (updater: SetStateAction<Record<string, string>>) => {
+    const next =
+      typeof updater === "function"
+        ? (updater as (prev: Record<string, string>) => Record<string, string>)(filterValues)
+        : updater;
+    if (onFilterValuesChange) onFilterValuesChange(next);
+    else setInternalFilterValues(next);
+  };
   const [sorting, setSorting] = useState<SortingState>([]);
   const [columnSizing, setColumnSizing] = useState<ColumnSizingState>({});
   // Só decide o RENDER final (cartão vs. tabela, no fim do componente) -- toda a lógica acima

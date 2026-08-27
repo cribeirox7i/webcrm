@@ -6,6 +6,7 @@ import { StatCards } from "./StatCards";
 import { DataGrid, type DataGridColumn, type DataGridFilter } from "./DataGrid";
 import { EditIcon, TrashIcon } from "./icons";
 import { usePermissao } from "../auth/usePermissao";
+import { clearFilterKeys, toggleFilterValue } from "../lib/filterValues";
 
 export function ContatosPage() {
   const { podeInserir, podeEditar, podeExcluir } = usePermissao("contatos");
@@ -17,6 +18,10 @@ export function ContatosPage() {
   const [editing, setEditing] = useState<Contato | null | "new">(null);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+
+  // Filtro do DataGrid levantado pra cá (controlado) pra os cards de StatCards poderem
+  // alternar o mesmo filtro que o dropdown "Status" já mostra.
+  const [filterValues, setFilterValues] = useState<Record<string, string>>({});
 
   async function loadAll() {
     setLoading(true);
@@ -109,9 +114,27 @@ export function ContatosPage() {
     <div className="page">
       <StatCards
         stats={[
-          { label: "Total de contatos", value: contatos.length, tone: "accent" },
-          { label: "Ativos", value: contatos.filter((c) => c.contato_status === "ATIVO").length, tone: "green" },
-          { label: "Inativos", value: contatos.filter((c) => c.contato_status === "INATIVO").length, tone: "red" },
+          {
+            label: "Total de contatos",
+            value: contatos.length,
+            tone: "accent",
+            onClick: () => setFilterValues((prev) => clearFilterKeys(prev, ["contato_status"])),
+            active: !filterValues.contato_status,
+          },
+          {
+            label: "Ativos",
+            value: contatos.filter((c) => c.contato_status === "ATIVO").length,
+            tone: "green",
+            onClick: () => setFilterValues((prev) => toggleFilterValue(prev, "contato_status", "ATIVO")),
+            active: filterValues.contato_status === "ATIVO",
+          },
+          {
+            label: "Inativos",
+            value: contatos.filter((c) => c.contato_status === "INATIVO").length,
+            tone: "red",
+            onClick: () => setFilterValues((prev) => toggleFilterValue(prev, "contato_status", "INATIVO")),
+            active: filterValues.contato_status === "INATIVO",
+          },
         ]}
       />
 
@@ -130,6 +153,8 @@ export function ContatosPage() {
         filters={filters}
         loading={loading}
         exportFilename="contatos"
+        filterValues={filterValues}
+        onFilterValuesChange={setFilterValues}
         actionsWidth={100}
         renderActions={
           podeEditar || podeExcluir

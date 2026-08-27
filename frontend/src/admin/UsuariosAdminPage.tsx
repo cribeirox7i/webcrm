@@ -7,6 +7,7 @@ import { UsuarioForm, valuesToPayload, type UsuarioFormValues } from "./UsuarioF
 import { UsuarioPermissoesMenuPage } from "./UsuarioPermissoesMenuPage";
 import { PasswordInput } from "../components/PasswordInput";
 import { EditIcon, KeyIcon, MailIcon, ShieldIcon, TrashIcon } from "../components/icons";
+import { clearFilterKeys, toggleFilterValue } from "../lib/filterValues";
 
 const MIN_SENHA_LEN = 8;
 const SENHA_CHARSET = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
@@ -38,6 +39,10 @@ export function UsuariosAdminPage({ token, onLogout }: UsuariosAdminPageProps) {
   const [convitePendente, setConvitePendente] = useState<number | null>(null);
 
   const [definindoSenhaFor, setDefinindoSenhaFor] = useState<Usuario | null>(null);
+
+  // Filtro do DataGrid levantado pra cá (controlado) pra os cards de StatCards poderem
+  // alternar o mesmo filtro que o dropdown "Status" já mostra.
+  const [filterValues, setFilterValues] = useState<Record<string, string>>({});
   const [novaSenhaAdmin, setNovaSenhaAdmin] = useState("");
   const [confirmarSenhaAdmin, setConfirmarSenhaAdmin] = useState("");
   const [savingSenha, setSavingSenha] = useState(false);
@@ -189,8 +194,20 @@ export function UsuariosAdminPage({ token, onLogout }: UsuariosAdminPageProps) {
     <div className="page">
       <StatCards
         stats={[
-          { label: "Total de usuários", value: usuarios.length, tone: "accent" },
-          { label: "Ativos", value: usuarios.filter((u) => u.user_status === "ATIVO").length, tone: "green" },
+          {
+            label: "Total de usuários",
+            value: usuarios.length,
+            tone: "accent",
+            onClick: () => setFilterValues((prev) => clearFilterKeys(prev, ["user_status"])),
+            active: !filterValues.user_status,
+          },
+          {
+            label: "Ativos",
+            value: usuarios.filter((u) => u.user_status === "ATIVO").length,
+            tone: "green",
+            onClick: () => setFilterValues((prev) => toggleFilterValue(prev, "user_status", "ATIVO")),
+            active: filterValues.user_status === "ATIVO",
+          },
         ]}
       />
 
@@ -209,6 +226,8 @@ export function UsuariosAdminPage({ token, onLogout }: UsuariosAdminPageProps) {
         filters={filters}
         loading={loading}
         exportFilename="usuarios"
+        filterValues={filterValues}
+        onFilterValuesChange={setFilterValues}
         actionsWidth={200}
         renderActions={(u) => (
           <div className="row-actions">

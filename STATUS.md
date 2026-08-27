@@ -1,15 +1,24 @@
 # WEBCRM - Status do Projeto
 
-> Documento de retomada. Última atualização: **2026-08-27** - o resize manual de coluna (existe
-> desde 2026-08-07) estava sendo anulado pelo mecanismo de "nunca rolar" adicionado em 2026-08-25:
-> arrastar a borda de uma coluna competia com o auto-encolhimento a cada pixel, cancelando o
-> gesto do usuário quase por inteiro. Corrigido: a partir do primeiro resize manual, o `DataGrid`
-> para de forçar o encaixe automático (encolher/esticar) e passa a usar os tamanhos naturais --
-> pode passar da largura disponível, e aí a rolagem lateral volta a aparecer de propósito. O
-> comportamento de abertura de tela (nunca rolar no estado original) continua igual. Ver "Leva
-> Resize de Coluna vs. Auto-fit" no fim do arquivo.
+> Documento de retomada. Última atualização: **2026-08-27** - cards de contagem (`StatCards`) no
+> topo das telas de listagem ganharam interatividade: clicar num card filtra a grid abaixo por
+> aquele valor (ex.: "Ativos" mostra só clientes ativos), clicar de novo desliga o filtro, e
+> "Total" limpa. Aplicado em 8 telas que já tinham um filtro de dropdown correspondente ao campo
+> do card (Clientes, Contatos, Pessoas, Servidores, URLs, Portfólio Completo, Admin > Carteira,
+> Admin > Usuários) - o resto ficou de fora de propósito (cards de 1 só, ou cards que não são
+> contagem de linha, ex. somas em dinheiro). Ver "Leva Cards de StatCards Clicáveis" no fim do
+> arquivo pro critério completo e a lista do que não entrou.
 >
-> Contexto anterior: 2026-08-26, 3 mudanças pedidas numa mensagem só (ver "Leva Cronograma,
+> Contexto anterior: 2026-08-27, o resize manual de coluna (existe desde 2026-08-07) estava sendo
+> anulado pelo mecanismo de "nunca rolar" adicionado em 2026-08-25: arrastar a borda de uma coluna
+> competia com o auto-encolhimento a cada pixel, cancelando o gesto do usuário quase por inteiro.
+> Corrigido: a partir do primeiro resize manual, o `DataGrid` para de forçar o encaixe automático
+> (encolher/esticar) e passa a usar os tamanhos naturais -- pode passar da largura disponível, e
+> aí a rolagem lateral volta a aparecer de propósito. O comportamento de abertura de tela (nunca
+> rolar no estado original) continua igual. Ver "Leva Resize de Coluna vs. Auto-fit" no fim do
+> arquivo.
+>
+> Contexto anterior a esse: 2026-08-26, 3 mudanças pedidas numa mensagem só (ver "Leva Cronograma,
 > Modais Fixos e Dúvida de Segurança" no fim do arquivo): atividade tipo A do Cronograma parou de
 > exigir Início/Término/% Atual (já eram ignorados pela view, o formulário que estava errado);
 > todo modal do app principal parou de fechar ao clicar fora (generalizando o que o Admin já
@@ -2224,3 +2233,94 @@ Nao verificado no navegador com grid renderizada de verdade (sem sessao autentic
 conferir numa tela real (ex. Financeiro ou Clientes): abrir a tela, confirmar sem rolagem lateral;
 arrastar a borda de uma coluna pra mais larga; confirmar que a coluna cresce de verdade e que a
 rolagem lateral aparece quando a soma passa da tela.
+
+## Leva Cards de StatCards Clicáveis (2026-08-27)
+
+Pedido do usuário: cards de contagem no topo das telas (`StatCards`) virarem filtros clicáveis --
+exemplo dado, tela de Clientes: clicar em "Ativos" mostra só ativos, clicar em "Inativos" filtra
+inativos. Sem mudar os cards existentes (visual/valores), só adicionar interatividade. Telas com
+1 card só não ganham comportamento nenhum.
+
+### Critério usado pra decidir onde aplicar
+
+O pedido citou "cards de **contagem de registros**", o que já exclui cards de soma em dinheiro
+(não fazem sentido como filtro binário). Apliquei nas telas onde **todos** os seguintes valem:
+1. Mais de 1 card (regra explícita do usuário).
+2. Os cards são contagens (`.length`/`.filter().length`) de linhas da MESMA grid mostrada embaixo,
+   não soma de valor nem contagem de uma entidade diferente.
+3. Já existe um `DataGridFilter` (dropdown) pro mesmo campo que o card representa -- assim o
+   clique no card e o dropdown existente ficam sincronizados no mesmo estado, em vez de duas UIs
+   competindo pelo mesmo filtro (ver "Mecanismo" abaixo).
+
+**8 telas aplicadas** (todas as 3 condições bateram): `ClientesPage` (`cliente_status`),
+`ContatosPage` (`contato_status`), `PessoasPage` (`pessoa_status`), `ServidoresPage`
+(`server_status` E `server_ambiente` -- 2 campos independentes, cada card no seu), `UrlsPage`
+(`url_status`), `PortfolioPage` (`port_status`), `admin/CartMesAdminPage`
+(`cart_vigencia_ativa`), `admin/UsuariosAdminPage` (`user_status`).
+
+**Fora do escopo, com o motivo** (não decidido por conta própria sem registrar o porquê):
+- **1 card só** (regra explícita): `FinanceiroPage`, `FornecedoresPage`, `GruposEconPage`,
+  `PagadoriaPage`, `ProdutosPage`, `PropostasPage`, `TabelaPrecosPage`.
+- **Cards de soma em dinheiro, não contagem**: `CarteiraMesPage`, `ConsumoMesPage`,
+  `FaturamentoMesPage` (tem 1 card de contagem, mas os outros 3 são valor e não haveria "oposto"
+  pra filtrar).
+- **Card de contagem sem um oposto que faça sentido filtrar**: `ConsumoAnaDetalhePage`
+  ("Registros" é sempre o total, "Quantidade total" é soma; nenhum dos dois recorta um subconjunto
+  de linha), `CronogramaDetalhadoPage` (cards são texto/percentual do projeto, não contagem).
+- **Dashboards com mais de uma grid na mesma tela** (`ClienteDashboardPage`,
+  `FornecedorDashboardPage`): cards contam entidades DIFERENTES (Contatos vs. URLs vs. Produtos, ou
+  Contratos vs. Pagamentos) espalhadas em sub-grids separadas -- dava pra fazer (cada card filtraria
+  só a sub-grid correspondente), mas é um mecanismo mais complexo que o pedido não cobriu
+  explicitamente com exemplo nenhum; fica pra pedir se fizer falta.
+
+### Mecanismo
+
+**`StatCards.tsx`**: `Stat` ganhou `onClick?`/`active?` opcionais. Sem eles (a maioria das telas,
+inalterada) o card continua 100% estático, exatamente como sempre foi. Com `onClick`, o card vira
+`role="button"` com `cursor: pointer`, `Enter`/`Espaço` funcionam via teclado
+(`aria-pressed`/`tabIndex`), e `active` acrescenta a classe `.stat-card-active` (borda + fundo
+`--accent-soft`, tokens que já existiam) -- só indica qual filtro está ligado, não muda o card em
+si (rótulo, valor, cor do `stat-dot` continuam iguais).
+
+**`DataGrid.tsx`**: o estado dos filtros de dropdown (`filterValues`) virou opcionalmente
+controlado -- `filterValues`/`onFilterValuesChange` novos, e o `useState` interno que existia vira
+só o fallback quando esses props não vêm (as outras ~14 telas com `filters` não mudam nada).
+Escolhi controlar em vez de a página filtrar o array `data` por fora, ANTES de entregar pro
+`DataGrid`, porque duas das telas-alvo (`ClientesPage`, `PortfolioPage`) já tinham
+`defaultFilterValues` no MESMO campo que o card ia mexer -- filtrar `data` por fora e deixar o
+dropdown do `DataGrid` com o próprio filtro interno defasado geraria filtro duplicado brigando
+consigo mesmo (ex.: clicar "Inativos" filtraria `data` só pra inativos, mas o dropdown interno
+continuaria aplicando `cliente_status = ATIVO` por cima, zerando a grid). Com estado controlado,
+card e dropdown são a mesma fonte de verdade -- mexer em qualquer um dos dois reflete no outro.
+
+**`lib/filterValues.ts`** (novo, compartilhado pelas 8 telas): `toggleFilterValue(prev, key,
+value)` -- clicar no card já ativo desliga o filtro (volta pra "Total"), clicar em outro troca sem
+acumular; `clearFilterKeys(prev, keys)` -- usado pelo card "Total"/"Todos", remove só as chaves que
+os cards da mesma tela controlam, sem mexer em outro dropdown sem card correspondente da mesma
+tela (ex. "Família" em Servidores, que convive com "Status"/"Ambiente" mas não tem card).
+
+Cada tela-alvo: estado `filterValues` levantado do `DataGrid` pra dentro da própria página
+(`ClientesPage`/`PortfolioPage` inicializam com o valor que `defaultFilterValues` já tinha, pra não
+mudar o comportamento de abertura de tela), passado como `filterValues`/`onFilterValuesChange` pro
+`DataGrid`, e cada card do `StatCards` ganhou `onClick`/`active` calculado a partir desse mesmo
+estado.
+
+### Verificação
+
+Sem `DATABASE_URL` local (limitação já conhecida), verificação em camadas:
+- `tsc -b` e `npm run build` (`vite build`) limpos.
+- `oxlint` nos 11 arquivos tocados -- limpo, sem warning novo (os `react-hooks/exhaustive-deps`
+  que aparecem são pré-existentes, em `useMemo` que eu não toquei, confirmados comparando antes/
+  depois da leva).
+- Lógica de `toggleFilterValue`/`clearFilterKeys` e o fallback controlado/não-controlado do
+  `DataGrid` simulados em Node com 6 casos (clicar card vazio, clicar de novo desliga, trocar de
+  card sem acumular, "Total" limpa só a própria chave preservando filtro de campo sem card,
+  `DataGrid` sem `filterValues` continua idêntico ao de sempre, `DataGrid` controlado reflete
+  exatamente o que a página manda) -- todos bateram o esperado.
+- Tela de login carregada no Browser pane (`npm run dev`) sem login real -- zero erro de console,
+  zero erro de servidor.
+
+**Não verificado no navegador com grid renderizada de verdade** (sem sessão autenticada local) --
+vale conferir numa tela real (ex. Clientes): clicar em "Ativos"/"Inativos" e confirmar que a grid
+filtra e o card fica realçado, clicar de novo pra desligar, e conferir que o dropdown "Status" (que
+já existia) mostra o mesmo valor que o card ativou.

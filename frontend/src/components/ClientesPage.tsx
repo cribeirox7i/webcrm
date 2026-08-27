@@ -6,6 +6,7 @@ import { StatCards } from "./StatCards";
 import { DataGrid, type DataGridColumn, type DataGridFilter } from "./DataGrid";
 import { EditIcon, TrashIcon } from "./icons";
 import { usePermissao } from "../auth/usePermissao";
+import { clearFilterKeys, toggleFilterValue } from "../lib/filterValues";
 
 interface ClientesPageProps {
   onOpenCliente: (clienteId: number) => void;
@@ -21,6 +22,10 @@ export function ClientesPage({ onOpenCliente }: ClientesPageProps) {
   const [editing, setEditing] = useState<Cliente | null | "new">(null);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+
+  // Estado dos filtros do DataGrid levantado pra cá (controlado) pra os cards de StatCards
+  // poderem alternar o mesmo filtro que o dropdown "Status" já mostra -- ver DESIGN_SYSTEM.md.
+  const [filterValues, setFilterValues] = useState<Record<string, string>>({ cliente_status: "ATIVO" });
 
   async function loadAll() {
     setLoading(true);
@@ -114,9 +119,27 @@ export function ClientesPage({ onOpenCliente }: ClientesPageProps) {
     <div className="page">
       <StatCards
         stats={[
-          { label: "Total de clientes", value: clientes.length, tone: "accent" },
-          { label: "Ativos", value: clientes.filter((c) => c.cliente_status === "ATIVO").length, tone: "green" },
-          { label: "Inativos", value: clientes.filter((c) => c.cliente_status !== "ATIVO").length, tone: "red" },
+          {
+            label: "Total de clientes",
+            value: clientes.length,
+            tone: "accent",
+            onClick: () => setFilterValues((prev) => clearFilterKeys(prev, ["cliente_status"])),
+            active: !filterValues.cliente_status,
+          },
+          {
+            label: "Ativos",
+            value: clientes.filter((c) => c.cliente_status === "ATIVO").length,
+            tone: "green",
+            onClick: () => setFilterValues((prev) => toggleFilterValue(prev, "cliente_status", "ATIVO")),
+            active: filterValues.cliente_status === "ATIVO",
+          },
+          {
+            label: "Inativos",
+            value: clientes.filter((c) => c.cliente_status !== "ATIVO").length,
+            tone: "red",
+            onClick: () => setFilterValues((prev) => toggleFilterValue(prev, "cliente_status", "INATIVO")),
+            active: filterValues.cliente_status === "INATIVO",
+          },
         ]}
       />
 
@@ -135,7 +158,8 @@ export function ClientesPage({ onOpenCliente }: ClientesPageProps) {
         filters={filters}
         loading={loading}
         exportFilename="clientes"
-        defaultFilterValues={{ cliente_status: "ATIVO" }}
+        filterValues={filterValues}
+        onFilterValuesChange={setFilterValues}
         onRowClick={(c) => onOpenCliente(c.cliente_id)}
         actionsWidth={100}
         renderActions={

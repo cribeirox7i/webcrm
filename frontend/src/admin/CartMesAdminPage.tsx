@@ -6,6 +6,7 @@ import { StatCards } from "../components/StatCards";
 import { CartMesForm, valuesToPayload, type CartMesFormValues } from "./CartMesForm";
 import { ImportarCarteiraModal } from "./ImportarCarteiraModal";
 import { EditIcon, TrashIcon, UploadIcon } from "../components/icons";
+import { clearFilterKeys, toggleFilterValue } from "../lib/filterValues";
 
 interface CartMesAdminPageProps {
   token: string;
@@ -21,6 +22,10 @@ export function CartMesAdminPage({ token, onLogout }: CartMesAdminPageProps) {
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [importandoPara, setImportandoPara] = useState<CartMes | null>(null);
+
+  // Filtro do DataGrid levantado pra cá (controlado) pra os cards de StatCards poderem
+  // alternar o mesmo filtro que o dropdown "Vigência ativa" já mostra.
+  const [filterValues, setFilterValues] = useState<Record<string, string>>({});
 
   function handleAuthError(err: unknown): boolean {
     if ((err as Error).message === "não autenticado") {
@@ -108,8 +113,20 @@ export function CartMesAdminPage({ token, onLogout }: CartMesAdminPageProps) {
     <div className="page">
       <StatCards
         stats={[
-          { label: "Meses cadastrados", value: meses.length, tone: "accent" },
-          { label: "Vigência ativa", value: meses.filter((m) => m.cart_vigencia_ativa === "S").length, tone: "green" },
+          {
+            label: "Meses cadastrados",
+            value: meses.length,
+            tone: "accent",
+            onClick: () => setFilterValues((prev) => clearFilterKeys(prev, ["cart_vigencia_ativa"])),
+            active: !filterValues.cart_vigencia_ativa,
+          },
+          {
+            label: "Vigência ativa",
+            value: meses.filter((m) => m.cart_vigencia_ativa === "S").length,
+            tone: "green",
+            onClick: () => setFilterValues((prev) => toggleFilterValue(prev, "cart_vigencia_ativa", "S")),
+            active: filterValues.cart_vigencia_ativa === "S",
+          },
         ]}
       />
 
@@ -128,6 +145,8 @@ export function CartMesAdminPage({ token, onLogout }: CartMesAdminPageProps) {
         filters={filters}
         loading={loading}
         exportFilename="cart_mes"
+        filterValues={filterValues}
+        onFilterValuesChange={setFilterValues}
         actionsWidth={140}
         renderActions={(m) => (
           <div className="row-actions">

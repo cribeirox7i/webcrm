@@ -505,6 +505,20 @@ main {
   padding: 14px 16px;
 }
 
+/* Card vira filtro clicável (ver StatCards.tsx) -- só quando a tela passa `onClick` por card. */
+.stat-card-clickable {
+  cursor: pointer;
+}
+
+.stat-card-clickable:hover {
+  border-color: var(--accent);
+}
+
+.stat-card-active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
 .stat-dot {
   width: 9px;
   height: 9px;
