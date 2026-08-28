@@ -204,6 +204,7 @@ export interface PrecosCliente {
   produto_id: number;
   cart_mes_id: number | null;
   pc_dat_niver: string | null;
+  pc_dat_ult_reajuste: string | null;
   pc_cod_index: string | null;
   pc_vlr_franquia: number | null;
   pc_vlr_unit: number | null;
@@ -217,6 +218,21 @@ export interface PrecosCliente {
   pc_fx3_vlr: number | null;
   pc_fx4_vlr: number | null;
   pc_fx5_vlr: number | null;
+}
+
+export interface IndiceEconomico {
+  index_nome: string;
+  index_ano: number;
+  index_mes: number;
+  index_vlr: number | null;
+  index_cod: number | null;
+}
+
+// Saída da view indices_calculados (views.pg.sql): a linha de indices_economicos + a variação
+// do mês (index_var_mes, já em fração: 0.0042 = 0,42%) e o acumulado móvel de 12 meses.
+export interface IndiceCalculado extends IndiceEconomico {
+  index_var_mes: number | null;
+  index_acum_12m: number | null;
 }
 
 export interface ConsumoAna {

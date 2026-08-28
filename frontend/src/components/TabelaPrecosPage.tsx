@@ -151,6 +151,14 @@ export function TabelaPrecosPage({ cartMesId, cartAnoMes, alertaInicial, onBack 
         value: (p) => clienteById.get(p.cliente_id)?.cliente_tip_vlr ?? "",
         width: 90,
       },
+      {
+        id: "pc_dat_ult_reajuste",
+        header: "Último Reajuste",
+        value: (p) => p.pc_dat_ult_reajuste ?? "",
+        cell: (p) => formatDataBr(p.pc_dat_ult_reajuste),
+        width: 120,
+        align: "center",
+      },
     ],
     [clienteNomeById, clienteById, produtoById]
   );

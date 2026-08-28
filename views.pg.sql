@@ -234,7 +234,7 @@ WITH var_mes AS (
     SELECT
         ie.*,
         CASE
-            WHEN ie.index_nome = 'SALÁRIO' THEN
+            WHEN ie.index_nome = 'SALÁRIO MÍNIMO' THEN
                 (ie.index_vlr / NULLIF(COALESCE(LAG(ie.index_vlr) OVER (
                     PARTITION BY ie.index_nome ORDER BY ie.index_ano, ie.index_mes
                 ), ie.index_vlr), 0)) - 1

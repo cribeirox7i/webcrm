@@ -12,6 +12,11 @@ backend/server.log
 frontend/.env.production.local
 *.xlsx
 __pycache__/
+# backfill de índices/pc_dat_ult_reajuste: embutem dados da planilha (pc_id + CNPJ + produto).
+# 00-03 + o gerador .py ficam versionados; estes dois se regeram do xlsx quando precisar.
+backend/scripts/sql-2026-08-28-indices/04_backfill_precheck.sql
+backend/scripts/sql-2026-08-28-indices/05_backfill_ult_reajuste.sql
+backend/scripts/sql-2026-08-28-indices/06_diagnostico.sql
 
 # Config local de preview desta máquina (caminhos e PIN de dev específicos daqui)
 .claude/

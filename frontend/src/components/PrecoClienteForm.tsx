@@ -6,6 +6,7 @@ export interface PrecoClienteFormValues {
   pc_vlr_unit: string;
   pc_cod_index: string;
   pc_dat_niver: string;
+  pc_dat_ult_reajuste: string;
 }
 
 function toFormValues(pc: PrecosCliente): PrecoClienteFormValues {
@@ -14,6 +15,7 @@ function toFormValues(pc: PrecosCliente): PrecoClienteFormValues {
     pc_vlr_unit: pc.pc_vlr_unit != null ? String(pc.pc_vlr_unit) : "",
     pc_cod_index: pc.pc_cod_index ?? "",
     pc_dat_niver: pc.pc_dat_niver ?? "",
+    pc_dat_ult_reajuste: pc.pc_dat_ult_reajuste ?? "",
   };
 }
 
@@ -24,6 +26,7 @@ export function valuesToPayload(values: PrecoClienteFormValues, cartMesId: numbe
     pc_vlr_unit: values.pc_vlr_unit ? Number(values.pc_vlr_unit) : null,
     pc_cod_index: values.pc_cod_index.trim() || null,
     pc_dat_niver: values.pc_dat_niver || null,
+    pc_dat_ult_reajuste: values.pc_dat_ult_reajuste || null,
   };
 }
 
@@ -38,7 +41,8 @@ interface PrecoClienteFormProps {
   onSubmit: (values: PrecoClienteFormValues) => void;
 }
 
-const INDICES = ["IGMP", "IPCA", "SALÁRIO"];
+// Nomes padronizados (2026-08-28): 'IGMP'->'IGP-M', 'SALÁRIO'->'SALÁRIO MÍNIMO', + CDI/INPC.
+const INDICES = ["IPCA", "INPC", "IGP-M", "CDI", "SALÁRIO MÍNIMO"];
 
 export function PrecoClienteForm({
   pc,
@@ -128,6 +132,16 @@ export function PrecoClienteForm({
             type="date"
             value={values.pc_dat_niver}
             onChange={(e) => set("pc_dat_niver", e.target.value)}
+          />
+        </div>
+
+        <div className="form-row">
+          <label htmlFor="pc_dat_ult_reajuste">Última data de reajuste</label>
+          <input
+            id="pc_dat_ult_reajuste"
+            type="date"
+            value={values.pc_dat_ult_reajuste}
+            onChange={(e) => set("pc_dat_ult_reajuste", e.target.value)}
           />
         </div>
 

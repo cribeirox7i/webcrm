@@ -16,6 +16,7 @@ import { FornecedorDashboardPage } from "./components/FornecedorDashboardPage";
 import { PagadoriaPage } from "./components/PagadoriaPage";
 import { PropostasPage } from "./components/PropostasPage";
 import { FinanceiroPage } from "./components/FinanceiroPage";
+import { IndicesPage } from "./components/IndicesPage";
 import { PortfolioPage } from "./components/PortfolioPage";
 import { Sidebar, type NavItem } from "./components/Sidebar";
 import { getParametrosGerais } from "./lib/parametros";
@@ -48,6 +49,7 @@ type Tab =
   | "fornecedores"
   | "pagadoria"
   | "financeiro"
+  | "indices"
   | "projetos";
 
 // Piloto da responsividade mobile (2026-08-25): só Clientes (lista + dashboard do cliente) tem
@@ -76,7 +78,12 @@ const NAV_ITEMS: NavItem[] = [
     icon: <UrlsIcon />,
     children: [{ id: "servidores", label: "Servidores", icon: <ServidoresIcon /> }],
   },
-  { id: "financeiro", label: "Financeiro", icon: <FinanceiroIcon /> },
+  {
+    id: "financeiro",
+    label: "Financeiro",
+    icon: <FinanceiroIcon />,
+    children: [{ id: "indices", label: "Índices", icon: <FinanceiroIcon /> }],
+  },
   { id: "projetos", label: "Projetos", icon: <ProjetosIcon /> },
   { id: "produtos", label: "Produtos", icon: <ProdutosIcon /> },
   { id: "pessoas", label: "Pessoas", icon: <PessoasIcon /> },
@@ -100,6 +107,7 @@ const TITLES: Record<Tab, string> = {
   fornecedores: "Fornecedores",
   pagadoria: "Pagadoria",
   financeiro: "Financeiro",
+  indices: "Índices",
   projetos: "Projetos",
 };
 
@@ -224,6 +232,7 @@ function App() {
               ))}
             {tab === "pagadoria" && <PagadoriaPage />}
             {tab === "financeiro" && <FinanceiroPage />}
+            {tab === "indices" && <IndicesPage />}
             {tab === "projetos" && <PortfolioPage />}
           </PageTitleContext.Provider>
           )}

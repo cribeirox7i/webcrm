@@ -192,6 +192,7 @@ CREATE TABLE precos_cliente (
     produto_id                  INTEGER NOT NULL REFERENCES produtos(produto_id),
     cart_mes_id                 INTEGER REFERENCES cart_mes(cart_mes_id),
     pc_dat_niver                TEXT,
+    pc_dat_ult_reajuste         TEXT,
     pc_cod_index                TEXT,
     pc_vlr_franquia             NUMERIC(14,2),
     pc_vlr_unit                 NUMERIC(14,4) DEFAULT 2.06,

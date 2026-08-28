@@ -278,7 +278,7 @@ WITH var_mes AS (
     SELECT
         ie.*,
         CASE
-            WHEN ie.index_nome = 'SALÁRIO' THEN
+            WHEN ie.index_nome = 'SALÁRIO MÍNIMO' THEN
                 -- sem mês anterior (1a linha da série) -> compara o valor com ele mesmo, dá 0
                 -- (mesmo fallback que a fórmula original: SE(ISNUMBER(E1),E1,E2))
                 (ie.index_vlr / NULLIF(COALESCE(LAG(ie.index_vlr) OVER (

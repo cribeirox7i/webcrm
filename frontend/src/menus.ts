@@ -12,6 +12,7 @@ export const MENUS: MenuDef[] = [
   { key: "propostas", label: "Propostas" },
   { key: "urls", label: "URLs" },
   { key: "financeiro", label: "Financeiro" },
+  { key: "indices", label: "Índices" },
   { key: "projetos", label: "Projetos" },
   { key: "produtos", label: "Produtos" },
   { key: "servidores", label: "Servidores" },

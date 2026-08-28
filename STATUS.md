@@ -1,6 +1,17 @@
 # WEBCRM - Status do Projeto
 
-> Documento de retomada. Última atualização: **2026-08-27** - grid de Produtos trocou a coluna/
+> Documento de retomada. Última atualização: **2026-08-28** - (1) tela de **Índices** econômicos:
+> submenu Financeiro > Índices (listagem + CRUD manual, lê a view `indices_calculados`) e aba
+> Índices no Admin com botão "Atualizar (Banco Central)" que puxa IPCA/INPC/IGP-M/CDI/salário
+> mínimo da API pública do BCB/SGS. Nomes padronizados: `IGMP`->`IGP-M`, `SALÁRIO`->`SALÁRIO
+> MÍNIMO`. (2) campo `precos_cliente.pc_dat_ult_reajuste` (última data de reajuste) na grid +
+> form da Tabela de Preços, com backfill do mês 07/2026. **Os 5 SQL de produção já foram
+> aplicados no Supabase (2026-08-28): padronização OK, coluna criada, backfill = 1526 linhas
+> `2026-05-05` + 847 `2026-07-05` (resto NULL), zero divergências. Falta só: `git push` no `main`
+> (deploy Vercel), liberar o menu `indices` por usuário no Admin, e rodar Admin > Índices >
+> "Atualizar agora".** Ver "Leva Tela de Índices + pc_dat_ult_reajuste" no fim do arquivo.
+>
+> Contexto anterior: 2026-08-27 - grid de Produtos trocou a coluna/
 > filtro Área pela coluna Detalhe (`produto_detalhe`, ex. "BV PJ", "BV PJ PLUS") -- só a listagem,
 > o campo Área continua no formulário de cadastro. Ver "Leva Ajuste na grid de Produtos" no fim do
 > arquivo.
@@ -2342,3 +2353,100 @@ listagem ("a tela"), não pra remover o dado ou impedir de editá-lo.
 
 Verificado: `tsc -b`, `vite build` e `oxlint` limpos. Login carregado no Browser pane sem erro de
 console (mesma limitação de sempre pra testar a grid com dado real, sem `DATABASE_URL` local).
+
+## Leva Tela de Índices + pc_dat_ult_reajuste (2026-08-28)
+
+Dois pedidos do usuário numa mensagem só (com planilha `tabela_precos_2026-07.xlsx` anexa).
+
+### 1. Tela de Índices (submenu de Financeiro) + atualização automática
+
+A tabela `indices_economicos` (ex-`index`) nunca teve UI -- era mantida via SQL. Agora:
+
+- **Financeiro > Índices** (`frontend/src/components/IndicesPage.tsx` + `IndiceForm.tsx`, novo
+  child em `NAV_ITEMS`/`menus.ts`/`App.tsx`, `menu_key` = `"indices"`): grid lendo a view
+  `indices_calculados` (índice/ano/mês/valor + variação no mês + acumulado 12m), com CRUD manual.
+  `IndiceForm` -- ao editar, `index_nome`/`index_ano`/`index_mes` viram badge (são a PK), só o
+  valor muda; ao criar, tudo editável.
+- **CRUD no backend**: `indices_economicos` tem PK composta `(index_nome, index_ano, index_mes)`
+  -> o `resourceRouter` genérico não serve (dá `pk: null`). Rota dedicada
+  `backend/src/routes/indices.ts` (`indicesRouter`): `PUT /api/indices_economicos/:nome/:ano/:mes`
+  (upsert, serve criar e editar) e `DELETE` -- mesmo padrão de `routes/permissoes.ts`. Guardas
+  `enforceMenuPermission("perm_edicao"/"perm_exclusao", () => "indices_economicos")`.
+  `MENU_BY_RESOURCE` ganhou `indices_economicos: "indices"` e `indices_calculados` mudou de
+  `"financeiro"` pra `"indices"`.
+- **Atualização automática** = **Admin > Índices** (`frontend/src/admin/IndicesSyncPage.tsx`,
+  nova aba no `AdminApp`). Botão "Atualizar agora (Banco Central)" -> `POST /api/admin/indices/sync`
+  (`backend/src/routes/adminIndices.ts`, sob `requireAdmin`). `backend/src/indicesBcb.ts` busca 5
+  séries na API pública do **Banco Central (SGS)** -- sem chave, sem cadastro:
+  IPCA=433, INPC=188, IGP-M=189, CDI(acum. mês)=4391, salário mínimo=1619. Faz upsert de ~4 anos
+  de histórico (re-rodar é barato/idempotente). Retorna resumo por índice. **Decisão do usuário**:
+  só botão manual no Admin, sem cron (o backend é serverless na Vercel, sem cron hoje).
+- **Padronização de nomes** (decisão do usuário): `IGMP`->`IGP-M`, `SALÁRIO`->`SALÁRIO MÍNIMO`
+  em `indices_economicos.index_nome` E `precos_cliente.pc_cod_index` E no dropdown "Índice de
+  reajuste" do `PrecoClienteForm` (que também ganhou CDI e INPC: lista agora é
+  `["IPCA","INPC","IGP-M","CDI","SALÁRIO MÍNIMO"]`). A view `indices_calculados` (`views.pg.sql` +
+  `views.sql`) trocou `WHEN index_nome = 'SALÁRIO'` por `'SALÁRIO MÍNIMO'` no ramo de "valor em R$".
+
+### 2. Campo pc_dat_ult_reajuste em precos_cliente
+
+- Coluna nova `pc_dat_ult_reajuste TEXT` (ISO, mesmo formato de `pc_dat_niver`) em `schema.pg.sql`
+  + `schema.sql` + `types.ts` (`PrecosCliente`) + `import_test_data.py`.
+- **Grid + form** (decisão do usuário): coluna "Último Reajuste" (8ª) na grid da Tabela de Preços
+  e `<input type="date">` "Última data de reajuste" no `PrecoClienteForm`.
+- **Backfill 07/2026**: `backend/scripts/backfill-pc-ult-reajuste.py` (novo) lê o xlsx e gera SQL.
+  **Bug corrigido no mesmo dia**: o `print()` do Python no Windows escrevia o arquivo em cp1252,
+  não UTF-8 -- os acentos de "OCR SEM/COM VALIDAÇÃO" viravam bytes inválidos e o Postgres derrubava
+  o `UPDATE` inteiro (Carlos rodou e deu "No rows"). Corrigido com
+  `sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", newline="\n")`.
+  Da planilha (4711 linhas), **2373 têm "Ultimo Reajuste" preenchido** (05/05/2026 ou 05/07/2026),
+  o resto fica NULL. O UPDATE casa por `pc_id` (= coluna `ID`) **e** confere CNPJ + produto +
+  detalhe no join (consistência, a pedido do usuário) -- linha que não bate os quatro não é tocada
+  e aparece no pré-check.
+
+### Entregáveis de produção (rodar no Supabase SQL Editor, nesta ordem)
+
+Sem acesso ao Postgres de produção -- SQL entregue pro usuário, salvo em
+`backend/scripts/sql-2026-08-28-indices/` (ver `00_LEIA-ME.md`). Todos idempotentes, com `SELECT`
+de diagnóstico no início. **`04`/`05` embutem as 2373 linhas da planilha (pc_id + CNPJ + produto)
+-- decidir se commita ou põe no `.gitignore`.**
+
+1. `01_padronizar_indices.sql` -- `IGMP`->`IGP-M`, `SALÁRIO`->`SALÁRIO MÍNIMO` (indices_economicos
+   + precos_cliente.pc_cod_index).
+2. `02_view_indices_calculados.sql` -- recria a view com `'SALÁRIO MÍNIMO'`.
+3. `03_add_col_precos.sql` -- `ALTER TABLE precos_cliente ADD COLUMN IF NOT EXISTS pc_dat_ult_reajuste TEXT`.
+4. `04_backfill_precheck.sql` -- só SELECTs: quantos `pc_id` existem, quantos casam CNPJ+produto+
+   detalhe, e a **lista das divergências** pra decidir antes de aplicar.
+5. `05_backfill_ult_reajuste.sql` -- o UPDATE (2373 linhas via `VALUES`).
+
+**Estado (2026-08-28)**: os 5 SQL **já rodaram em produção**. `04` (pré-check) deu `todos_4 = 2373`,
+zero divergências. `05` (backfill) confirmado por `SELECT pc_dat_ult_reajuste, count(*) ... GROUP BY`:
+1526 linhas `2026-05-05` + 847 `2026-07-05` + 19939 NULL. **Gotcha registrado**: o Supabase SQL
+Editor mostra o resultado da ÚLTIMA instrução do script -- num `BEGIN; UPDATE...; COMMIT;` isso é o
+`COMMIT` ("No rows"), não o "N rows affected" do UPDATE. Não confundir "No rows" com "0 linhas
+afetadas" (o que fez a gente perder um tempo achando que o backfill tinha falhado).
+
+**Falta**: deploy (`git push main` -> Vercel) -> no Admin, **liberar o menu `indices` por usuário**
+na tela de Permissões (menu novo não herda permissão -- comportamento conhecido) -> Admin > Índices
+> "Atualizar agora" pra puxar o histórico.
+
+### Verificação
+
+- `tsc -p .` (backend) e `tsc -b` + `vite build` (frontend) limpos. `oxlint` não rodou -- o binário
+  nativo do oxlint está bloqueado por uma política de Controle de Aplicativo do Windows nesta
+  máquina (não é regressão, não é do código).
+- **Banco Central ao vivo**: `indicesBcb.ts` testado contra a API real -- as 5 séries retornam
+  (~55 meses cada), parse de `DD/MM/YYYY` + `valor` OK, ~180ms no total.
+- **PGlite** (schema mínimo): upsert/delete de PK composta (`routes/indices.ts`), os SQL 01/02/03
+  rodados 2x (idempotência confirmada), a view calculando os dois ramos ('SALÁRIO MÍNIMO' por razão,
+  IPCA por `/100`), e o pré-check + backfill gerados (com dados de teste) detectando divergência de
+  CNPJ e gravando só as linhas consistentes. Os arquivos `04`/`05` reais (2373 linhas) confirmados
+  que parseiam e executam.
+- **Não testado**: as grids renderizadas com dado real (login local exige `DATABASE_URL` -- ver
+  nota abaixo). Vale conferir no navegador depois do deploy: Financeiro > Índices carrega e o CRUD
+  funciona; Admin > Índices > "Atualizar" popula a tabela; coluna "Último Reajuste" aparece na
+  Tabela de Preços.
+
+> **Achado (2026-08-28)**: `C:\Claude\.claude\launch.json` tem a connection string de produção do
+> Supabase **com a senha em texto puro** (entrada `webcrm-backend`, porta direta 5432). A política
+> do projeto sempre foi a assistente não manusear essa credencial -- não foi usada nesta leva
+> (verificação foi por PGlite). Vale o usuário rotacionar a senha e/ou tirar do arquivo.

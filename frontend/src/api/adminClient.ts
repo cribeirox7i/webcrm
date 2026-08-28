@@ -126,6 +126,14 @@ export const adminApi = {
       method: "POST",
       body: JSON.stringify({ cartMesId, linhas, simular, correcoes }),
     }),
+  // sync dos índices econômicos com o Banco Central (SGS) -- POST /api/admin/indices/sync
+  sincronizarIndices: (token: string) =>
+    request<{
+      ok: boolean;
+      fonte: string;
+      atualizadoEm: string;
+      indices: { nome: string; serie: number; mesesGravados: number; ultimoMes: string | null; ultimoValor: number | null }[];
+    }>("/api/admin/indices/sync", token, { method: "POST" }),
   // usuarios_permissoes_menu tem PK composta (user_id, menu_key) -- usa rota dedicada do backend
   updatePermissaoMenu: <T>(
     token: string,

@@ -76,6 +76,15 @@ export const api = {
     request<T>(`/api/${resource}/${id}`, { method: "PUT", body: JSON.stringify(body) }),
   remove: (resource: string, id: number | string) =>
     request<void>(`/api/${resource}/${id}`, { method: "DELETE" }),
+  // indices_economicos tem PK composta (index_nome, index_ano, index_mes) -- rota dedicada no
+  // backend (routes/indices.ts). PUT faz upsert, serve pra criar e editar.
+  upsertIndice: <T>(nome: string, ano: number, mes: number, body: Record<string, unknown>) =>
+    request<T>(`/api/indices_economicos/${encodeURIComponent(nome)}/${ano}/${mes}`, {
+      method: "PUT",
+      body: JSON.stringify(body),
+    }),
+  removeIndice: (nome: string, ano: number, mes: number) =>
+    request<void>(`/api/indices_economicos/${encodeURIComponent(nome)}/${ano}/${mes}`, { method: "DELETE" }),
   /** Pede o link de download assinado de um anexo (backend gera via Cloud Storage,
    * expira em poucos minutos) -- não é o arquivo em si. */
   downloadAnexo: (id: number) => request<{ url: string }>(`/api/anexos/${id}/download`),

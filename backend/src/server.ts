@@ -4,6 +4,8 @@ import { metaRouter } from "./routes/meta";
 import { resourceRouter } from "./routes/resource";
 import { adminRouter } from "./routes/admin";
 import { permissoesRouter } from "./routes/permissoes";
+import { indicesRouter } from "./routes/indices";
+import { adminIndicesRouter } from "./routes/adminIndices";
 import { anexosRouter } from "./routes/anexos";
 import { propostaAnexoRouter } from "./routes/propostaAnexo";
 import { parametrosRouter } from "./routes/parametros";
@@ -82,6 +84,8 @@ app.use("/api/usuario_sessoes", requireAdmin);
 app.use("/api/parametros_storage_menu", requireAdmin);
 // importação da planilha de medição -> carteira (apaga e regrava o mês inteiro): só com o PIN
 app.use("/api/admin/importar-carteira", requireAdmin);
+// sync dos índices econômicos com o Banco Central (SGS): só com o PIN mestre
+app.use("/api/admin/indices", requireAdmin, adminIndicesRouter);
 // rotas dedicadas de /api/usuarios (criar com senha provisória, enviar convite) --
 // registradas depois do requireAdmin acima (mesmo prefixo), então só respondem autenticado
 app.use("/api/usuarios", usuariosRouter);
@@ -104,6 +108,8 @@ app.use("/api/cart_mes", requireUserOrAdminAuth);
 app.use("/api", requireUserAuth);
 
 app.use("/api", permissoesRouter);
+// indices_economicos tem PK composta -- rota dedicada (upsert/delete), mesmo motivo de permissoesRouter
+app.use("/api", indicesRouter);
 // montado antes do resourceRouter -- upload/download/exclusão de anexos precisam de
 // tratamento de storage próprio (ver routes/anexos.ts), o resto (GET lista/por id) cai
 // no genérico normalmente.

@@ -328,6 +328,12 @@ uma tela do fluxo operacional. Login por PIN (`.admin-login-card`, centralizado,
 input grande com letter-spacing) — mecanismo **independente** do login do app principal
 (ver seção abaixo), não são a mesma sessão.
 
+**Índices (2026-08-28)**: a listagem/CRUD manual de índices econômicos fica em **Financeiro >
+Índices** (submenu na sidebar, `IndicesPage.tsx`, lê a view `indices_calculados`). A aba
+**Índices** do Admin (`IndicesSyncPage.tsx`) só tem o botão "Atualizar (Banco Central)" —
+o sync com a API pública do BCB/SGS, que é operação de configuração/manutenção, não de fluxo
+diário. Mesma divisão do `cart_mes` (CRUD no Admin, consumo no Financeiro), invertida aqui.
+
 ## Autenticação do app principal (`frontend/src/auth/`, 2026-08-11)
 
 - `TrocarSenhaPage.tsx`/`DefinirSenhaPage.tsx` usam classes próprias

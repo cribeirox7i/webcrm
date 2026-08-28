@@ -121,7 +121,9 @@ TABLES = [
     ]),
     ("precos_cliente", "precos_cliente", [
         ("pc_id", "pc_id"), ("cliente_id", "cliente_id"), ("produto_id", "produto_id"),
-        ("cart_mes_id", "cart_mes_id"), ("pc_dat_niver", "pc_dat_niver"), ("pc_cod_index", "pc_cod_index"),
+        ("cart_mes_id", "cart_mes_id"), ("pc_dat_niver", "pc_dat_niver"),
+        ("pc_dat_ult_reajuste", "pc_dat_ult_reajuste"),  # AVISO se a planilha-modelo nao tiver -- ok, coluna nova
+        ("pc_cod_index", "pc_cod_index"),
         # pc_tip_vlr não entra mais aqui -- moveu pra clientes.cliente_tip_vlr (backfill_cliente_tip_vlr)
         ("pc_vlr_franquia", "pc_vlr_franquia"), ("pc_vlr_unit", "pc_vlr_unit"),
         ("pc_fx1_lim", "pc_fx1_lim"), ("pc_fx2_lim", "pc_fx2_lim"), ("pc_fx3_lim", "pc_fx3_lim"),
