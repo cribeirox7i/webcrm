@@ -2,7 +2,7 @@
 // os valores REAIS da planilha de medição -- datas em dd/mm/aaaa viram ISO (a coluna gerada
 // cart_nome_plan_analitica depende disso), e valores viram número.
 // Uso: npx tsx scripts/testa-conversores-medicao.ts
-import { dataIso, inteiro, numero, texto } from "../src/planilhaValores";
+import { dataIso, inteiro, nomePlanAnalitica, numero, texto } from "../src/planilhaValores";
 
 const casos: { entrada: unknown; esperado: unknown; fn: (v: unknown) => unknown; nome: string }[] = [
   { nome: "data dd/mm/aaaa", entrada: "31/07/2026", esperado: "2026-07-31", fn: (v) => dataIso(v) },
@@ -27,14 +27,22 @@ for (const c of casos) {
   console.log(`${ok ? "OK  " : "FALHA"} ${c.nome}: ${JSON.stringify(c.entrada)} -> ${JSON.stringify(obtido)}${ok ? "" : ` (esperado ${JSON.stringify(c.esperado)})`}`);
 }
 
-// confere que o nome da planilha analítica (coluna gerada no banco) sai certo com a data ISO
-const dataBase = dataIso("31/07/2026")!;
-const prod = "Módulo Esc";
-const nomeGerado = `${prod}_Medicao_${dataBase.slice(0, 7)}-01_${dataBase.slice(0, 7)}-${dataBase.slice(8, 10)}.xlsx`;
-const esperadoGerado = "Módulo Esc_Medicao_2026-07-01_2026-07-31.xlsx";
-const okGerado = nomeGerado === esperadoGerado;
-if (!okGerado) falhas++;
-console.log(`${okGerado ? "OK  " : "FALHA"} nome da planilha analítica: ${nomeGerado}`);
+// confere que `nomePlanAnalitica` (JS, usado na importação pra casar com a lista do Drive ANTES
+// do INSERT) reproduz exatamente a coluna gerada `cart_nome_plan_analitica` do banco (SQL).
+const casosNome: { prod: string | null; dataBase: string | null; esperado: string | null }[] = [
+  { prod: "Módulo Esc", dataBase: dataIso("31/07/2026"), esperado: "Módulo Esc_Medicao_2026-07-01_2026-07-31.xlsx" },
+  { prod: "2mj_factor", dataBase: "2026-07-05", esperado: "2mj_factor_Medicao_2026-07-01_2026-07-05.xlsx" },
+  { prod: null, dataBase: "2026-07-05", esperado: null },
+  { prod: "2mj_factor", dataBase: null, esperado: null },
+];
+for (const c of casosNome) {
+  const obtido = nomePlanAnalitica(c.prod, c.dataBase);
+  const ok = obtido === c.esperado;
+  if (!ok) falhas++;
+  console.log(
+    `${ok ? "OK  " : "FALHA"} nomePlanAnalitica(${JSON.stringify(c.prod)}, ${JSON.stringify(c.dataBase)}): ${JSON.stringify(obtido)}${ok ? "" : ` (esperado ${JSON.stringify(c.esperado)})`}`
+  );
+}
 
 console.log(falhas === 0 ? "\nTodos os casos passaram." : `\n${falhas} caso(s) falharam.`);
 process.exit(falhas === 0 ? 0 : 1);

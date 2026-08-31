@@ -35,6 +35,14 @@ export interface LinhaMedicao {
   prod: string | null;
 }
 
+/** Uma linha de { nome do arquivo .xlsx, id do arquivo no Drive } vinda do txt/csv que o usuário
+ * exporta manualmente da pasta do Drive (sem integração com a API do Drive -- ver
+ * ImportarCarteiraModal). */
+export interface PlanilhaAnalitica {
+  nome: string;
+  id: string;
+}
+
 export interface RelatorioImportacao {
   simulado: boolean;
   mes: string;
@@ -52,6 +60,9 @@ export interface RelatorioImportacao {
     clienteIdSugerido?: number;
     clienteNomeSugerido?: string;
   }[];
+  // linhas que serão gravadas mas não bateram com nenhum nome da lista de planilhas enviada --
+  // só vem preenchido quando uma lista foi de fato enviada (ver ImportarCarteiraModal).
+  semPlanilha: { indice: number; nome: string; nomePlanilhaEsperado: string }[];
   linhasExistentesNoMes: number;
   inseridos?: number;
   apagados?: number;
@@ -120,11 +131,12 @@ export const adminApi = {
     cartMesId: number,
     linhas: LinhaMedicao[],
     simular: boolean,
-    correcoes?: Record<number, number>
+    correcoes?: Record<number, number>,
+    planilhas?: PlanilhaAnalitica[]
   ) =>
     request<RelatorioImportacao>("/api/admin/importar-carteira", token, {
       method: "POST",
-      body: JSON.stringify({ cartMesId, linhas, simular, correcoes }),
+      body: JSON.stringify({ cartMesId, linhas, simular, correcoes, planilhas }),
     }),
   // sync dos índices econômicos com o Banco Central (SGS) -- POST /api/admin/indices/sync
   sincronizarIndices: (token: string) =>

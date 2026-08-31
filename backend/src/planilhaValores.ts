@@ -50,3 +50,14 @@ export function dataIso(v: unknown, comHora = false): string | null {
   }
   return s; // formato desconhecido: grava como veio, em vez de descartar silenciosamente
 }
+
+/** Reproduz em JS a mesma fórmula da coluna gerada `carteira.cart_nome_plan_analitica` (ver
+ * schema.pg.sql), pra poder casar cada linha com o nome de arquivo do Drive ANTES de gravar --
+ * a coluna gerada só existe depois do INSERT. `dataBaseIso` precisa já estar em "AAAA-MM-DD"
+ * (saída de `dataIso`); qualquer divergência de formato aqui faz o nome não bater com o do banco. */
+export function nomePlanAnalitica(prod: string | null, dataBaseIso: string | null): string | null {
+  if (!prod || !dataBaseIso || dataBaseIso.length < 10) return null;
+  const anoMes = dataBaseIso.slice(0, 7);
+  const dia = dataBaseIso.slice(8, 10);
+  return `${prod}_Medicao_${anoMes}-01_${anoMes}-${dia}.xlsx`;
+}

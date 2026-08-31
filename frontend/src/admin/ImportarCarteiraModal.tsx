@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import ExcelJS from "exceljs";
-import { adminApi, type LinhaMedicao, type RelatorioImportacao } from "../api/adminClient";
+import { adminApi, type LinhaMedicao, type PlanilhaAnalitica, type RelatorioImportacao } from "../api/adminClient";
 import type { CartMes } from "../api/types";
 import { SearchableSelect } from "../components/SearchableSelect";
 
@@ -53,9 +53,30 @@ function valorCru(v: ExcelJS.CellValue): unknown {
   return v;
 }
 
+/** Lê o txt/csv exportado manualmente da pasta do Drive (uma linha por planilha: nome do arquivo
+ * .xlsx e o id do arquivo no Drive, separados por vírgula, ponto-e-vírgula ou tab -- sem
+ * integração com a API do Drive, ver conversa com o usuário). Aceita ou não uma linha de
+ * cabeçalho ("nome,id"); linhas sem os dois campos são ignoradas. */
+function parsePlanilhasAnaliticas(texto: string): PlanilhaAnalitica[] {
+  const out: PlanilhaAnalitica[] = [];
+  for (const linhaBruta of texto.split(/\r?\n/)) {
+    const linha = linhaBruta.trim();
+    if (!linha) continue;
+    const partes = linha.split(/[,;\t]/).map((p) => p.trim().replace(/^["']|["']$/g, ""));
+    if (partes.length < 2) continue;
+    const [nome, id] = partes;
+    if (!nome || !id) continue;
+    if (nome.toLowerCase() === "nome" && id.toLowerCase() === "id") continue; // cabeçalho
+    out.push({ nome, id });
+  }
+  return out;
+}
+
 export function ImportarCarteiraModal({ cartMes, token, onClose, onLogout }: ImportarCarteiraModalProps) {
   const [linhas, setLinhas] = useState<LinhaMedicao[] | null>(null);
   const [nomeArquivo, setNomeArquivo] = useState("");
+  const [planilhas, setPlanilhas] = useState<PlanilhaAnalitica[]>([]);
+  const [nomeArquivoPlanilhas, setNomeArquivoPlanilhas] = useState("");
   const [relatorio, setRelatorio] = useState<RelatorioImportacao | null>(null);
   const [concluido, setConcluido] = useState<RelatorioImportacao | null>(null);
   const [erro, setErro] = useState<string | null>(null);
@@ -124,12 +145,22 @@ export function ImportarCarteiraModal({ cartMes, token, onClose, onLogout }: Imp
     }
   }
 
+  async function lerListaPlanilhas(file: File) {
+    setNomeArquivoPlanilhas(file.name);
+    try {
+      const texto = await file.text();
+      setPlanilhas(parsePlanilhasAnaliticas(texto));
+    } catch (err) {
+      setErro(`Falha ao ler a lista de planilhas: ${(err as Error).message}`);
+    }
+  }
+
   async function analisar() {
     if (!linhas) return;
     setOcupado(true);
     setErro(null);
     try {
-      setRelatorio(await adminApi.importarCarteira(token, cartMes.cart_mes_id, linhas, true, correcoes));
+      setRelatorio(await adminApi.importarCarteira(token, cartMes.cart_mes_id, linhas, true, correcoes, planilhas));
     } catch (err) {
       if (!tratarErroAuth(err)) setErro((err as Error).message);
     } finally {
@@ -146,7 +177,9 @@ export function ImportarCarteiraModal({ cartMes, token, onClose, onLogout }: Imp
     setOcupado(true);
     setErro(null);
     try {
-      setRelatorio(await adminApi.importarCarteira(token, cartMes.cart_mes_id, linhas, true, novasCorrecoes));
+      setRelatorio(
+        await adminApi.importarCarteira(token, cartMes.cart_mes_id, linhas, true, novasCorrecoes, planilhas)
+      );
     } catch (err) {
       if (!tratarErroAuth(err)) setErro((err as Error).message);
     } finally {
@@ -165,11 +198,13 @@ export function ImportarCarteiraModal({ cartMes, token, onClose, onLogout }: Imp
     setOcupado(true);
     setErro(null);
     try {
-      const rel = await adminApi.importarCarteira(token, cartMes.cart_mes_id, linhas, false, correcoes);
+      const rel = await adminApi.importarCarteira(token, cartMes.cart_mes_id, linhas, false, correcoes, planilhas);
       setConcluido(rel);
       setRelatorio(null);
       setLinhas(null);
       setNomeArquivo("");
+      setPlanilhas([]);
+      setNomeArquivoPlanilhas("");
       setCorrecoes({});
       setAtribuindoCliente({});
     } catch (err) {
@@ -210,6 +245,27 @@ export function ImportarCarteiraModal({ cartMes, token, onClose, onLogout }: Imp
                 {nomeArquivo}: {linhas.length} linhas lidas.
               </p>
             )}
+          </div>
+        )}
+
+        {!concluido && (
+          <div className="form-row">
+            <label htmlFor="arquivo_planilhas">Lista de planilhas do Drive (.txt/.csv, opcional)</label>
+            <input
+              id="arquivo_planilhas"
+              type="file"
+              accept=".txt,.csv"
+              disabled={ocupado}
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) lerListaPlanilhas(f);
+              }}
+            />
+            <p className="page-subtitle">
+              {planilhas.length > 0
+                ? `${nomeArquivoPlanilhas}: ${planilhas.length} planilhas lidas.`
+                : "Uma linha por planilha, \"nome do arquivo,id do Drive\" — usado pra preencher o botão \"Planilha\" de cada linha da carteira. Sem esse arquivo, a importação segue igual, só sem esse link."}
+            </p>
           </div>
         )}
 
@@ -381,6 +437,32 @@ export function ImportarCarteiraModal({ cartMes, token, onClose, onLogout }: Imp
                         </tr>
                       );
                     })}
+                  </tbody>
+                </table>
+              </>
+            )}
+
+            {relatorio.semPlanilha.length > 0 && (
+              <>
+                <h3>Sem planilha correspondente na lista do Drive</h3>
+                <p className="page-subtitle">
+                  Essas linhas serão gravadas normalmente, só com o botão "Planilha" desabilitado — nenhum
+                  arquivo da lista bate com o nome esperado.
+                </p>
+                <table className="mini-table">
+                  <thead>
+                    <tr>
+                      <th>Cliente na planilha</th>
+                      <th>Nome de arquivo esperado</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {relatorio.semPlanilha.map((r) => (
+                      <tr key={r.indice}>
+                        <td>{r.nome}</td>
+                        <td>{r.nomePlanilhaEsperado}</td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
               </>

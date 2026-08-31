@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { query, withTransaction } from "../db";
 import { escolhePorNome, normalizaCnpj, type ClienteCandidato } from "../matchCliente";
-import { dataIso, inteiro, numero, texto } from "../planilhaValores";
+import { dataIso, inteiro, nomePlanAnalitica, numero, texto } from "../planilhaValores";
 
 // Importação mensal da planilha de medição para a tabela `carteira` (Admin > Importar Carteira).
 // A planilha é lida no navegador (exceljs, já usado na exportação) e chega aqui como JSON --
@@ -32,14 +32,30 @@ export interface LinhaMedicao {
 type Origem = "cnpj" | "nome" | "database" | "manual";
 
 importarCarteiraRouter.post("/admin/importar-carteira", async (req, res) => {
-  const { cartMesId, linhas, simular, correcoes } = (req.body ?? {}) as {
+  const { cartMesId, linhas, simular, correcoes, planilhas } = (req.body ?? {}) as {
     cartMesId?: unknown;
     linhas?: unknown;
     simular?: unknown;
     // { índice da linha na planilha -> cliente_id escolhido à mão }, quando o usuário não
     // concorda com o cliente que a heurística escolheu (ver relatório na tela).
     correcoes?: unknown;
+    // lista { nome, id } importada de um txt/csv à parte (nome do arquivo .xlsx na pasta do
+    // Drive -> id do arquivo no Drive) -- usada pra preencher cart_url_plan_analitica. Casamento
+    // é por nome exato contra o mesmo nome que a coluna gerada `cart_nome_plan_analitica`
+    // calcularia (ver `nomePlanAnalitica`). Opcional: sem isso, a importação segue igual, só sem
+    // preencher a URL da planilha (comportamento de antes desta leva).
+    planilhas?: unknown;
   };
+
+  const idPorNomePlanilha = new Map<string, string>();
+  if (Array.isArray(planilhas)) {
+    planilhas.forEach((p) => {
+      if (!p || typeof p !== "object") return;
+      const nome = texto((p as { nome?: unknown }).nome);
+      const id = texto((p as { id?: unknown }).id);
+      if (nome && id) idPorNomePlanilha.set(nome, id);
+    });
+  }
 
   const correcoesPorIndice = new Map<number, number>();
   if (correcoes && typeof correcoes === "object") {
@@ -97,7 +113,7 @@ importarCarteiraRouter.post("/admin/importar-carteira", async (req, res) => {
   const porDatabase = new Map(dbRows.map((r) => [r.cart_db.trim().toLowerCase(), r]));
 
   // ---- classificação ----
-  const paraInserir: { linha: LinhaMedicao; clienteId: number; origem: Origem }[] = [];
+  const paraInserir: { linha: LinhaMedicao; clienteId: number; origem: Origem; indice: number }[] = [];
   const resolvidosPorNome: { indice: number; nome: string; cnpj: string; clienteId: number; clienteNome: string }[] = [];
   const resolvidosPorDatabase: { indice: number; nome: string; db: string; clienteId: number; clienteNome: string }[] = [];
   const ignorados: {
@@ -157,12 +173,12 @@ importarCarteiraRouter.post("/admin/importar-carteira", async (req, res) => {
     }
 
     if (candidatos.length === 1 && !corrigido) {
-      paraInserir.push({ linha: bruta, clienteId: candidatos[0].cliente_id, origem: "cnpj" });
+      paraInserir.push({ linha: bruta, clienteId: candidatos[0].cliente_id, origem: "cnpj", indice });
       return;
     }
     if (candidatos.length > 1) {
       const clienteId = corrigido ?? sugestao!.cliente_id;
-      paraInserir.push({ linha: bruta, clienteId, origem: corrigido ? "manual" : "nome" });
+      paraInserir.push({ linha: bruta, clienteId, origem: corrigido ? "manual" : "nome", indice });
       resolvidosPorNome.push({
         indice,
         nome,
@@ -174,7 +190,7 @@ importarCarteiraRouter.post("/admin/importar-carteira", async (req, res) => {
     }
     if (viaDb || corrigido) {
       const clienteId = corrigido ?? viaDb!.cliente_id;
-      paraInserir.push({ linha: bruta, clienteId, origem: corrigido ? "manual" : "database" });
+      paraInserir.push({ linha: bruta, clienteId, origem: corrigido ? "manual" : "database", indice });
       resolvidosPorDatabase.push({
         indice,
         nome,
@@ -198,6 +214,27 @@ importarCarteiraRouter.post("/admin/importar-carteira", async (req, res) => {
     [mesId]
   );
 
+  // ---- casamento com a lista de planilhas do Drive (nome exato) ----
+  // Só reporta "sem planilha" quando uma lista foi de fato enviada -- sem lista, a importação
+  // segue normal e ninguém precisa ver um aviso de "planilha não encontrada" pra 100% das linhas.
+  const urlPorIndice = new Map<number, string>();
+  const semPlanilha: { indice: number; nome: string; nomePlanilhaEsperado: string }[] = [];
+  if (idPorNomePlanilha.size > 0) {
+    for (const item of paraInserir) {
+      const nomeEsperado = nomePlanAnalitica(texto(item.linha.prod), dataIso(item.linha.dataBase));
+      const id = nomeEsperado ? idPorNomePlanilha.get(nomeEsperado) : undefined;
+      if (id) {
+        urlPorIndice.set(item.indice, `https://drive.google.com/file/d/${id}/view`);
+      } else {
+        semPlanilha.push({
+          indice: item.indice,
+          nome: texto(item.linha.nome) ?? "",
+          nomePlanilhaEsperado: nomeEsperado ?? "(sem produto/data base pra montar o nome)",
+        });
+      }
+    }
+  }
+
   const relatorio = {
     mes: mesRows[0].cart_ano_mes,
     linhasNaPlanilha: (linhas as unknown[]).length,
@@ -206,6 +243,7 @@ importarCarteiraRouter.post("/admin/importar-carteira", async (req, res) => {
     porNome: resolvidosPorNome,
     porDatabase: resolvidosPorDatabase,
     ignorados,
+    semPlanilha,
     // só na simulação -- a tela usa isso pra montar o dropdown de correção manual; não precisa
     // ir de novo na resposta de confirmação (`simular: false`), que já é o resultado final.
     clientes: simular !== false ? clientes.map((c) => ({ cliente_id: c.cliente_id, cliente_nome: c.cliente_nome })) : undefined,
@@ -221,13 +259,13 @@ importarCarteiraRouter.post("/admin/importar-carteira", async (req, res) => {
   try {
     await withTransaction(async (client) => {
       await client.query("DELETE FROM carteira WHERE cart_mes_id = $1", [mesId]);
-      for (const { linha, clienteId } of paraInserir) {
+      for (const { linha, clienteId, indice } of paraInserir) {
         await client.query(
           `INSERT INTO carteira (
              cliente_id, cart_mes_id, cart_qtd, cart_vlr, cart_pdd, cart_sem_pdd, cart_fat,
              cart_qtd_mes, cart_emprestimos_mes, cart_ult_def, cart_data_base, cart_dat_extracao,
-             cart_rds, cart_db, cart_prod
-           ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
+             cart_rds, cart_db, cart_prod, cart_url_plan_analitica
+           ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
           [
             clienteId,
             mesId,
@@ -244,6 +282,7 @@ importarCarteiraRouter.post("/admin/importar-carteira", async (req, res) => {
             texto(linha.rds),
             texto(linha.db),
             texto(linha.prod),
+            urlPorIndice.get(indice) ?? null,
           ]
         );
       }

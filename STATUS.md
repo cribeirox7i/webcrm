@@ -1,6 +1,17 @@
 # WEBCRM - Status do Projeto
 
-> Documento de retomada. Última atualização: **2026-08-28** - (1) tela de **Índices** econômicos:
+> Documento de retomada. Última atualização: **2026-08-31** - importação de carteira ganhou um
+> segundo arquivo opcional (`.txt`/`.csv` com nome do arquivo + id do Google Drive, exportado à
+> mão pelo usuário, sem integração com a API do Drive) pra preencher `cart_url_plan_analitica`
+> (URL do botão "Planilha") durante a importação -- até aqui só jan-jun/2026 tinham essa URL,
+> preenchida manualmente na migração inicial; jul/2026 ficou sem, e é o próximo mês a reimportar
+> com o novo arquivo. Casamento por nome exato de arquivo; linha sem planilha correspondente na
+> lista não trava a importação, só aparece num aviso antes de confirmar. **Verificado por
+> `tsc --noEmit` (os dois lados) e teste de unidade da fórmula de nome de arquivo; não testado
+> contra o Postgres de produção nem no navegador** (sem `DATABASE_URL` local, por política do
+> projeto). Ver "Leva Link da planilha analítica na importação de carteira" no fim do arquivo.
+>
+> Contexto anterior: 2026-08-28 - (1) tela de **Índices** econômicos:
 > submenu Financeiro > Índices (listagem + CRUD manual, lê a view `indices_calculados`) e aba
 > Índices no Admin com botão "Atualizar (Banco Central)" que puxa IPCA/INPC/IGP-M/CDI/salário
 > mínimo da API pública do BCB/SGS. Nomes padronizados: `IGMP`->`IGP-M`, `SALÁRIO`->`SALÁRIO
@@ -2430,6 +2441,40 @@ na tela de Permissões (menu novo não herda permissão -- comportamento conheci
 > "Atualizar agora" pra puxar o histórico.
 
 ### Verificação
+
+## Leva Link da planilha analítica na importação de carteira (2026-08-31)
+
+`cart_url_plan_analitica` (coluna já existente, usada pelo botão "Planilha" inline em Carteira/
+Dashboard do cliente) nunca era preenchida pela importação -- funcionou pra jan-jun/2026 porque
+alguém preencheu à mão na migração inicial; jul/2026 ficou sem, e o botão nasce desabilitado.
+
+**Decisão do usuário**: sem integração com a API do Google Drive (nem service account, nem API
+key) -- o usuário exporta manualmente um `.txt`/`.csv` (nome do arquivo + id do arquivo no Drive,
+um por linha) e sobe esse arquivo junto com a planilha de medição, na mesma tela de importação.
+
+- **`backend/src/planilhaValores.ts`**: nova função `nomePlanAnalitica(prod, dataBaseIso)` --
+  reproduz em JS a mesma fórmula da coluna gerada `carteira.cart_nome_plan_analitica` (SQL,
+  `schema.pg.sql`), pra poder casar cada linha da planilha com o nome de arquivo do `.txt` ANTES
+  do INSERT (a coluna gerada do banco só existe depois). Testado em
+  `backend/scripts/testa-conversores-medicao.ts` contra os mesmos casos que a coluna gerada já
+  tinha em `test-trigger.ts` -- os dois lados batem.
+- **`backend/src/routes/importarCarteira.ts`**: aceita `planilhas?: { nome, id }[]` no body
+  (opcional -- sem isso a importação segue igual, só sem preencher a URL). Casamento é por nome
+  exato; quando bate, grava `https://drive.google.com/file/d/{id}/view` em
+  `cart_url_plan_analitica` no INSERT. Linha que ficaria de fora do casamento entra na lista nova
+  `relatorio.semPlanilha` (só aparece quando uma lista foi enviada) -- não bloqueia a importação,
+  só avisa antes de confirmar.
+- **`frontend/src/admin/ImportarCarteiraModal.tsx`**: segundo campo de arquivo (`.txt`/`.csv`,
+  opcional), parser tolerante a `,`/`;`/tab e a uma linha de cabeçalho opcional
+  (`parsePlanilhasAnaliticas`). Relatório ganhou a seção "Sem planilha correspondente na lista do
+  Drive" (nome do cliente + nome de arquivo que era esperado), pro usuário conferir antes de
+  gravar.
+
+**Verificação**: `tsc --noEmit` limpo nos dois lados (backend e frontend). Lógica de casamento
+testada via script (`nomePlanAnalitica` contra os mesmos casos da coluna gerada do banco). **Não
+testado contra o Postgres de produção nem no navegador** -- sem `DATABASE_URL` local e por
+política do projeto (não manusear essa credencial, ver achado logo acima). Fica pra ser exercitado
+de verdade quando o usuário reimportar julho/2026 com o `.txt` de planilhas.
 
 - `tsc -p .` (backend) e `tsc -b` + `vite build` (frontend) limpos. `oxlint` não rodou -- o binário
   nativo do oxlint está bloqueado por uma política de Controle de Aplicativo do Windows nesta
