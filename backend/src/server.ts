@@ -41,7 +41,11 @@ app.use(
     },
   })
 );
-app.use(express.json());
+// limite padrão do express.json() é só 100kb -- a importação de carteira manda a planilha de
+// medição inteira (centenas de linhas) + a lista de planilhas do Drive num POST só, e passa
+// disso fácil (achado 2026-08-31, HTTP 413 testando com 244 linhas + 245 links). 10mb cobre
+// isso com folga sem abrir a porta pra payload absurdo.
+app.use(express.json({ limit: "10mb" }));
 
 // Headers de segurança básicos em toda resposta -- sem isso a tela de login/admin (protegida
 // só por PIN, sem 2FA) podia ser embutida num <iframe> de terceiro (clickjacking), e faltava
