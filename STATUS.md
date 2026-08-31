@@ -2556,6 +2556,17 @@ banco**: `usuarios_permissoes_menu.menu_key` já é `TEXT` livre, sem `CHECK`/en
 valores -- a rota dedicada (`permissoes.ts`) também não valida contra lista fixa. `tsc --noEmit`
 limpo; não testado no navegador (mesma restrição de `DATABASE_URL`/credencial de produção).
 
+**5ª rodada, correção de padrão a pedido do usuário**: a 4ª rodada escondia a coluna de ações
+inteira quando faltava a permissão -- **trocado pra "bloqueado" (botão sempre visível, só
+`disabled`)**, regra explícita do usuário pra valer daqui pra frente em qualquer botão
+condicionado a permissão (registrado em `project_webcrm.md`, memória). `CarteiraMesPage.tsx`/
+`ClienteDashboardPage.tsx` voltaram a passar `renderActions` sempre, com `disabled={!permissao ||
+!condição de dado}` no botão em vez de `renderActions={undefined}`. Mesma leva, o botão
+"Relatório" (PDF analítico de consumo) em `FaturamentoMesPage.tsx` ganhou a MESMA permissão
+`planilha_analitica` (reaproveitada, não uma nova) -- também "bloqueado" desde o início, nunca
+chegou a esconder. Rótulo do menu em `menus.ts` ajustado de "Planilha Analítica (Carteira)" pra
+"Planilha e Relatório Analítico", já que agora cobre as duas telas. `tsc --noEmit` limpo.
+
 - `tsc -p .` (backend) e `tsc -b` + `vite build` (frontend) limpos. `oxlint` não rodou -- o binário
   nativo do oxlint está bloqueado por uma política de Controle de Aplicativo do Windows nesta
   máquina (não é regressão, não é do código).

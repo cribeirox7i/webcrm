@@ -8,6 +8,7 @@ import { FaturamentoForm, valuesToPayload, type FaturamentoFormValues } from "./
 import { exportCsvProtheus, exportRelatorioConsumoPdf } from "../lib/export";
 import { CsvIcon, EditIcon, PdfIcon } from "./icons";
 import { usePermissao } from "../auth/usePermissao";
+import { useAuth } from "../auth/AuthContext";
 
 function formatMoney(v: number): string {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -36,6 +37,10 @@ interface FaturamentoMesPageProps {
 
 export function FaturamentoMesPage({ cartMesId, cartAnoMes, onBack }: FaturamentoMesPageProps) {
   const { podeEditar } = usePermissao("financeiro");
+  // mesma permissão que já condiciona o botão "Planilha" em Carteira/dashboard do cliente --
+  // decisão do usuário. Botão fica visível, só desabilitado (padrão "bloqueado", não "some").
+  const { permissoes } = useAuth();
+  const permPlanilhaAnalitica = !!permissoes?.get("planilha_analitica")?.leitura;
   const [faturamentos, setFaturamentos] = useState<FaturamentoDetalhe[]>([]);
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [produtos, setProdutos] = useState<Produto[]>([]);
@@ -316,7 +321,13 @@ export function FaturamentoMesPage({ cartMesId, cartAnoMes, onBack }: Faturament
                 <EditIcon />
               </button>
             )}
-            <button className="icon-btn" title="Relatório" aria-label="Relatório" onClick={() => handleExportarRelatorio(f)}>
+            <button
+              className="icon-btn"
+              title={permPlanilhaAnalitica ? "Relatório" : "Sem permissão pra gerar o relatório analítico"}
+              aria-label="Relatório"
+              disabled={!permPlanilhaAnalitica}
+              onClick={() => handleExportarRelatorio(f)}
+            >
               <PdfIcon />
             </button>
             <button className="icon-btn" title="CSV Protheus" aria-label="CSV Protheus" onClick={() => handleCsvProtheus(f)}>

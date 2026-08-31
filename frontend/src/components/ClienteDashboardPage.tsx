@@ -228,24 +228,22 @@ export function ClienteDashboardPage({ clienteId, onBack }: ClienteDashboardPage
     );
   }
 
-  // undefined (não uma função que devolve null) quando falta a permissão -- o DataGrid usa
-  // `!!renderActions` pra decidir se a coluna de ações existe, então isso some a coluna
-  // inteira, não só o botão dentro dela.
-  const carteiraRowActions = permPlanilhaAnalitica
-    ? (c: Carteira) => (
-        <div className="row-actions">
-          <button
-            className="icon-btn"
-            title="Planilha"
-            aria-label="Planilha"
-            disabled={!c.cart_url_plan_analitica}
-            onClick={() => window.open(c.cart_url_plan_analitica ?? "", "_blank", "noopener,noreferrer")}
-          >
-            <ExternalLinkIcon />
-          </button>
-        </div>
-      )
-    : undefined;
+  // botão sempre visível -- desabilitado (não escondido) quando falta a permissão ou quando a
+  // linha simplesmente não tem URL. Padrão "bloqueado, não some", decisão do usuário pra manter
+  // consistência entre todos os botões condicionados a permissão.
+  const carteiraRowActions = (c: Carteira) => (
+    <div className="row-actions">
+      <button
+        className="icon-btn"
+        title="Planilha"
+        aria-label="Planilha"
+        disabled={!permPlanilhaAnalitica || !c.cart_url_plan_analitica}
+        onClick={() => window.open(c.cart_url_plan_analitica ?? "", "_blank", "noopener,noreferrer")}
+      >
+        <ExternalLinkIcon />
+      </button>
+    </div>
+  );
 
   // card de Contatos é idêntico nos dois layouts (com/sem Financeiro) -- monta uma vez só.
   const contatosCard = (

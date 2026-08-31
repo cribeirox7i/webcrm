@@ -19,9 +19,11 @@ export const MENUS: MenuDef[] = [
   { key: "pessoas", label: "Pessoas" },
   { key: "fornecedores", label: "Fornecedores" },
   { key: "pagadoria", label: "Pagadoria" },
-  // não é um item de navegação (sem NAV_ITEMS correspondente) -- só controla se o botão
-  // "Planilha" (link pra planilha analítica no Drive, em Carteira e no dashboard do cliente)
-  // aparece pro usuário. Só a permissão de Leitura tem efeito aqui; Inserção/Edição/Exclusão
-  // ficam sem uso, mesma tabela genérica de permissões por menu.
-  { key: "planilha_analitica", label: "Planilha Analítica (Carteira)" },
+  // não é um item de navegação (sem NAV_ITEMS correspondente) -- controla se o botão "Planilha"
+  // (link pra planilha analítica no Drive, em Carteira e no dashboard do cliente) e o botão
+  // "Relatório" (PDF analítico de consumo, em Faturamento) ficam habilitados -- sem a permissão,
+  // o botão continua visível, só desabilitado ("bloqueado", não "some"; decisão do usuário).
+  // Só a permissão de Leitura tem efeito aqui; Inserção/Edição/Exclusão ficam sem uso, mesma
+  // tabela genérica de permissões por menu.
+  { key: "planilha_analitica", label: "Planilha e Relatório Analítico" },
 ];

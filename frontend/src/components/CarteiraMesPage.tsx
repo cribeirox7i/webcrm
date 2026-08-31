@@ -169,26 +169,22 @@ export function CarteiraMesPage({ cartMesId, cartAnoMes, onBack }: CarteiraMesPa
         loading={loading}
         exportFilename={`carteira_${cartAnoMes.replace("/", "-")}`}
         actionsWidth={60}
-        // undefined (não uma função que devolve null) quando falta a permissão -- o DataGrid usa
-        // `!!renderActions` pra decidir se a coluna de ações existe, então isso some a coluna
-        // inteira, não só o botão dentro dela.
-        renderActions={
-          permPlanilhaAnalitica
-            ? (c) => (
-                <div className="row-actions">
-                  <button
-                    className="icon-btn"
-                    title="Planilha"
-                    aria-label="Planilha"
-                    disabled={!c.cart_url_plan_analitica}
-                    onClick={() => window.open(c.cart_url_plan_analitica ?? "", "_blank", "noopener,noreferrer")}
-                  >
-                    <ExternalLinkIcon />
-                  </button>
-                </div>
-              )
-            : undefined
-        }
+        // botão sempre visível -- desabilitado (não escondido) quando falta a permissão ou
+        // quando a linha simplesmente não tem URL. Padrão "bloqueado, não some", decisão do
+        // usuário pra manter consistência entre todos os botões condicionados a permissão.
+        renderActions={(c) => (
+          <div className="row-actions">
+            <button
+              className="icon-btn"
+              title="Planilha"
+              aria-label="Planilha"
+              disabled={!permPlanilhaAnalitica || !c.cart_url_plan_analitica}
+              onClick={() => window.open(c.cart_url_plan_analitica ?? "", "_blank", "noopener,noreferrer")}
+            >
+              <ExternalLinkIcon />
+            </button>
+          </div>
+        )}
       />
     </div>
   );
