@@ -70,6 +70,47 @@ export interface RelatorioImportacao {
   clientes?: { cliente_id: number; cliente_nome: string }[];
 }
 
+/** Uma linha de um dos arquivos de consumo analítico (xlsx ou csv, mesmo layout), já mapeada
+ * pelas colunas (ver ImportarConsumoModal). Vários arquivos são lidos e concatenados no
+ * navegador antes de mandar pra cá -- o backend não sabe de qual arquivo cada linha veio. */
+export interface LinhaConsumo {
+  idProduto: unknown;
+  cnpj: string | null;
+  data: unknown;
+  quantidade: unknown;
+  detalhamento: string | null;
+}
+
+export interface RelatorioImportacaoConsumo {
+  simulado: boolean;
+  mes: string;
+  linhasNaPlanilha: number;
+  aInserir: number;
+  clientesDistintos: number;
+  // agrupado por CNPJ (não por linha) -- um CNPJ se repete em dezenas/centenas de linhas neste
+  // arquivo. `candidatos` vem preenchido só quando o CNPJ é ambíguo (mais de 1 cliente
+  // cadastrado com o mesmo CNPJ); vazio quando simplesmente não existe cliente com esse CNPJ.
+  cnpjsPendentes: { cnpj: string; linhas: number; candidatos: { cliente_id: number; cliente_nome: string }[] }[];
+  // agrupado por ID_Produto (texto original do arquivo).
+  produtosPendentes: { idProduto: string; linhas: number }[];
+  // de onde vêm as linhas de precos_cliente que serão duplicadas pro mês da carga -- null quando
+  // não existe nenhum outro mês com preço cadastrado ainda (primeira carga do sistema).
+  precosOrigem: { cartMesId: number; anoMes: string; linhas: number } | null;
+  consumoExistenteNoMes: number;
+  precosExistentesNoMes: number;
+  faturamentoExistenteNoMes: number;
+  /** Só vem na simulação -- dropdowns de correção manual. */
+  clientes?: { cliente_id: number; cliente_nome: string }[];
+  produtos?: { produto_id: number; produto_nome: string }[];
+  // só na confirmação (simulado: false)
+  consumoInseridos?: number;
+  consumoApagados?: number;
+  precosDuplicados?: number;
+  precosApagados?: number;
+  faturamentoInseridos?: number;
+  faturamentoApagados?: number;
+}
+
 async function request<T>(path: string, token: string | null, options?: RequestInit): Promise<T> {
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (token) headers["Authorization"] = `Bearer ${token}`;
@@ -140,6 +181,21 @@ export const adminApi = {
     request<RelatorioImportacao>("/api/admin/importar-carteira", token, {
       method: "POST",
       body: JSON.stringify({ cartMesId, linhas, simular, correcoes, planilhas, urlsManuais }),
+    }),
+  // importação do consumo analítico -> consumo_ana + precos_cliente (duplicado) + faturamento.
+  // Mesmo padrão 2x de importarCarteira. `correcoesCnpj`/`correcoesProduto` são agrupados por
+  // CNPJ/ID_Produto (não por linha) -- ver RelatorioImportacaoConsumo.
+  importarConsumo: (
+    token: string,
+    cartMesId: number,
+    linhas: LinhaConsumo[],
+    simular: boolean,
+    correcoesCnpj?: Record<string, number>,
+    correcoesProduto?: Record<string, number>
+  ) =>
+    request<RelatorioImportacaoConsumo>("/api/admin/importar-consumo", token, {
+      method: "POST",
+      body: JSON.stringify({ cartMesId, linhas, simular, correcoesCnpj, correcoesProduto }),
     }),
   // sync dos índices econômicos com o Banco Central (SGS) -- POST /api/admin/indices/sync
   sincronizarIndices: (token: string) =>

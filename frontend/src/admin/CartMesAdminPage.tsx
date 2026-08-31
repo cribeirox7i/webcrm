@@ -5,7 +5,8 @@ import { DataGrid, type DataGridColumn, type DataGridFilter } from "../component
 import { StatCards } from "../components/StatCards";
 import { CartMesForm, valuesToPayload, type CartMesFormValues } from "./CartMesForm";
 import { ImportarCarteiraModal } from "./ImportarCarteiraModal";
-import { EditIcon, TrashIcon, UploadIcon } from "../components/icons";
+import { ImportarConsumoModal } from "./ImportarConsumoModal";
+import { ChartIcon, EditIcon, TrashIcon, UploadIcon } from "../components/icons";
 import { clearFilterKeys, toggleFilterValue } from "../lib/filterValues";
 
 interface CartMesAdminPageProps {
@@ -22,6 +23,7 @@ export function CartMesAdminPage({ token, onLogout }: CartMesAdminPageProps) {
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [importandoPara, setImportandoPara] = useState<CartMes | null>(null);
+  const [importandoConsumoPara, setImportandoConsumoPara] = useState<CartMes | null>(null);
 
   // Filtro do DataGrid levantado pra cá (controlado) pra os cards de StatCards poderem
   // alternar o mesmo filtro que o dropdown "Vigência ativa" já mostra.
@@ -147,7 +149,7 @@ export function CartMesAdminPage({ token, onLogout }: CartMesAdminPageProps) {
         exportFilename="cart_mes"
         filterValues={filterValues}
         onFilterValuesChange={setFilterValues}
-        actionsWidth={140}
+        actionsWidth={180}
         renderActions={(m) => (
           <div className="row-actions">
             <button className="icon-btn" title="Editar" aria-label="Editar" onClick={() => setEditing(m)}>
@@ -160,6 +162,14 @@ export function CartMesAdminPage({ token, onLogout }: CartMesAdminPageProps) {
               onClick={() => setImportandoPara(m)}
             >
               <UploadIcon />
+            </button>
+            <button
+              className="icon-btn"
+              title="Importar consumo analítico para este mês"
+              aria-label="Importar consumo"
+              onClick={() => setImportandoConsumoPara(m)}
+            >
+              <ChartIcon />
             </button>
             <button className="icon-btn danger" title="Excluir" aria-label="Excluir" onClick={() => handleDelete(m)}>
               <TrashIcon />
@@ -191,6 +201,15 @@ export function CartMesAdminPage({ token, onLogout }: CartMesAdminPageProps) {
           cartMes={importandoPara}
           token={token}
           onClose={() => setImportandoPara(null)}
+          onLogout={onLogout}
+        />
+      )}
+
+      {importandoConsumoPara && (
+        <ImportarConsumoModal
+          cartMes={importandoConsumoPara}
+          token={token}
+          onClose={() => setImportandoConsumoPara(null)}
           onLogout={onLogout}
         />
       )}

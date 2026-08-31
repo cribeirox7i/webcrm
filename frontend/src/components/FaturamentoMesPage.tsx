@@ -21,7 +21,10 @@ function formatValor(v: number): string {
 
 function formatDate(iso: string | null): string {
   if (!iso) return "";
-  const [y, m, d] = iso.split("-");
+  // consumo_data pode vir com hora (ex. "2026-07-27 15:52:48", da importação de Consumo) --
+  // corta pros 10 primeiros caracteres antes de separar, senão a hora vaza pro "dia" (achado
+  // 2026-08-31: "27 15:52:48/07/2026").
+  const [y, m, d] = iso.slice(0, 10).split("-");
   return d && m && y ? `${d}/${m}/${y}` : iso;
 }
 

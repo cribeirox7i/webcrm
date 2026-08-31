@@ -11,6 +11,7 @@ import { propostaAnexoRouter } from "./routes/propostaAnexo";
 import { parametrosRouter } from "./routes/parametros";
 import { parametrosStorageRouter } from "./routes/parametrosStorage";
 import { importarCarteiraRouter } from "./routes/importarCarteira";
+import { importarConsumoRouter } from "./routes/importarConsumo";
 import { authRouter } from "./routes/auth";
 import { usuariosRouter } from "./routes/usuarios";
 import { requireAdmin } from "./adminAuth";
@@ -88,6 +89,9 @@ app.use("/api/usuario_sessoes", requireAdmin);
 app.use("/api/parametros_storage_menu", requireAdmin);
 // importação da planilha de medição -> carteira (apaga e regrava o mês inteiro): só com o PIN
 app.use("/api/admin/importar-carteira", requireAdmin);
+// importação do consumo analítico -> consumo_ana + precos_cliente (duplicado) + faturamento
+// (apaga e regrava o mês inteiro nas 3 tabelas): só com o PIN
+app.use("/api/admin/importar-consumo", requireAdmin);
 // sync dos índices econômicos com o Banco Central (SGS): só com o PIN mestre
 app.use("/api/admin/indices", requireAdmin, adminIndicesRouter);
 // rotas dedicadas de /api/usuarios (criar com senha provisória, enviar convite) --
@@ -95,6 +99,7 @@ app.use("/api/admin/indices", requireAdmin, adminIndicesRouter);
 app.use("/api/usuarios", usuariosRouter);
 app.use("/api", parametrosStorageRouter);
 app.use("/api", importarCarteiraRouter);
+app.use("/api", importarConsumoRouter);
 
 // parametros_gerais (branding) precisa aceitar tanto o PIN mestre (tela de Admin, sem
 // sessão de usuário) quanto a sessão do app principal -- montado antes do requireUserAuth

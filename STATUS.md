@@ -1,6 +1,26 @@
 # WEBCRM - Status do Projeto
 
-> Documento de retomada. Última atualização: **2026-08-31** - importação de carteira ganhou um
+> Documento de retomada. Última atualização: **2026-08-31** - **Importar Consumo** novo (Admin >
+> Financeiro, botão ao lado de Importar Carteira): sobe um GRUPO de arquivos xlsx/csv no mesmo
+> layout (`ID_Produto;CNPJ;Data;quantidade;Detalhamento`) e faz três coisas juntas pro mês
+> escolhido -- grava em `consumo_ana` (ID_Produto é direto o `produto_id`, CNPJ casa por
+> normalização igual carteira), duplica TODAS as linhas de `precos_cliente` do mês mais recente
+> que já tem preço pro mês novo, e cria uma linha-âncora de `faturamento` por cliente distinto
+> que apareceu no consumo (os valores de faturamento continuam calculados ao vivo pela view
+> `faturamento_detalhe`, nada novo armazenado ali). Reimportar o mesmo mês substitui as 3 tabelas
+> inteiras. CNPJ/ID_Produto sem match ficam de fora, **agrupados** (não linha a linha -- um CNPJ
+> se repete em centenas de linhas nesse arquivo) num relatório de simulação, com dropdown pra
+> corrigir antes de confirmar. **Achado e corrigido durante o teste**: o parser de CSV, testado
+> fora do navegador com decode `latin1` (só pra debugar), quebrou com um BOM UTF-8 no início do
+> arquivo real (`consumo_analitico_PEP.csv`) -- confirmado que `File.text()` do navegador já tira
+> o BOM sozinho (testado replicando o decode real via `TextDecoder`), mas um `startsWith("﻿")`
+> defensivo foi adicionado mesmo assim, sem custo. `formatDate` (`FaturamentoMesPage.tsx`) também
+> corrigido -- quebrava se `consumo_data` viesse com hora (a importação nova grava com hora, ex.
+> "2026-07-27 15:52:48"). Ver "Leva Importar Consumo (consumo_ana + precos_cliente + faturamento)"
+> no fim do arquivo. **Não testado contra o Postgres de produção nem no navegador** -- sem
+> `DATABASE_URL` local, por política do projeto.
+>
+> Contexto anterior: 2026-08-31 - importação de carteira ganhou um
 > segundo arquivo opcional (`.txt`/`.csv` com nome do arquivo + link/id do Google Drive, exportado
 > à mão pelo usuário, sem integração com a API do Drive) pra preencher `cart_url_plan_analitica`
 > (URL do botão "Planilha") durante a importação -- até aqui só jan-jun/2026 tinham essa URL,
@@ -2555,3 +2575,86 @@ limpo; não testado no navegador (mesma restrição de `DATABASE_URL`/credencial
 > Supabase **com a senha em texto puro** (entrada `webcrm-backend`, porta direta 5432). A política
 > do projeto sempre foi a assistente não manusear essa credencial -- não foi usada nesta leva
 > (verificação foi por PGlite). Vale o usuário rotacionar a senha e/ou tirar do arquivo.
+
+## Leva Importar Consumo (consumo_ana + precos_cliente + faturamento) (2026-08-31)
+
+A pedido do usuário: hoje não existe carga de consumo nenhuma (só carteira). O fluxo real é
+mensal -- sobe um GRUPO de arquivos (xlsx e/ou csv, todos no mesmo layout:
+`ID_Produto;CNPJ;Data;quantidade;Detalhamento`, um deles usado como exemplo real,
+`consumo_analitico_PEP.csv`, 8643 linhas) e três coisas acontecem juntas pro mês escolhido:
+
+1. **`consumo_ana`**: uma linha por linha do(s) arquivo(s). `ID_Produto` é usado DIRETO como
+   `produto_id` (confirmado pelo usuário: já é a chave real, sem match por nome) -- só precisa
+   ser um inteiro que exista em `produtos`. CNPJ casa por normalização contra `clientes`, mesma
+   função (`normalizaCnpj`) já usada na importação de carteira.
+2. **`precos_cliente`**: duplica TODAS as linhas do `cart_mes_id` mais recente (por
+   `cart_ano_mes`, não pelo id numérico -- que não é cronológico) que já tem alguma linha de
+   preço, excluindo o mês alvo, pro mês novo -- decisão do usuário ("a tabela de preços não muda
+   todo mês, carrega adiante"). Se não existir nenhum mês anterior com preço, a duplicação não
+   acontece (relatório avisa) e a tabela fica vazia pra esse mês, sem travar o resto da importação.
+3. **`faturamento`**: uma linha-âncora (`cliente_id`, `cart_mes_id`) por cliente DISTINTO que
+   apareceu em `consumo_ana` nesta importação (não em todo o histórico). **Achado no meio do
+   design**: a tabela `faturamento` não tem coluna nenhuma de quantidade/valor -- esses números
+   (`fat_vlr_liq`/`fat_vlr_brt`) já são calculados AO VIVO pela view `faturamento_detalhe`, que
+   soma `precos_cliente_mes_atual` (a mesma view que já cruza `consumo_ana` + `precos_cliente`
+   por `cart_mes_id`) -- então "totalizar quantidade e total" já acontece sozinho assim que os
+   passos 1 e 2 estiverem certos; não precisou (nem dava) gravar total nenhum aqui.
+
+Reimportar o mesmo mês **substitui as 3 tabelas inteiras** daquele `cart_mes_id` (mesma decisão
+"substitui tudo" da carteira) -- idempotente.
+
+**CNPJ/ID_Produto sem match**: agrupado por CNPJ ou por ID_Produto, NÃO por linha -- a pedido
+explícito do usuário ("aqui não pode ser escolha linha a linha, muito granular"), porque um
+único CNPJ se repete em dezenas/centenas de linhas neste arquivo (cada linha é 1 evento de
+checagem, não 1 cliente). O relatório da simulação mostra cada CNPJ/ID_Produto pendente com a
+contagem de linhas afetadas e um dropdown -- a escolha feita ali vale pra TODAS as linhas
+daquele CNPJ/ID_Produto, reanalisa na hora (mesmo padrão de `corrigirCliente` da carteira). CNPJ
+ambíguo (mais de 1 cliente cadastrado com o mesmo CNPJ) entra na mesma lista, com os candidatos
+reais como opção no dropdown em vez da lista inteira.
+
+- **`backend/src/routes/importarConsumo.ts`** (novo): rota `POST /admin/importar-consumo`, PIN
+  de admin (`requireAdmin`, montada em `server.ts` igual `importar-carteira`). `simular: true`
+  devolve o relatório completo (linhas a inserir, CNPJs/produtos pendentes com candidatos, de
+  onde vêm os preços a duplicar, contagem do que já existe no mês) sem gravar nada;
+  `simular: false` grava as 3 tabelas numa transação só (`DELETE` das 3 pro mês alvo, depois os
+  3 `INSERT`s -- o de `precos_cliente` é um `INSERT ... SELECT` direto no banco, sem passar os
+  dados pela aplicação). Reaproveita `dataIso`/`numero`/`texto` (`planilhaValores.ts`) e
+  `normalizaCnpj` (`matchCliente.ts`) -- nenhuma função pura nova no backend, só a rota.
+- **`frontend/src/admin/ImportarConsumoModal.tsx`** (novo): campo de arquivo `multiple`
+  (`.xlsx,.csv`), lê e concatena todos antes de mandar. Parser de xlsx via `ExcelJS` (mesmo
+  padrão do `ImportarCarteiraModal`); parser de CSV próprio (`parseCsv`/`splitCsvLine`) --
+  autodetecta `;` vs `,` pela linha de cabeçalho, suporta aspas (texto de Detalhamento com o
+  delimitador dentro, caso raro), tolera BOM UTF-8 no início do arquivo.
+- **`CartMesAdminPage.tsx`**: terceiro botão-ícone na linha do mês (`ChartIcon`), ao lado de
+  Editar/Importar carteira/Excluir -- abre o modal novo, mesmo padrão de estado
+  (`importandoConsumoPara`).
+- **`adminClient.ts`**: tipos `LinhaConsumo`/`RelatorioImportacaoConsumo` + `importarConsumo()`,
+  espelhando `LinhaMedicao`/`RelatorioImportacao`/`importarCarteira()`.
+
+**Achado real durante o teste do parser** (não é bug do código final, mas quase virou um):
+testando o `parseCsv` fora do navegador (script Node avulso, só pra validar a lógica) com
+`fs.readFileSync(..., "latin1")`, o header saiu como `IIDPRODUTO` em vez de `IDPRODUTO` -- o
+arquivo real (`consumo_analitico_PEP.csv`) tem um BOM UTF-8 no início, e decodificado como
+`latin1` (decode errado, só do script de teste) os 3 bytes do BOM viram `ï»¿`, e o `ï` sobrevive
+à normalização de acento (`.normalize("NFD")` decompõe em `i` + acento, o acento é removido mas o
+`i` fica) virando um `I` extra colado no cabeçalho. Testado de novo simulando o decode REAL que o
+navegador usa (`File.text()`, equivalente a `new TextDecoder("utf-8").decode()`, que já retira o
+BOM por spec) -- aí bate certo, 8643 linhas, colunas corretas. Mesmo assim, um
+`textoBruto.startsWith("\uFEFF")` defensivo foi adicionado no início do `parseCsv` (sem custo,
+protege contra qualquer navegador/gerador de arquivo que não tire o BOM sozinho) -- testado com
+o BOM presente de propósito, mesmas 8643 linhas.
+
+**`FaturamentoMesPage.tsx` corrigido no mesmo passo**: `formatDate` fazia `iso.split("-")` direto
+-- funciona pra `"2026-07-05"`, mas quebra pra `"2026-07-27 15:52:48"` (a hora vaza pro "dia":
+vira `"27 15:52:48/07/2026"`). A importação de carteira sempre gravou `consumo_data` sem hora
+(campo não existia nela), mas a de Consumo agora grava com hora (o arquivo real tem timestamp de
+segundo, dado de auditoria de checagem PEP/OFAC/etc. -- perder isso seria jogar fora informação
+real). Corrigido cortando pros 10 primeiros caracteres antes de separar.
+
+**Verificação**: `tsc --noEmit` limpo nos dois lados. Parser de CSV testado à exaustão contra o
+arquivo real do usuário (`C:\A\2026.07\consumo_analitico_PEP.csv`, 8643 linhas, 9 CNPJs
+distintos, 1 produto) -- via scripts Node avulsos replicando o decode `File.text()` do navegador,
+com e sem BOM de propósito. **Não testado**: a rota do backend (SQL) contra o Postgres de
+produção, nem a tela no navegador -- sem `DATABASE_URL` local, mesma política de não manusear
+essa credencial (ver achado da leva de Índices). O teste de verdade acontece na próxima
+importação real do usuário, com o mês/preços de origem certos.
