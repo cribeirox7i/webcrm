@@ -4,6 +4,7 @@ import type { Carteira, Cliente } from "../api/types";
 import { StatCards } from "./StatCards";
 import { DataGrid, type DataGridColumn } from "./DataGrid";
 import { usePageTitle } from "../PageTitleContext";
+import { useAuth } from "../auth/AuthContext";
 import { ExternalLinkIcon } from "./icons";
 
 function formatMoney(v: number | null): string {
@@ -27,6 +28,8 @@ interface CarteiraMesPageProps {
 }
 
 export function CarteiraMesPage({ cartMesId, cartAnoMes, onBack }: CarteiraMesPageProps) {
+  const { permissoes } = useAuth();
+  const permPlanilhaAnalitica = !!permissoes?.get("planilha_analitica")?.leitura;
   const [carteira, setCarteira] = useState<Carteira[]>([]);
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [loading, setLoading] = useState(true);
@@ -166,19 +169,26 @@ export function CarteiraMesPage({ cartMesId, cartAnoMes, onBack }: CarteiraMesPa
         loading={loading}
         exportFilename={`carteira_${cartAnoMes.replace("/", "-")}`}
         actionsWidth={60}
-        renderActions={(c) => (
-          <div className="row-actions">
-            <button
-              className="icon-btn"
-              title="Planilha"
-              aria-label="Planilha"
-              disabled={!c.cart_url_plan_analitica}
-              onClick={() => window.open(c.cart_url_plan_analitica ?? "", "_blank", "noopener,noreferrer")}
-            >
-              <ExternalLinkIcon />
-            </button>
-          </div>
-        )}
+        // undefined (não uma função que devolve null) quando falta a permissão -- o DataGrid usa
+        // `!!renderActions` pra decidir se a coluna de ações existe, então isso some a coluna
+        // inteira, não só o botão dentro dela.
+        renderActions={
+          permPlanilhaAnalitica
+            ? (c) => (
+                <div className="row-actions">
+                  <button
+                    className="icon-btn"
+                    title="Planilha"
+                    aria-label="Planilha"
+                    disabled={!c.cart_url_plan_analitica}
+                    onClick={() => window.open(c.cart_url_plan_analitica ?? "", "_blank", "noopener,noreferrer")}
+                  >
+                    <ExternalLinkIcon />
+                  </button>
+                </div>
+              )
+            : undefined
+        }
       />
     </div>
   );

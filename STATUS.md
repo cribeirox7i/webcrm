@@ -2524,6 +2524,18 @@ sufixo nem com `_rds` bateu na lista do Drive) agora tem um campo de texto pra c
 `adminClient.ts`/`ImportarCarteiraModal.tsx` (frontend), no mesmo padrão que `correcoes` (cliente
 manual) já usava. `tsc --noEmit` limpo nos dois lados.
 
+**4ª rodada, a pedido do usuário**: botão "Planilha" (Carteira e dashboard do cliente) agora tem
+permissão própria, separada de Financeiro -- usuário sem ela nem vê o botão (coluna de ações some
+inteira, não só o botão desabilitado). Menu novo `planilha_analitica` em `frontend/src/menus.ts`
+(só a flag Leitura tem efeito; Inserção/Edição/Exclusão ficam sem uso, mesma tabela genérica de
+permissões) -- aparece automaticamente na tela Admin > Usuários > Permissões (`MENUS` já é a lista
+que dirige aquela tabela, sem código extra). `CarteiraMesPage.tsx`/`ClienteDashboardPage.tsx`
+passam `renderActions={undefined}` (não uma função que devolve `null`) quando falta a permissão --
+o `DataGrid` usa `!!renderActions` pra decidir se a coluna de ações existe. **Sem migração de
+banco**: `usuarios_permissoes_menu.menu_key` já é `TEXT` livre, sem `CHECK`/enum restringindo
+valores -- a rota dedicada (`permissoes.ts`) também não valida contra lista fixa. `tsc --noEmit`
+limpo; não testado no navegador (mesma restrição de `DATABASE_URL`/credencial de produção).
+
 - `tsc -p .` (backend) e `tsc -b` + `vite build` (frontend) limpos. `oxlint` não rodou -- o binário
   nativo do oxlint está bloqueado por uma política de Controle de Aplicativo do Windows nesta
   máquina (não é regressão, não é do código).

@@ -32,8 +32,9 @@ interface ClienteDashboardPageProps {
 }
 
 export function ClienteDashboardPage({ clienteId, onBack }: ClienteDashboardPageProps) {
-  const { menusPermitidos } = useAuth();
+  const { menusPermitidos, permissoes } = useAuth();
   const permFinanceiro = !!menusPermitidos?.has("financeiro");
+  const permPlanilhaAnalitica = !!permissoes?.get("planilha_analitica")?.leitura;
 
   const [cliente, setCliente] = useState<Cliente | null>(null);
   const [grupos, setGrupos] = useState<GrupoEcon[]>([]);
@@ -227,19 +228,24 @@ export function ClienteDashboardPage({ clienteId, onBack }: ClienteDashboardPage
     );
   }
 
-  const carteiraRowActions = (c: Carteira) => (
-    <div className="row-actions">
-      <button
-        className="icon-btn"
-        title="Planilha"
-        aria-label="Planilha"
-        disabled={!c.cart_url_plan_analitica}
-        onClick={() => window.open(c.cart_url_plan_analitica ?? "", "_blank", "noopener,noreferrer")}
-      >
-        <ExternalLinkIcon />
-      </button>
-    </div>
-  );
+  // undefined (não uma função que devolve null) quando falta a permissão -- o DataGrid usa
+  // `!!renderActions` pra decidir se a coluna de ações existe, então isso some a coluna
+  // inteira, não só o botão dentro dela.
+  const carteiraRowActions = permPlanilhaAnalitica
+    ? (c: Carteira) => (
+        <div className="row-actions">
+          <button
+            className="icon-btn"
+            title="Planilha"
+            aria-label="Planilha"
+            disabled={!c.cart_url_plan_analitica}
+            onClick={() => window.open(c.cart_url_plan_analitica ?? "", "_blank", "noopener,noreferrer")}
+          >
+            <ExternalLinkIcon />
+          </button>
+        </div>
+      )
+    : undefined;
 
   // card de Contatos é idêntico nos dois layouts (com/sem Financeiro) -- monta uma vez só.
   const contatosCard = (
