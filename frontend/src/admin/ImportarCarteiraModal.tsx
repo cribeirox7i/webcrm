@@ -54,20 +54,27 @@ function valorCru(v: ExcelJS.CellValue): unknown {
 }
 
 /** Lê o txt/csv exportado manualmente da pasta do Drive (uma linha por planilha: nome do arquivo
- * .xlsx e o id do arquivo no Drive, separados por vírgula, ponto-e-vírgula ou tab -- sem
- * integração com a API do Drive, ver conversa com o usuário). Aceita ou não uma linha de
- * cabeçalho ("nome,id"); linhas sem os dois campos são ignoradas. */
+ * .xlsx e o link/id do arquivo no Drive) -- sem integração com a API do Drive, ver conversa com o
+ * usuário. Tolerante ao formato real que apareceu na prática: separador vírgula, ponto-e-vírgula
+ * ou tab, com colunas vazias/decorativas no meio (ex. exportos de planilha que colam uma coluna
+ * ";" solta entre nome e link) -- por isso ignora tokens vazios em vez de assumir posição fixa, e
+ * usa sempre o PRIMEIRO token como nome e o ÚLTIMO como link/id. Se o último token já for uma URL
+ * (começa com "http"), usa ela direto; se for só o id do arquivo, monta o link do Drive. */
 function parsePlanilhasAnaliticas(texto: string): PlanilhaAnalitica[] {
   const out: PlanilhaAnalitica[] = [];
   for (const linhaBruta of texto.split(/\r?\n/)) {
     const linha = linhaBruta.trim();
     if (!linha) continue;
-    const partes = linha.split(/[,;\t]/).map((p) => p.trim().replace(/^["']|["']$/g, ""));
+    const partes = linha
+      .split(/[,;\t]/)
+      .map((p) => p.trim().replace(/^["']|["']$/g, ""))
+      .filter(Boolean);
     if (partes.length < 2) continue;
-    const [nome, id] = partes;
-    if (!nome || !id) continue;
-    if (nome.toLowerCase() === "nome" && id.toLowerCase() === "id") continue; // cabeçalho
-    out.push({ nome, id });
+    const nome = partes[0];
+    const idOuUrl = partes[partes.length - 1];
+    if (nome.toLowerCase() === "nome" && idOuUrl.toLowerCase() === "id") continue; // cabeçalho
+    const url = /^https?:\/\//i.test(idOuUrl) ? idOuUrl : `https://drive.google.com/file/d/${idOuUrl}/view`;
+    out.push({ nome, url });
   }
   return out;
 }
@@ -264,7 +271,7 @@ export function ImportarCarteiraModal({ cartMes, token, onClose, onLogout }: Imp
             <p className="page-subtitle">
               {planilhas.length > 0
                 ? `${nomeArquivoPlanilhas}: ${planilhas.length} planilhas lidas.`
-                : "Uma linha por planilha, \"nome do arquivo,id do Drive\" — usado pra preencher o botão \"Planilha\" de cada linha da carteira. Sem esse arquivo, a importação segue igual, só sem esse link."}
+                : "Uma linha por planilha: nome do arquivo + link (ou id) do Drive, separados por vírgula, ponto-e-vírgula ou tab — usado pra preencher o botão \"Planilha\" de cada linha da carteira. Sem esse arquivo, a importação segue igual, só sem esse link."}
             </p>
           </div>
         )}

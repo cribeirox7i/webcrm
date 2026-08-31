@@ -35,12 +35,12 @@ export interface LinhaMedicao {
   prod: string | null;
 }
 
-/** Uma linha de { nome do arquivo .xlsx, id do arquivo no Drive } vinda do txt/csv que o usuário
- * exporta manualmente da pasta do Drive (sem integração com a API do Drive -- ver
- * ImportarCarteiraModal). */
+/** Uma linha de { nome do arquivo .xlsx, URL da planilha no Drive } vinda do txt/csv que o
+ * usuário exporta manualmente da pasta do Drive (sem integração com a API do Drive -- ver
+ * ImportarCarteiraModal, que já normaliza um id solto pra URL completa antes de chegar aqui). */
 export interface PlanilhaAnalitica {
   nome: string;
-  id: string;
+  url: string;
 }
 
 export interface RelatorioImportacao {

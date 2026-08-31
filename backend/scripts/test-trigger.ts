@@ -44,7 +44,7 @@ async function main() {
   );
   const cliente2 = await client.query("INSERT INTO clientes (cliente_nome) VALUES ('Teste Carteira') RETURNING cliente_id");
   const carteira = await client.query(
-    "INSERT INTO carteira (cliente_id, cart_mes_id, cart_prod, cart_data_base) VALUES ($1, $2, 'WEBCRED', '2026-08-15') RETURNING cart_nome_plan_analitica",
+    "INSERT INTO carteira (cliente_id, cart_mes_id, cart_db, cart_data_base) VALUES ($1, $2, 'WEBCRED', '2026-08-15') RETURNING cart_nome_plan_analitica",
     [cliente2.rows[0].cliente_id, cart.rows[0].cart_mes_id]
   );
   console.log("cart_nome_plan_analitica (esperado WEBCRED_Medicao_2026-08-01_2026-08-15.xlsx):", carteira.rows[0].cart_nome_plan_analitica);

@@ -39,21 +39,22 @@ importarCarteiraRouter.post("/admin/importar-carteira", async (req, res) => {
     // { índice da linha na planilha -> cliente_id escolhido à mão }, quando o usuário não
     // concorda com o cliente que a heurística escolheu (ver relatório na tela).
     correcoes?: unknown;
-    // lista { nome, id } importada de um txt/csv à parte (nome do arquivo .xlsx na pasta do
-    // Drive -> id do arquivo no Drive) -- usada pra preencher cart_url_plan_analitica. Casamento
-    // é por nome exato contra o mesmo nome que a coluna gerada `cart_nome_plan_analitica`
-    // calcularia (ver `nomePlanAnalitica`). Opcional: sem isso, a importação segue igual, só sem
-    // preencher a URL da planilha (comportamento de antes desta leva).
+    // lista { nome, url } importada de um txt/csv à parte (nome do arquivo .xlsx na pasta do
+    // Drive -> URL da planilha, já normalizada pelo frontend a partir de um id solto se preciso)
+    // -- usada pra preencher cart_url_plan_analitica. Casamento é por nome exato contra o mesmo
+    // nome que a coluna gerada `cart_nome_plan_analitica` calcularia (ver `nomePlanAnalitica`).
+    // Opcional: sem isso, a importação segue igual, só sem preencher a URL da planilha
+    // (comportamento de antes desta leva).
     planilhas?: unknown;
   };
 
-  const idPorNomePlanilha = new Map<string, string>();
+  const urlPorNomePlanilha = new Map<string, string>();
   if (Array.isArray(planilhas)) {
     planilhas.forEach((p) => {
       if (!p || typeof p !== "object") return;
       const nome = texto((p as { nome?: unknown }).nome);
-      const id = texto((p as { id?: unknown }).id);
-      if (nome && id) idPorNomePlanilha.set(nome, id);
+      const url = texto((p as { url?: unknown }).url);
+      if (nome && url) urlPorNomePlanilha.set(nome, url);
     });
   }
 
@@ -219,17 +220,17 @@ importarCarteiraRouter.post("/admin/importar-carteira", async (req, res) => {
   // segue normal e ninguém precisa ver um aviso de "planilha não encontrada" pra 100% das linhas.
   const urlPorIndice = new Map<number, string>();
   const semPlanilha: { indice: number; nome: string; nomePlanilhaEsperado: string }[] = [];
-  if (idPorNomePlanilha.size > 0) {
+  if (urlPorNomePlanilha.size > 0) {
     for (const item of paraInserir) {
-      const nomeEsperado = nomePlanAnalitica(texto(item.linha.prod), dataIso(item.linha.dataBase));
-      const id = nomeEsperado ? idPorNomePlanilha.get(nomeEsperado) : undefined;
-      if (id) {
-        urlPorIndice.set(item.indice, `https://drive.google.com/file/d/${id}/view`);
+      const nomeEsperado = nomePlanAnalitica(texto(item.linha.db), dataIso(item.linha.dataBase));
+      const url = nomeEsperado ? urlPorNomePlanilha.get(nomeEsperado) : undefined;
+      if (url) {
+        urlPorIndice.set(item.indice, url);
       } else {
         semPlanilha.push({
           indice: item.indice,
           nome: texto(item.linha.nome) ?? "",
-          nomePlanilhaEsperado: nomeEsperado ?? "(sem produto/data base pra montar o nome)",
+          nomePlanilhaEsperado: nomeEsperado ?? "(sem database/data base pra montar o nome)",
         });
       }
     }

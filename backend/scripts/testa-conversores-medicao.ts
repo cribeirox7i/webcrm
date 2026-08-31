@@ -28,19 +28,22 @@ for (const c of casos) {
 }
 
 // confere que `nomePlanAnalitica` (JS, usado na importação pra casar com a lista do Drive ANTES
-// do INSERT) reproduz exatamente a coluna gerada `cart_nome_plan_analitica` do banco (SQL).
-const casosNome: { prod: string | null; dataBase: string | null; esperado: string | null }[] = [
-  { prod: "Módulo Esc", dataBase: dataIso("31/07/2026"), esperado: "Módulo Esc_Medicao_2026-07-01_2026-07-31.xlsx" },
-  { prod: "2mj_factor", dataBase: "2026-07-05", esperado: "2mj_factor_Medicao_2026-07-01_2026-07-05.xlsx" },
-  { prod: null, dataBase: "2026-07-05", esperado: null },
-  { prod: "2mj_factor", dataBase: null, esperado: null },
+// do INSERT) reproduz exatamente a coluna gerada `cart_nome_plan_analitica` do banco (SQL) -- base
+// é cart_db (o "slug"), não cart_prod (texto descritivo); achado 2026-08-31 batendo a fórmula
+// original do AppSheet contra nomes reais de arquivo no Drive (ex. "2mj_factor_Medicao_...xlsx",
+// nunca "Módulo WebFactor_Medicao_...xlsx").
+const casosNome: { db: string | null; dataBase: string | null; esperado: string | null }[] = [
+  { db: "2mj_factor", dataBase: dataIso("31/07/2026"), esperado: "2mj_factor_Medicao_2026-07-01_2026-07-31.xlsx" },
+  { db: "crefazscm_webscm", dataBase: "2026-07-05", esperado: "crefazscm_webscm_Medicao_2026-07-01_2026-07-05.xlsx" },
+  { db: null, dataBase: "2026-07-05", esperado: null },
+  { db: "2mj_factor", dataBase: null, esperado: null },
 ];
 for (const c of casosNome) {
-  const obtido = nomePlanAnalitica(c.prod, c.dataBase);
+  const obtido = nomePlanAnalitica(c.db, c.dataBase);
   const ok = obtido === c.esperado;
   if (!ok) falhas++;
   console.log(
-    `${ok ? "OK  " : "FALHA"} nomePlanAnalitica(${JSON.stringify(c.prod)}, ${JSON.stringify(c.dataBase)}): ${JSON.stringify(obtido)}${ok ? "" : ` (esperado ${JSON.stringify(c.esperado)})`}`
+    `${ok ? "OK  " : "FALHA"} nomePlanAnalitica(${JSON.stringify(c.db)}, ${JSON.stringify(c.dataBase)}): ${JSON.stringify(obtido)}${ok ? "" : ` (esperado ${JSON.stringify(c.esperado)})`}`
   );
 }
 

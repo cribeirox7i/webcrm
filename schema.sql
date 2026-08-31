@@ -260,9 +260,12 @@ CREATE TABLE carteira (
     cart_rds                TEXT,
     cart_db                 TEXT,
     cart_prod               TEXT,
-    -- cart_nome_plan_analitica: nome de arquivo montado a partir de outras colunas desta linha -> gerada
+    -- cart_nome_plan_analitica: nome de arquivo montado a partir de outras colunas desta linha -> gerada.
+    -- Base é cart_db (o "slug" tipo "2mj_factor"), não cart_prod (texto descritivo tipo "Módulo
+    -- WebFactor") -- confirmado batendo a fórmula original do AppSheet contra nomes reais de
+    -- arquivo no Drive (achado 2026-08-31, ver STATUS.md).
     cart_nome_plan_analitica TEXT GENERATED ALWAYS AS (
-        cart_prod || '_Medicao_' ||
+        cart_db || '_Medicao_' ||
         strftime('%Y-%m-01', cart_data_base) || '_' ||
         strftime('%Y-%m-', cart_data_base) || strftime('%d', cart_data_base) || '.xlsx'
     ) VIRTUAL,

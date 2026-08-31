@@ -54,10 +54,16 @@ export function dataIso(v: unknown, comHora = false): string | null {
 /** Reproduz em JS a mesma fórmula da coluna gerada `carteira.cart_nome_plan_analitica` (ver
  * schema.pg.sql), pra poder casar cada linha com o nome de arquivo do Drive ANTES de gravar --
  * a coluna gerada só existe depois do INSERT. `dataBaseIso` precisa já estar em "AAAA-MM-DD"
- * (saída de `dataIso`); qualquer divergência de formato aqui faz o nome não bater com o do banco. */
-export function nomePlanAnalitica(prod: string | null, dataBaseIso: string | null): string | null {
-  if (!prod || !dataBaseIso || dataBaseIso.length < 10) return null;
+ * (saída de `dataIso`); qualquer divergência de formato aqui faz o nome não bater com o do banco.
+ *
+ * A base do nome é `cart_db` (o "slug" tipo "2mj_factor"), NÃO `cart_prod` (texto descritivo tipo
+ * "Módulo WebFactor") -- achado 2026-08-31 batendo a fórmula original do AppSheet (que referencia
+ * a coluna do database, não a do produto) contra nomes reais de arquivo no Drive. A coluna gerada
+ * do banco tinha o mesmo engano herdado da migração original; corrigida junto (ver
+ * backend/scripts/sql-2026-08-31-cart-nome-plan/). */
+export function nomePlanAnalitica(db: string | null, dataBaseIso: string | null): string | null {
+  if (!db || !dataBaseIso || dataBaseIso.length < 10) return null;
   const anoMes = dataBaseIso.slice(0, 7);
   const dia = dataBaseIso.slice(8, 10);
-  return `${prod}_Medicao_${anoMes}-01_${anoMes}-${dia}.xlsx`;
+  return `${db}_Medicao_${anoMes}-01_${anoMes}-${dia}.xlsx`;
 }

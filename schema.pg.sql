@@ -257,8 +257,12 @@ CREATE TABLE carteira (
     -- substring/concatenação puros (IMMUTABLE), sem precisar de to_char/data real -- isso evita
     -- o problema de to_char não ser IMMUTABLE (dependente de locale) e mantém a coluna
     -- declarativa, sem precisar virar lógica de aplicação.
+    -- Base é cart_db (o "slug" tipo "2mj_factor"), não cart_prod (texto descritivo tipo "Módulo
+    -- WebFactor") -- confirmado batendo a fórmula original do AppSheet contra nomes reais de
+    -- arquivo no Drive (achado 2026-08-31, ver STATUS.md e
+    -- backend/scripts/sql-2026-08-31-cart-nome-plan/ pra correção em produção).
     cart_nome_plan_analitica TEXT GENERATED ALWAYS AS (
-        cart_prod || '_Medicao_' ||
+        cart_db || '_Medicao_' ||
         substring(cart_data_base FROM 1 FOR 7) || '-01_' ||
         substring(cart_data_base FROM 1 FOR 7) || '-' || substring(cart_data_base FROM 9 FOR 2) || '.xlsx'
     ) STORED,
