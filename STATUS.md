@@ -2669,3 +2669,31 @@ com e sem BOM de propósito. **Não testado**: a rota do backend (SQL) contra o 
 produção, nem a tela no navegador -- sem `DATABASE_URL` local, mesma política de não manusear
 essa credencial (ver achado da leva de Índices). O teste de verdade acontece na próxima
 importação real do usuário, com o mês/preços de origem certos.
+
+### 2ª rodada: layout VOIP -- coluna "Duração" em vez de "quantidade" (2026-08-31)
+
+A pedido do usuário: um dos layouts de arquivo (VOIP) não tem coluna "quantidade" -- tem
+"Duração", mesmo papel (vira `consumo_qtd`, e a apuração de faturamento já multiplica
+`consumo_qtd × pc_vlr_unit` sozinha via `precos_cliente_mes_atual`/`faturamento_detalhe`, nenhuma
+mudança de view/SQL foi necessária, só a conversão na importação). O valor vem em notação de
+duração do Google Sheets (`"<dias> <HH:MM:SS>"`, às vezes com a palavra "day"/"days" no meio --
+confirmado com um exemplo real do usuário, `"0 days 00:04:05"`), precisando virar minutos --
+mesma fórmula que o usuário já usava na planilha antiga
+(`=(VALOR(ESQUERDA(...))*86400 + VALOR(DIREITA(...;8))*86400)/60`).
+
+- **`ImportarConsumoModal.tsx`**: `COLUNAS` passou a aceitar `"DURACAO"` como cabeçalho
+  alternativo pra `quantidade`. Nova função `duracaoParaMinutos` -- em vez de reproduzir o truque
+  do Sheets (`VALOR()` interpretando texto de hora como fração de dia, `×86400`), faz o parse
+  direto: pega os **últimos 8 caracteres** do texto como `HH:MM:SS` (funciona não importa quantos
+  dígitos tem a contagem de dias nem se tem "day"/"days" no meio, porque `HH:MM:SS` tem largura
+  fixa e fica sempre no fim) e o que vem ANTES do primeiro espaço como contagem de dias (`"0"` se
+  não achar espaço nenhum, ex. `"00:04:05"` sozinho). Se o valor já chegar como número (célula de
+  xlsx com formato de duração nativo do Excel/Sheets, fração de dia) só multiplica por 1440
+  (minutos num dia) -- caso não testado contra um xlsx real, só validado o formato de texto.
+  Aplicado tanto no `parseCsv` quanto no `parseXlsx`, detectando por qual cabeçalho a coluna
+  `quantidade` foi de fato casada (`"DURACAO"` vs `"QUANTIDADE"`) -- o backend não muda nada,
+  recebe sempre um número pronto em `LinhaConsumo.quantidade`.
+
+**Verificação**: `tsc --noEmit` limpo. `duracaoParaMinutos` testado via script Node contra o
+exemplo real do usuário (`"0 days 00:04:05"` -> 4,0833... min) e casos de borda (sem prefixo de
+dia, `"1 day"` singular, 2 dígitos de dia, valor numérico de fração de dia) -- todos batem.
