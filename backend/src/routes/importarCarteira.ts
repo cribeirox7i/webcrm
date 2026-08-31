@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { query, withTransaction } from "../db";
 import { escolhePorNome, normalizaCnpj, type ClienteCandidato } from "../matchCliente";
-import { dataIso, inteiro, nomePlanAnalitica, numero, texto } from "../planilhaValores";
+import { dataIso, inteiro, nomesPlanAnaliticaCandidatos, numero, texto } from "../planilhaValores";
 
 // Importação mensal da planilha de medição para a tabela `carteira` (Admin > Importar Carteira).
 // A planilha é lida no navegador (exceljs, já usado na exportação) e chega aqui como JSON --
@@ -222,15 +222,23 @@ importarCarteiraRouter.post("/admin/importar-carteira", async (req, res) => {
   const semPlanilha: { indice: number; nome: string; nomePlanilhaEsperado: string }[] = [];
   if (urlPorNomePlanilha.size > 0) {
     for (const item of paraInserir) {
-      const nomeEsperado = nomePlanAnalitica(texto(item.linha.db), dataIso(item.linha.dataBase));
-      const url = nomeEsperado ? urlPorNomePlanilha.get(nomeEsperado) : undefined;
+      // parte dos arquivos no Drive tem sufixo `_{rds}` antes do .xlsx, parte não -- tenta as
+      // duas variantes possíveis (ver nomesPlanAnaliticaCandidatos) e usa a primeira que bater.
+      const candidatos = nomesPlanAnaliticaCandidatos(
+        texto(item.linha.db),
+        texto(item.linha.rds),
+        dataIso(item.linha.dataBase)
+      );
+      const url = candidatos.map((nome) => urlPorNomePlanilha.get(nome)).find(Boolean);
       if (url) {
         urlPorIndice.set(item.indice, url);
       } else {
         semPlanilha.push({
           indice: item.indice,
           nome: texto(item.linha.nome) ?? "",
-          nomePlanilhaEsperado: nomeEsperado ?? "(sem database/data base pra montar o nome)",
+          nomePlanilhaEsperado: candidatos.length
+            ? candidatos.join(" ou ")
+            : "(sem database/data base pra montar o nome)",
         });
       }
     }

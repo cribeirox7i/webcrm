@@ -2498,6 +2498,25 @@ testada via script (`backend/scripts/testa-conversores-medicao.ts`, `nomePlanAna
 de Índices acima). Fica pra ser exercitado de verdade quando o usuário reimportar julho/2026 com
 o `.txt`/`.csv` de planilhas (depois de rodar o `02_corrigir_formula.sql` em produção).
 
+**2ª rodada de achados, testando de verdade em produção (2026-08-31)**:
+
+1. **HTTP 413** no "Analisar planilha" com a planilha real (244 linhas de medição + 245 links do
+   Drive num POST só) -- `express.json()` sem `limit` explícito usa o default do Express, que é
+   só **100kb**. Corrigido em `backend/src/server.ts` (`limit: "10mb"`).
+2. **Nem todo nome de arquivo segue o padrão simples**: parte dos arquivos no Drive tem um sufixo
+   extra com o RDS da linha antes do `.xlsx` (ex. `allesc_webesc_Medicao_2026-07-01_2026-07-31_
+   DB03.xlsx`), parte não (`crefazscm_webscm_Medicao_2026-07-01_2026-07-31.xlsx`) -- não dá pra
+   saber de antemão qual variante existe pra cada cliente. `nomesPlanAnaliticaCandidatos`
+   (`planilhaValores.ts`) agora gera as duas tentativas (sem sufixo primeiro, com `_{cart_rds}`
+   depois) e `importarCarteira.ts` usa a primeira que bater na lista do Drive. A coluna gerada do
+   banco (`cart_nome_plan_analitica`) continua só com a variante sem sufixo -- ela não é lida por
+   nenhuma tela, então não precisa cobrir as duas variantes.
+
+**Verificação (2ª rodada)**: `tsc --noEmit` limpo, `testa-conversores-medicao.ts` cobrindo o
+exemplo real do usuário (`allesc_webesc` + `DB03`) -- as duas variantes batem. Segue sem teste
+contra o Postgres de produção (mesma restrição de credencial); o teste de verdade acontece na
+próxima tentativa de importação do usuário.
+
 - `tsc -p .` (backend) e `tsc -b` + `vite build` (frontend) limpos. `oxlint` não rodou -- o binário
   nativo do oxlint está bloqueado por uma política de Controle de Aplicativo do Windows nesta
   máquina (não é regressão, não é do código).

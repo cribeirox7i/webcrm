@@ -2,7 +2,7 @@
 // os valores REAIS da planilha de medição -- datas em dd/mm/aaaa viram ISO (a coluna gerada
 // cart_nome_plan_analitica depende disso), e valores viram número.
 // Uso: npx tsx scripts/testa-conversores-medicao.ts
-import { dataIso, inteiro, nomePlanAnalitica, numero, texto } from "../src/planilhaValores";
+import { dataIso, inteiro, nomePlanAnalitica, nomesPlanAnaliticaCandidatos, numero, texto } from "../src/planilhaValores";
 
 const casos: { entrada: unknown; esperado: unknown; fn: (v: unknown) => unknown; nome: string }[] = [
   { nome: "data dd/mm/aaaa", entrada: "31/07/2026", esperado: "2026-07-31", fn: (v) => dataIso(v) },
@@ -44,6 +44,29 @@ for (const c of casosNome) {
   if (!ok) falhas++;
   console.log(
     `${ok ? "OK  " : "FALHA"} nomePlanAnalitica(${JSON.stringify(c.db)}, ${JSON.stringify(c.dataBase)}): ${JSON.stringify(obtido)}${ok ? "" : ` (esperado ${JSON.stringify(c.esperado)})`}`
+  );
+}
+
+// confere `nomesPlanAnaliticaCandidatos` -- achado 2026-08-31 (2ª rodada): parte dos arquivos
+// reais no Drive tem sufixo `_{rds}` antes do .xlsx (ex. "..._DB03.xlsx"), parte não, e não dá
+// pra saber de antemão qual variante existe -- por isso duas tentativas de casamento, na ordem
+// sem sufixo primeiro.
+const casosCandidatos: { db: string | null; rds: string | null; dataBase: string | null; esperado: string[] }[] = [
+  {
+    db: "allesc_webesc",
+    rds: "DB03",
+    dataBase: "2026-07-31",
+    esperado: ["allesc_webesc_Medicao_2026-07-01_2026-07-31.xlsx", "allesc_webesc_Medicao_2026-07-01_2026-07-31_DB03.xlsx"],
+  },
+  { db: "crefazscm_webscm", rds: null, dataBase: "2026-07-31", esperado: ["crefazscm_webscm_Medicao_2026-07-01_2026-07-31.xlsx"] },
+  { db: null, rds: "DB03", dataBase: "2026-07-31", esperado: [] },
+];
+for (const c of casosCandidatos) {
+  const obtido = nomesPlanAnaliticaCandidatos(c.db, c.rds, c.dataBase);
+  const ok = JSON.stringify(obtido) === JSON.stringify(c.esperado);
+  if (!ok) falhas++;
+  console.log(
+    `${ok ? "OK  " : "FALHA"} nomesPlanAnaliticaCandidatos(${JSON.stringify(c.db)}, ${JSON.stringify(c.rds)}, ${JSON.stringify(c.dataBase)}): ${JSON.stringify(obtido)}${ok ? "" : ` (esperado ${JSON.stringify(c.esperado)})`}`
   );
 }
 

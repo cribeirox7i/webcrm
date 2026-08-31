@@ -67,3 +67,21 @@ export function nomePlanAnalitica(db: string | null, dataBaseIso: string | null)
   const dia = dataBaseIso.slice(8, 10);
   return `${db}_Medicao_${anoMes}-01_${anoMes}-${dia}.xlsx`;
 }
+
+/** Achado 2026-08-31 (2ª rodada, testando a importação de verdade): parte dos arquivos no Drive
+ * tem um sufixo extra com o RDS da linha (ex. `allesc_webesc_Medicao_2026-07-01_2026-07-31_DB03
+ * .xlsx`), parte não (`crefazscm_webscm_Medicao_2026-07-01_2026-07-31.xlsx`) -- não dá pra saber
+ * de antemão qual variante existe pra cada cliente, então o casamento tenta as duas: primeiro sem
+ * sufixo (igual à coluna gerada do banco), depois com `_{rds}` antes do `.xlsx`. Devolve só os
+ * candidatos possíveis de montar (1 sem `rds`, 2 com `rds`). */
+export function nomesPlanAnaliticaCandidatos(
+  db: string | null,
+  rds: string | null,
+  dataBaseIso: string | null
+): string[] {
+  const semSufixo = nomePlanAnalitica(db, dataBaseIso);
+  if (!semSufixo) return [];
+  if (!rds) return [semSufixo];
+  const comSufixo = semSufixo.replace(/\.xlsx$/, `_${rds}.xlsx`);
+  return [semSufixo, comSufixo];
+}
