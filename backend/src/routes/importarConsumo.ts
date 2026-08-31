@@ -5,23 +5,31 @@ import { dataIso, numero, texto } from "../planilhaValores";
 
 // Importação mensal do consumo analítico (Admin > Financeiro > Importar Consumo). Diferente da
 // importação de carteira, aqui um "arquivo" real é um GRUPO de planilhas/CSVs (todas no mesmo
-// layout: ID_Produto;CNPJ;Data;quantidade;Detalhamento) -- o frontend já lê e concatena todas
-// antes de mandar pra cá, então esta rota só vê uma lista `linhas` só, igual à de carteira.
+// layout: ID_Produto;CNPJ;Data;quantidade;Detalhamento) -- e o volume é grande de verdade
+// (achado 2026-08-31: uma carga real tinha 64116 linhas em 6 arquivos). Mandar tudo isso num
+// POST só estoura o limite de tamanho de requisição da Vercel (~4.5MB) ANTES de chegar no
+// Express -- a resposta de erro vem sem header de CORS (a Vercel barra na borda, antes da nossa
+// app rodar), então o navegador mostra "bloqueado por CORS" em vez do erro de tamanho real.
 //
-// Três efeitos por importação (sempre os três juntos, mesmo cart_mes_id):
-//   1. `consumo_ana`: uma linha por linha do arquivo (ID_Produto -> produto_id direto, sem
-//      match por nome -- é a chave real; CNPJ -> cliente_id via normalização, igual carteira).
-//   2. `precos_cliente`: duplica TODAS as linhas do cart_mes_id mais recente que já tem preço
-//      cadastrado (excluindo o mês alvo) pro mês novo -- carrega adiante a tabela de preços/
-//      franquia vigente, decisão do usuário (a tabela de preços não muda todo mês).
-//   3. `faturamento`: uma linha-âncora (cliente_id, cart_mes_id) por cliente distinto que
-//      apareceu em `consumo_ana` nesta importação -- os valores (fat_vlr_liq/brt) não ficam
-//      armazenados aqui, são calculados ao vivo pela view `faturamento_detalhe` a partir de
-//      `precos_cliente_mes_atual` (que já cruza consumo_ana + precos_cliente pelo cart_mes_id).
-//
-// Igual carteira: `simular: true` devolve o relatório completo sem gravar nada; `simular: false`
-// GRAVA de vez, e sempre substitui o mês inteiro (DELETE + INSERT nas três tabelas) -- reimportar
-// o mesmo mês é idempotente.
+// Por isso o fluxo agora tem 3 passos (ver `consumo_import_staging` em schema.pg.sql):
+//   1. `POST .../limpar-staging` -- limpa qualquer resto de uma sessão de upload anterior pro
+//      mesmo mês (nunca deve reter dado entre uma importação e outra).
+//   2. `POST .../chunk` (repetido, um POST pequeno por lote de linhas) -- só grava bruto na
+//      tabela de preparo, nenhuma classificação acontece aqui.
+//   3. `POST /admin/importar-consumo` (`simular: true`/`false`) -- lê TODAS as linhas da tabela
+//      de preparo (consulta SQL, sem limite de tamanho de requisição HTTP) e faz o resto: three
+//      efeitos por importação, sempre os três juntos, mesmo cart_mes_id:
+//        a. `consumo_ana`: uma linha por linha (ID_Produto -> produto_id direto, sem match por
+//           nome -- é a chave real; CNPJ -> cliente_id via normalização, igual carteira).
+//        b. `precos_cliente`: duplica TODAS as linhas do cart_mes_id mais recente que já tem
+//           preço cadastrado (excluindo o mês alvo) pro mês novo -- carrega adiante a tabela de
+//           preços/franquia vigente, decisão do usuário (a tabela de preços não muda todo mês).
+//        c. `faturamento`: uma linha-âncora (cliente_id, cart_mes_id) por cliente distinto que
+//           apareceu em `consumo_ana` nesta importação -- os valores (fat_vlr_liq/brt) não ficam
+//           armazenados aqui, são calculados ao vivo pela view `faturamento_detalhe`.
+//      Igual carteira: `simular: true` devolve o relatório completo sem gravar nada;
+//      `simular: false` GRAVA de vez (substitui o mês inteiro nas 3 tabelas) e limpa a tabela de
+//      preparo no final -- reimportar o mesmo mês é idempotente.
 export const importarConsumoRouter = Router();
 
 export interface LinhaConsumo {
@@ -40,10 +48,73 @@ interface ItemParaInserir {
   det: string | null;
 }
 
+function mesIdValido(v: unknown): number | null {
+  const n = Number(v);
+  return Number.isInteger(n) && n > 0 ? n : null;
+}
+
+/** Insere em lotes (multi-row INSERT) em vez de uma linha por vez -- com dezenas de milhares de
+ * linhas, um round-trip por INSERT é rápido demais pro orçamento de tempo de uma função
+ * serverless. `LOTE` bem abaixo do limite de 65535 parâmetros por query do Postgres. */
+const LOTE = 2000;
+
+importarConsumoRouter.post("/admin/importar-consumo/limpar-staging", async (req, res) => {
+  const mesId = mesIdValido((req.body ?? {}).cartMesId);
+  if (!mesId) {
+    res.status(400).json({ error: "cartMesId inválido" });
+    return;
+  }
+  await query("DELETE FROM consumo_import_staging WHERE cart_mes_id = $1", [mesId]);
+  res.json({ ok: true });
+});
+
+importarConsumoRouter.post("/admin/importar-consumo/chunk", async (req, res) => {
+  const { cartMesId, linhas } = (req.body ?? {}) as { cartMesId?: unknown; linhas?: unknown };
+  const mesId = mesIdValido(cartMesId);
+  if (!mesId) {
+    res.status(400).json({ error: "cartMesId inválido" });
+    return;
+  }
+  if (!Array.isArray(linhas) || linhas.length === 0) {
+    res.status(400).json({ error: "nenhuma linha recebida" });
+    return;
+  }
+
+  const linhasTyped = linhas as LinhaConsumo[];
+  for (let i = 0; i < linhasTyped.length; i += LOTE) {
+    const pedaco = linhasTyped.slice(i, i + LOTE);
+    const valores: unknown[] = [];
+    const tuplas = pedaco.map((l, idx) => {
+      const base = idx * 6;
+      valores.push(
+        mesId,
+        texto(l.idProduto),
+        texto(l.cnpj),
+        // `data` guarda o valor cru (string ISO/BR ou Date serializado em JSON) -- a conversão
+        // de verdade (`dataIso`) só acontece na classificação, igual antes desta leva.
+        l.data == null ? null : String(l.data),
+        l.quantidade == null ? null : String(l.quantidade),
+        texto(l.detalhamento)
+      );
+      return `($${base + 1},$${base + 2},$${base + 3},$${base + 4},$${base + 5},$${base + 6})`;
+    });
+    await query(
+      `INSERT INTO consumo_import_staging (cart_mes_id, id_produto, cnpj, data, quantidade, detalhamento)
+       VALUES ${tuplas.join(",")}`,
+      valores
+    );
+  }
+
+  const { rows } = await query<{ n: number }>(
+    "SELECT COUNT(*)::int AS n FROM consumo_import_staging WHERE cart_mes_id = $1",
+    [mesId]
+  );
+  res.json({ inseridos: linhasTyped.length, totalNaStaging: rows[0].n });
+});
+
 importarConsumoRouter.post("/admin/importar-consumo", async (req, res) => {
-  const { cartMesId, linhas, simular, correcoesCnpj, correcoesProduto } = (req.body ?? {}) as {
+  const { cartMesId, simular, correcoesCnpj, correcoesProduto } = (req.body ?? {}) as {
     cartMesId?: unknown;
-    linhas?: unknown;
     simular?: unknown;
     // { CNPJ normalizado -> cliente_id escolhido à mão }, pra CNPJ sem match único (ambíguo ou
     // não cadastrado) -- agrupado por CNPJ, não por linha, porque um CNPJ se repete em dezenas/
@@ -53,13 +124,9 @@ importarConsumoRouter.post("/admin/importar-consumo", async (req, res) => {
     correcoesProduto?: unknown;
   };
 
-  const mesId = Number(cartMesId);
-  if (!Number.isInteger(mesId) || mesId <= 0) {
+  const mesId = mesIdValido(cartMesId);
+  if (!mesId) {
     res.status(400).json({ error: "cartMesId inválido" });
-    return;
-  }
-  if (!Array.isArray(linhas) || linhas.length === 0) {
-    res.status(400).json({ error: "nenhuma linha recebida das planilhas" });
     return;
   }
 
@@ -71,6 +138,30 @@ importarConsumoRouter.post("/admin/importar-consumo", async (req, res) => {
     res.status(404).json({ error: "mês (cart_mes) não encontrado" });
     return;
   }
+
+  const { rows: linhasStaging } = await query<{
+    id_produto: string | null;
+    cnpj: string | null;
+    data: string | null;
+    quantidade: string | null;
+    detalhamento: string | null;
+  }>(
+    "SELECT id_produto, cnpj, data, quantidade, detalhamento FROM consumo_import_staging WHERE cart_mes_id = $1",
+    [mesId]
+  );
+  if (linhasStaging.length === 0) {
+    res.status(400).json({
+      error: "nenhuma linha na área de preparo pra este mês -- suba os arquivos de novo (a sessão pode ter expirado ou sido limpa)",
+    });
+    return;
+  }
+  const linhas: LinhaConsumo[] = linhasStaging.map((r) => ({
+    idProduto: r.id_produto,
+    cnpj: r.cnpj,
+    data: r.data,
+    quantidade: r.quantidade,
+    detalhamento: r.detalhamento,
+  }));
 
   const correcoesCnpjMap = new Map<string, number>();
   if (correcoesCnpj && typeof correcoesCnpj === "object") {
@@ -111,7 +202,7 @@ importarConsumoRouter.post("/admin/importar-consumo", async (req, res) => {
   const cnpjsPendentes = new Map<string, { cnpjOriginal: string; linhas: number }>();
   const produtosPendentes = new Map<string, number>(); // idProdutoOriginal -> contagem de linhas
 
-  (linhas as LinhaConsumo[]).forEach((bruta) => {
+  linhas.forEach((bruta) => {
     const cnpjOriginal = texto(bruta.cnpj) ?? "";
     const cnpjNorm = normalizaCnpj(bruta.cnpj);
     const idProdutoOriginal = texto(bruta.idProduto) ?? "";
@@ -174,7 +265,7 @@ importarConsumoRouter.post("/admin/importar-consumo", async (req, res) => {
   const clientesPorId = new Map(clientes.map((c) => [c.cliente_id, c.cliente_nome]));
   const relatorio = {
     mes: mesRows[0].cart_ano_mes,
-    linhasNaPlanilha: (linhas as unknown[]).length,
+    linhasNaPlanilha: linhas.length,
     aInserir: paraInserir.length,
     clientesDistintos: new Set(paraInserir.map((p) => p.clienteId)).size,
     cnpjsPendentes: [...cnpjsPendentes.entries()].map(([cnpjNorm, v]) => ({
@@ -207,11 +298,18 @@ importarConsumoRouter.post("/admin/importar-consumo", async (req, res) => {
       await client.query("DELETE FROM precos_cliente WHERE cart_mes_id = $1", [mesId]);
       await client.query("DELETE FROM faturamento WHERE cart_mes_id = $1", [mesId]);
 
-      for (const item of paraInserir) {
+      for (let i = 0; i < paraInserir.length; i += LOTE) {
+        const pedaco = paraInserir.slice(i, i + LOTE);
+        const valores: unknown[] = [];
+        const tuplas = pedaco.map((item, idx) => {
+          const base = idx * 6;
+          valores.push(item.clienteId, item.produtoId, mesId, item.consumoData, item.qtd, item.det);
+          return `($${base + 1},$${base + 2},$${base + 3},$${base + 4},$${base + 5},$${base + 6})`;
+        });
         await client.query(
           `INSERT INTO consumo_ana (cliente_id, produto_id, cart_mes_id, consumo_data, consumo_qtd, consumo_det)
-           VALUES ($1,$2,$3,$4,$5,$6)`,
-          [item.clienteId, item.produtoId, mesId, item.consumoData, item.qtd, item.det]
+           VALUES ${tuplas.join(",")}`,
+          valores
         );
       }
 
@@ -236,9 +334,17 @@ importarConsumoRouter.post("/admin/importar-consumo", async (req, res) => {
       }
 
       const clienteIdsDistintos = [...new Set(paraInserir.map((p) => p.clienteId))];
-      for (const clienteId of clienteIdsDistintos) {
-        await client.query("INSERT INTO faturamento (cliente_id, cart_mes_id) VALUES ($1,$2)", [clienteId, mesId]);
+      if (clienteIdsDistintos.length > 0) {
+        const valores: unknown[] = [];
+        const tuplas = clienteIdsDistintos.map((clienteId, idx) => {
+          valores.push(clienteId, mesId);
+          return `($${idx * 2 + 1},$${idx * 2 + 2})`;
+        });
+        await client.query(`INSERT INTO faturamento (cliente_id, cart_mes_id) VALUES ${tuplas.join(",")}`, valores);
       }
+
+      // tabela de preparo cumpriu o papel -- não deve reter dado depois de uma gravação com sucesso.
+      await client.query("DELETE FROM consumo_import_staging WHERE cart_mes_id = $1", [mesId]);
     });
   } catch (err) {
     res.status(500).json({ error: `falha ao importar: ${(err as Error).message}` });

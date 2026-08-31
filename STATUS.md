@@ -2697,3 +2697,50 @@ mesma fórmula que o usuário já usava na planilha antiga
 **Verificação**: `tsc --noEmit` limpo. `duracaoParaMinutos` testado via script Node contra o
 exemplo real do usuário (`"0 days 00:04:05"` -> 4,0833... min) e casos de borda (sem prefixo de
 dia, `"1 day"` singular, 2 dígitos de dia, valor numérico de fração de dia) -- todos batem.
+
+### 3ª rodada: upload em lotes -- "CORS" era estouro de tamanho de requisição (2026-08-31)
+
+Achado testando com o volume real (6 arquivos, **64116 linhas**): "Analisar arquivos" falhava
+com "Failed to fetch" e o console do navegador mostrava erro de **CORS** (`No 'Access-Control-
+Allow-Origin' header`). Não era CORS de verdade -- a Vercel tem um limite de tamanho de
+requisição (~4.5MB) enforçado na borda, ANTES de qualquer código nosso rodar; quando ela recusa
+por tamanho, a resposta de erro não carrega o header de CORS (porque nossa app, que adicionaria
+esse header, nunca chegou a rodar), e o navegador reporta isso como bloqueio de CORS em vez do
+erro de tamanho real. 64116 linhas de JSON num POST só passa longe dos ~4.5MB.
+
+**Solução**: upload em lotes pra uma tabela de preparo no banco (`consumo_import_staging`, nova
+-- ver `schema.pg.sql` e `backend/scripts/sql-2026-08-31-consumo-staging/`, **precisa rodar em
+produção antes do próximo deploy funcionar**), e só depois disso a análise/gravação de verdade
+roda em cima do que já está no banco (consulta SQL, sem limite de tamanho de requisição HTTP).
+
+- **Fluxo novo** (`importarConsumo.ts`, 3 rotas em vez de 1):
+  1. `POST .../limpar-staging` -- limpa qualquer resto de uma sessão de upload anterior pro
+     mesmo mês (chamado no início de cada "Analisar", nunca deve reter dado de tentativa
+     abandonada).
+  2. `POST .../chunk` -- sobe um lote pequeno (2000 linhas, `TAMANHO_LOTE` no frontend) por vez,
+     grava bruto na staging via `INSERT` multi-linha (uma query por lote, não uma por linha).
+     Nenhuma classificação acontece aqui -- só grava cru.
+  3. `POST /admin/importar-consumo` (`simular`/`correcoesCnpj`/`correcoesProduto`, sem `linhas`
+     no corpo) -- lê tudo da staging por SQL e faz a classificação + gravação de sempre. Na
+     confirmação (`simular: false`), limpa a própria staging no fim, dentro da MESMA transação
+     que grava as 3 tabelas de verdade (se a gravação falhar e der rollback, a staging continua
+     intacta pra poder tentar de novo sem reenviar os arquivos).
+- **Gravação também em lote**: o `INSERT` de `consumo_ana` (e o da própria staging) que antes
+  era um `await client.query(...)` por linha virou `INSERT` multi-linha em lotes de 2000 -- com
+  dezenas de milhares de linhas, um round-trip por linha era rápido demais pro orçamento de
+  tempo de uma função serverless (risco de timeout, não só de payload).
+- **`ImportarConsumoModal.tsx`**: novo estado `enviado`/`progressoEnvio` -- "Analisar arquivos"
+  primeiro sobe tudo em lotes (mostrando "Enviando pro servidor: X / Y linhas..."), só depois
+  chama a classificação. Correções manuais (`corrigirCnpj`/`corrigirProduto`) e a confirmação
+  final NÃO reenviam nada -- as linhas já estão na staging desde o primeiro "Analisar".
+- **`adminClient.ts`**: `importarConsumo()` perdeu o parâmetro `linhas`; duas funções novas,
+  `limparStagingConsumo()` e `enviarChunkConsumo()`.
+
+**Verificação**: `tsc --noEmit` limpo nos dois lados. Lógica de placeholder dos `INSERT`
+multi-linha (`$1,$2,...` por tupla, `base = idx * nColunas`) testada via script Node isolado --
+confere que o maior placeholder gerado bate exatamente com a quantidade de valores passados, pros
+3 casos usados (staging 6 colunas, consumo_ana 6 colunas, faturamento 2 colunas). **Não testado**
+contra o Postgres de produção nem no navegador (mesma restrição de `DATABASE_URL`/credencial) --
+e a tabela nova (`consumo_import_staging`) **ainda não existe em produção**, precisa rodar o SQL
+antes do próximo deploy valer pra alguma coisa. O teste de verdade acontece na próxima tentativa
+do usuário, já com os 64116 linhas reais.

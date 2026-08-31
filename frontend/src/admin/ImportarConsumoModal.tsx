@@ -187,6 +187,11 @@ export function ImportarConsumoModal({ cartMes, token, onClose, onLogout }: Impo
   // -- agrupado, não por linha (ver comentário no backend).
   const [correcoesCnpj, setCorrecoesCnpj] = useState<Record<string, number>>({});
   const [correcoesProduto, setCorrecoesProduto] = useState<Record<string, number>>({});
+  // true depois que `linhas` já foi todo enviado pra tabela de preparo no banco (upload em
+  // lotes) -- enquanto isso não acontece, "Analisar" precisa subir os arquivos antes de poder
+  // classificar. Reseta pra false sempre que um arquivo novo é lido.
+  const [enviado, setEnviado] = useState(false);
+  const [progressoEnvio, setProgressoEnvio] = useState<{ enviadas: number; total: number } | null>(null);
 
   const opcoesCliente = useMemo(
     () =>
@@ -217,6 +222,7 @@ export function ImportarConsumoModal({ cartMes, token, onClose, onLogout }: Impo
     setConcluido(null);
     setCorrecoesCnpj({});
     setCorrecoesProduto({});
+    setEnviado(false);
 
     const lista = Array.from(files);
     const resumo: { nome: string; linhas: number }[] = [];
@@ -238,31 +244,50 @@ export function ImportarConsumoModal({ cartMes, token, onClose, onLogout }: Impo
     }
   }
 
+  // Arquivos reais desse fluxo passam de 60 mil linhas -- mandar tudo isso num POST só estoura o
+  // limite de tamanho de requisição da Vercel antes de chegar no backend (o navegador mostra
+  // isso como erro de CORS, não como erro de tamanho -- achado 2026-08-31). Por isso o upload
+  // vai em lotes pequenos pra uma tabela de preparo no banco; só depois disso a análise/gravação
+  // (que já lê do banco, sem limite de tamanho de requisição) pode rodar.
+  const TAMANHO_LOTE = 2000;
+
+  async function enviarEmLotes(dados: LinhaConsumo[]) {
+    await adminApi.limparStagingConsumo(token, cartMes.cart_mes_id);
+    setProgressoEnvio({ enviadas: 0, total: dados.length });
+    for (let i = 0; i < dados.length; i += TAMANHO_LOTE) {
+      const lote = dados.slice(i, i + TAMANHO_LOTE);
+      await adminApi.enviarChunkConsumo(token, cartMes.cart_mes_id, lote);
+      setProgressoEnvio({ enviadas: Math.min(i + lote.length, dados.length), total: dados.length });
+    }
+    setEnviado(true);
+    setProgressoEnvio(null);
+  }
+
   async function analisar() {
     if (!linhas) return;
     setOcupado(true);
     setErro(null);
     try {
-      setRelatorio(
-        await adminApi.importarConsumo(token, cartMes.cart_mes_id, linhas, true, correcoesCnpj, correcoesProduto)
-      );
+      if (!enviado) await enviarEmLotes(linhas);
+      setRelatorio(await adminApi.importarConsumo(token, cartMes.cart_mes_id, true, correcoesCnpj, correcoesProduto));
     } catch (err) {
       if (!tratarErroAuth(err)) setErro((err as Error).message);
     } finally {
       setOcupado(false);
+      setProgressoEnvio(null);
     }
   }
 
   /** Chamado quando o usuário escolhe um cliente pra um CNPJ pendente -- guarda e já reanalisa,
-   * pra ver o efeito (a linha some de "CNPJ não identificado" na hora). */
+   * pra ver o efeito (a linha some de "CNPJ não identificado" na hora). As linhas já estão na
+   * tabela de preparo desde o "Analisar" inicial, não precisa subir de novo. */
   async function corrigirCnpj(cnpj: string, clienteId: number) {
-    if (!linhas) return;
     const novas = { ...correcoesCnpj, [cnpj]: clienteId };
     setCorrecoesCnpj(novas);
     setOcupado(true);
     setErro(null);
     try {
-      setRelatorio(await adminApi.importarConsumo(token, cartMes.cart_mes_id, linhas, true, novas, correcoesProduto));
+      setRelatorio(await adminApi.importarConsumo(token, cartMes.cart_mes_id, true, novas, correcoesProduto));
     } catch (err) {
       if (!tratarErroAuth(err)) setErro((err as Error).message);
     } finally {
@@ -271,13 +296,12 @@ export function ImportarConsumoModal({ cartMes, token, onClose, onLogout }: Impo
   }
 
   async function corrigirProduto(idProduto: string, produtoId: number) {
-    if (!linhas) return;
     const novas = { ...correcoesProduto, [idProduto]: produtoId };
     setCorrecoesProduto(novas);
     setOcupado(true);
     setErro(null);
     try {
-      setRelatorio(await adminApi.importarConsumo(token, cartMes.cart_mes_id, linhas, true, correcoesCnpj, novas));
+      setRelatorio(await adminApi.importarConsumo(token, cartMes.cart_mes_id, true, correcoesCnpj, novas));
     } catch (err) {
       if (!tratarErroAuth(err)) setErro((err as Error).message);
     } finally {
@@ -286,7 +310,7 @@ export function ImportarConsumoModal({ cartMes, token, onClose, onLogout }: Impo
   }
 
   async function confirmar() {
-    if (!linhas || !relatorio) return;
+    if (!relatorio) return;
     const existentes =
       relatorio.consumoExistenteNoMes > 0 || relatorio.precosExistentesNoMes > 0 || relatorio.faturamentoExistenteNoMes > 0;
     const aviso = existentes
@@ -299,20 +323,16 @@ export function ImportarConsumoModal({ cartMes, token, onClose, onLogout }: Impo
     setOcupado(true);
     setErro(null);
     try {
-      const rel = await adminApi.importarConsumo(
-        token,
-        cartMes.cart_mes_id,
-        linhas,
-        false,
-        correcoesCnpj,
-        correcoesProduto
-      );
+      // a tabela de preparo já tem as linhas (subidas no "Analisar") -- o backend lê de lá e
+      // limpa ela mesmo, sozinho, depois de gravar com sucesso.
+      const rel = await adminApi.importarConsumo(token, cartMes.cart_mes_id, false, correcoesCnpj, correcoesProduto);
       setConcluido(rel);
       setRelatorio(null);
       setLinhas(null);
       setArquivosLidos([]);
       setCorrecoesCnpj({});
       setCorrecoesProduto({});
+      setEnviado(false);
     } catch (err) {
       if (!tratarErroAuth(err)) setErro((err as Error).message);
     } finally {
@@ -358,6 +378,11 @@ export function ImportarConsumoModal({ cartMes, token, onClose, onLogout }: Impo
                     <strong>Total: {linhas?.length ?? 0} linhas</strong>
                   </li>
                 </ul>
+              )}
+              {progressoEnvio && (
+                <p className="page-subtitle">
+                  Enviando pro servidor: {progressoEnvio.enviadas} / {progressoEnvio.total} linhas...
+                </p>
               )}
             </div>
           )}
@@ -490,7 +515,7 @@ export function ImportarConsumoModal({ cartMes, token, onClose, onLogout }: Impo
           </button>
           {!concluido && !relatorio && (
             <button type="button" className="primary" disabled={!linhas || ocupado} onClick={analisar}>
-              {ocupado ? "Analisando..." : "Analisar arquivos"}
+              {progressoEnvio ? "Enviando..." : ocupado ? "Analisando..." : "Analisar arquivos"}
             </button>
           )}
           {!concluido && relatorio && (

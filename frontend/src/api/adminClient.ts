@@ -185,17 +185,37 @@ export const adminApi = {
   // importação do consumo analítico -> consumo_ana + precos_cliente (duplicado) + faturamento.
   // Mesmo padrão 2x de importarCarteira. `correcoesCnpj`/`correcoesProduto` são agrupados por
   // CNPJ/ID_Produto (não por linha) -- ver RelatorioImportacaoConsumo.
+  // As linhas NÃO vão mais no corpo desta chamada -- arquivos reais desse fluxo passam de 60 mil
+  // linhas, e um POST só com tudo estoura o limite de tamanho de requisição da Vercel (~4.5MB)
+  // antes de chegar no Express (o navegador reporta isso como erro de CORS, porque a resposta de
+  // erro da própria Vercel não carrega o header de CORS -- achado 2026-08-31). As linhas sobem
+  // antes, em lotes pequenos, via `limparStagingConsumo` + `enviarChunkConsumo`; esta chamada só
+  // dispara a classificação/gravação em cima do que já está na tabela de preparo no banco.
   importarConsumo: (
     token: string,
     cartMesId: number,
-    linhas: LinhaConsumo[],
     simular: boolean,
     correcoesCnpj?: Record<string, number>,
     correcoesProduto?: Record<string, number>
   ) =>
     request<RelatorioImportacaoConsumo>("/api/admin/importar-consumo", token, {
       method: "POST",
-      body: JSON.stringify({ cartMesId, linhas, simular, correcoesCnpj, correcoesProduto }),
+      body: JSON.stringify({ cartMesId, simular, correcoesCnpj, correcoesProduto }),
+    }),
+  // limpa qualquer resto de uma sessão de upload anterior pro mesmo mês -- chamar sempre antes
+  // de começar a subir os lotes de uma nova análise (nunca deve reter dado de uma tentativa
+  // anterior/abandonada).
+  limparStagingConsumo: (token: string, cartMesId: number) =>
+    request<{ ok: boolean }>("/api/admin/importar-consumo/limpar-staging", token, {
+      method: "POST",
+      body: JSON.stringify({ cartMesId }),
+    }),
+  // sobe um lote pequeno de linhas pra tabela de preparo -- chamado repetidamente (um POST por
+  // lote) até esgotar todas as linhas lidas dos arquivos.
+  enviarChunkConsumo: (token: string, cartMesId: number, linhas: LinhaConsumo[]) =>
+    request<{ inseridos: number; totalNaStaging: number }>("/api/admin/importar-consumo/chunk", token, {
+      method: "POST",
+      body: JSON.stringify({ cartMesId, linhas }),
     }),
   // sync dos índices econômicos com o Banco Central (SGS) -- POST /api/admin/indices/sync
   sincronizarIndices: (token: string) =>
