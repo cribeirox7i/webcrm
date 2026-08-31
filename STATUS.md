@@ -2517,6 +2517,13 @@ exemplo real do usuário (`allesc_webesc` + `DB03`) -- as duas variantes batem. 
 contra o Postgres de produção (mesma restrição de credencial); o teste de verdade acontece na
 próxima tentativa de importação do usuário.
 
+**3ª rodada, a pedido do usuário**: linha que cai em "sem planilha correspondente" (nem sem
+sufixo nem com `_rds` bateu na lista do Drive) agora tem um campo de texto pra colar a URL à mão
+-- vence qualquer casamento automático, some da lista assim que preenchido (reanalisa sozinho no
+`onBlur` do campo). `urlsManuais: { índice -> URL }` novo em `importarCarteira.ts` (backend) e
+`adminClient.ts`/`ImportarCarteiraModal.tsx` (frontend), no mesmo padrão que `correcoes` (cliente
+manual) já usava. `tsc --noEmit` limpo nos dois lados.
+
 - `tsc -p .` (backend) e `tsc -b` + `vite build` (frontend) limpos. `oxlint` não rodou -- o binário
   nativo do oxlint está bloqueado por uma política de Controle de Aplicativo do Windows nesta
   máquina (não é regressão, não é do código).

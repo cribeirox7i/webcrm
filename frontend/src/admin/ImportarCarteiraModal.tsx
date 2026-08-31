@@ -94,6 +94,9 @@ export function ImportarCarteiraModal({ cartMes, token, onClose, onLogout }: Imp
   // linhas da tabela "Não serão importadas" onde o usuário desmarcou "Ignorar" -- só nessas
   // mostra o campo de escolher cliente. Marcado (ignorar) é o padrão pra toda linha de fora.
   const [atribuindoCliente, setAtribuindoCliente] = useState<Record<number, boolean>>({});
+  // { índice da linha na planilha -> URL colada à mão }, pra linha que caiu em "sem planilha
+  // correspondente" (nem sem sufixo nem com _rds bateu na lista do Drive).
+  const [urlsManuais, setUrlsManuais] = useState<Record<number, string>>({});
 
   const opcoesCliente = useMemo(
     () =>
@@ -118,6 +121,7 @@ export function ImportarCarteiraModal({ cartMes, token, onClose, onLogout }: Imp
     setLinhas(null);
     setCorrecoes({});
     setAtribuindoCliente({});
+    setUrlsManuais({});
     setNomeArquivo(file.name);
     try {
       const wb = new ExcelJS.Workbook();
@@ -167,7 +171,9 @@ export function ImportarCarteiraModal({ cartMes, token, onClose, onLogout }: Imp
     setOcupado(true);
     setErro(null);
     try {
-      setRelatorio(await adminApi.importarCarteira(token, cartMes.cart_mes_id, linhas, true, correcoes, planilhas));
+      setRelatorio(
+        await adminApi.importarCarteira(token, cartMes.cart_mes_id, linhas, true, correcoes, planilhas, urlsManuais)
+      );
     } catch (err) {
       if (!tratarErroAuth(err)) setErro((err as Error).message);
     } finally {
@@ -185,7 +191,36 @@ export function ImportarCarteiraModal({ cartMes, token, onClose, onLogout }: Imp
     setErro(null);
     try {
       setRelatorio(
-        await adminApi.importarCarteira(token, cartMes.cart_mes_id, linhas, true, novasCorrecoes, planilhas)
+        await adminApi.importarCarteira(
+          token,
+          cartMes.cart_mes_id,
+          linhas,
+          true,
+          novasCorrecoes,
+          planilhas,
+          urlsManuais
+        )
+      );
+    } catch (err) {
+      if (!tratarErroAuth(err)) setErro((err as Error).message);
+    } finally {
+      setOcupado(false);
+    }
+  }
+
+  /** Chamado quando o usuário cola a URL de uma planilha que não bateu automaticamente -- guarda
+   * e já reanalisa, pra a linha sair de "sem planilha correspondente" na hora. Só reanalisa
+   * quando o campo perde o foco (blur), não a cada tecla digitada. */
+  async function informarUrlManual(indice: number, url: string) {
+    if (!linhas) return;
+    const novasUrls = { ...urlsManuais, [indice]: url };
+    setUrlsManuais(novasUrls);
+    if (!url.trim()) return; // apagou o campo -- não vale a pena reanalisar por um valor vazio
+    setOcupado(true);
+    setErro(null);
+    try {
+      setRelatorio(
+        await adminApi.importarCarteira(token, cartMes.cart_mes_id, linhas, true, correcoes, planilhas, novasUrls)
       );
     } catch (err) {
       if (!tratarErroAuth(err)) setErro((err as Error).message);
@@ -205,12 +240,21 @@ export function ImportarCarteiraModal({ cartMes, token, onClose, onLogout }: Imp
     setOcupado(true);
     setErro(null);
     try {
-      const rel = await adminApi.importarCarteira(token, cartMes.cart_mes_id, linhas, false, correcoes, planilhas);
+      const rel = await adminApi.importarCarteira(
+        token,
+        cartMes.cart_mes_id,
+        linhas,
+        false,
+        correcoes,
+        planilhas,
+        urlsManuais
+      );
       setConcluido(rel);
       setRelatorio(null);
       setLinhas(null);
       setNomeArquivo("");
       setPlanilhas([]);
+      setUrlsManuais({});
       setNomeArquivoPlanilhas("");
       setCorrecoes({});
       setAtribuindoCliente({});
@@ -453,14 +497,15 @@ export function ImportarCarteiraModal({ cartMes, token, onClose, onLogout }: Imp
               <>
                 <h3>Sem planilha correspondente na lista do Drive</h3>
                 <p className="page-subtitle">
-                  Essas linhas serão gravadas normalmente, só com o botão "Planilha" desabilitado — nenhum
-                  arquivo da lista bate com o nome esperado.
+                  Essas linhas serão gravadas normalmente. Nenhum arquivo da lista bate com o nome esperado — cole a
+                  URL da planilha à mão pra habilitar o botão "Planilha", ou deixe em branco pra gravar sem link.
                 </p>
                 <table className="mini-table">
                   <thead>
                     <tr>
                       <th>Cliente na planilha</th>
                       <th>Nome de arquivo esperado</th>
+                      <th>URL da planilha (manual)</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -468,6 +513,16 @@ export function ImportarCarteiraModal({ cartMes, token, onClose, onLogout }: Imp
                       <tr key={r.indice}>
                         <td>{r.nome}</td>
                         <td>{r.nomePlanilhaEsperado}</td>
+                        <td>
+                          <input
+                            type="text"
+                            defaultValue={urlsManuais[r.indice] ?? ""}
+                            placeholder="https://docs.google.com/spreadsheets/d/..."
+                            style={{ width: "100%" }}
+                            disabled={ocupado}
+                            onBlur={(e) => informarUrlManual(r.indice, e.target.value.trim())}
+                          />
+                        </td>
                       </tr>
                     ))}
                   </tbody>

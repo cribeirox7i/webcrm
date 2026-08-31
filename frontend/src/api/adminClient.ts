@@ -126,17 +126,20 @@ export const adminApi = {
   // relatório sem gravar nada, e só depois da confirmação do usuário vai com `simular: false`.
   // `correcoes` é { índice da linha na planilha -> cliente_id } pras linhas em que o usuário não
   // concordou com o cliente escolhido pela heurística (CNPJ ambíguo / achado pelo database).
+  // `urlsManuais` é { índice da linha na planilha -> URL colada à mão }, pra linha que caiu em
+  // "sem planilha correspondente" no relatório -- vence qualquer casamento automático da lista.
   importarCarteira: (
     token: string,
     cartMesId: number,
     linhas: LinhaMedicao[],
     simular: boolean,
     correcoes?: Record<number, number>,
-    planilhas?: PlanilhaAnalitica[]
+    planilhas?: PlanilhaAnalitica[],
+    urlsManuais?: Record<number, string>
   ) =>
     request<RelatorioImportacao>("/api/admin/importar-carteira", token, {
       method: "POST",
-      body: JSON.stringify({ cartMesId, linhas, simular, correcoes, planilhas }),
+      body: JSON.stringify({ cartMesId, linhas, simular, correcoes, planilhas, urlsManuais }),
     }),
   // sync dos índices econômicos com o Banco Central (SGS) -- POST /api/admin/indices/sync
   sincronizarIndices: (token: string) =>

@@ -32,7 +32,7 @@ export interface LinhaMedicao {
 type Origem = "cnpj" | "nome" | "database" | "manual";
 
 importarCarteiraRouter.post("/admin/importar-carteira", async (req, res) => {
-  const { cartMesId, linhas, simular, correcoes, planilhas } = (req.body ?? {}) as {
+  const { cartMesId, linhas, simular, correcoes, planilhas, urlsManuais } = (req.body ?? {}) as {
     cartMesId?: unknown;
     linhas?: unknown;
     simular?: unknown;
@@ -46,6 +46,10 @@ importarCarteiraRouter.post("/admin/importar-carteira", async (req, res) => {
     // Opcional: sem isso, a importação segue igual, só sem preencher a URL da planilha
     // (comportamento de antes desta leva).
     planilhas?: unknown;
+    // { índice da linha na planilha -> URL colada à mão }, pra linha que caiu em "sem planilha
+    // correspondente" (nem sem sufixo nem com `_{rds}` bateu na lista) -- vence qualquer
+    // casamento automático.
+    urlsManuais?: unknown;
   };
 
   const urlPorNomePlanilha = new Map<string, string>();
@@ -55,6 +59,15 @@ importarCarteiraRouter.post("/admin/importar-carteira", async (req, res) => {
       const nome = texto((p as { nome?: unknown }).nome);
       const url = texto((p as { url?: unknown }).url);
       if (nome && url) urlPorNomePlanilha.set(nome, url);
+    });
+  }
+
+  const urlManualPorIndice = new Map<number, string>();
+  if (urlsManuais && typeof urlsManuais === "object") {
+    Object.entries(urlsManuais as Record<string, unknown>).forEach(([k, v]) => {
+      const indice = Number(k);
+      const url = texto(v);
+      if (Number.isInteger(indice) && url) urlManualPorIndice.set(indice, url);
     });
   }
 
@@ -216,12 +229,19 @@ importarCarteiraRouter.post("/admin/importar-carteira", async (req, res) => {
   );
 
   // ---- casamento com a lista de planilhas do Drive (nome exato) ----
-  // Só reporta "sem planilha" quando uma lista foi de fato enviada -- sem lista, a importação
-  // segue normal e ninguém precisa ver um aviso de "planilha não encontrada" pra 100% das linhas.
+  // Só reporta "sem planilha" quando uma lista foi de fato enviada (ou alguma URL manual) -- sem
+  // nenhuma das duas, a importação segue normal e ninguém precisa ver um aviso de "planilha não
+  // encontrada" pra 100% das linhas.
   const urlPorIndice = new Map<number, string>();
   const semPlanilha: { indice: number; nome: string; nomePlanilhaEsperado: string }[] = [];
-  if (urlPorNomePlanilha.size > 0) {
+  if (urlPorNomePlanilha.size > 0 || urlManualPorIndice.size > 0) {
     for (const item of paraInserir) {
+      // URL colada à mão (ver urlManualPorIndice) vence qualquer casamento automático.
+      const manual = urlManualPorIndice.get(item.indice);
+      if (manual) {
+        urlPorIndice.set(item.indice, manual);
+        continue;
+      }
       // parte dos arquivos no Drive tem sufixo `_{rds}` antes do .xlsx, parte não -- tenta as
       // duas variantes possíveis (ver nomesPlanAnaliticaCandidatos) e usa a primeira que bater.
       const candidatos = nomesPlanAnaliticaCandidatos(
