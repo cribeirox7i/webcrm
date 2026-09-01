@@ -2943,3 +2943,52 @@ Node contra casos de cada regra faltando isoladamente. `gerarSenhaAleatoria` tes
 senhas e validando cada uma contra `erroComplexidadeSenha` -- 2000/2000 passaram. Não testado no
 navegador (mesma restrição de `DATABASE_URL`/credencial) -- o teste de verdade é o usuário tentar
 definir uma senha fraca em cada uma das 3 telas e confirmar a mensagem de erro certa.
+
+## Leva Reajuste de preço de consumo por indexador (2026-09-01)
+
+A pedido do usuário: nova aba **Admin > Reajuste** que reajusta `pc_vlr_unit`/`pc_vlr_franquia`
+de `precos_cliente` uma vez por ano, no mês de aniversário do contrato (`pc_dat_niver`), usando o
+acumulado de 12 meses do indexador do próprio contrato (`pc_cod_index`) no mês/ano corrente
+(`indices_calculados.index_acum_12m`, já em fração decimal). Fórmula confirmada pelo usuário:
+`novo_valor = valor_atual * (1 + index_acum_12m)`.
+
+- **Tabela nova `reajuste_eventos`** (`schema.pg.sql`) -- 1 linha por reajuste aplicado, guarda
+  `pc_id`/`cliente_id`/`produto_id`, o indexador e o acumulado usado, e o valor unitário/franquia
+  antes e depois. **View `reajuste_eventos_detalhe`** (`views.pg.sql`) junta nome de
+  cliente/produto pra exibição.
+- **`backend/src/routes/adminReajuste.ts`** (novo, montado sob `requireAdmin` em `server.ts`
+  igual `adminIndicesRouter`): `POST /simular` só lê -- lista os contratos com aniversário no mês
+  corrente, cada um com um status (`aplicavel` / `sem_indexador` / `sem_indice_mes_corrente` --
+  índice do indexador ainda não sincronizado pro mês atual / `ja_aplicado` -- já reajustado este
+  mês) e o valor novo já calculado. `POST /aplicar` recebe os `pc_id` marcados na tela e
+  **recalcula tudo do zero dentro da transação** (não confia no valor que o frontend mandou de
+  volta) -- só grava os que ainda estiverem `aplicavel` nesse recálculo, o resto volta em
+  `ignorados` com o motivo, sem interromper os demais. Dedupe de reajuste duplicado no mesmo mês
+  é feito consultando `reajuste_eventos` (não depende mais de `pc_dat_ult_reajuste`, que só é um
+  campo de exibição). Aplicar também atualiza `pc_dat_ult_reajuste` pra hoje (decisão minha, não
+  perguntada -- é o propósito original do campo).
+- **`indices_calculados`** era LEFT JOIN com `pc_cod_index`/ano/mês correntes -- contrato com
+  indexador cujo mês corrente ainda não foi sincronizado no Banco Central (Admin > Índices) cai
+  em `sem_indice_mes_corrente`, não trava nem quebra a simulação dos demais.
+- **`reajuste_eventos_detalhe`** dual-mounted (`requireUserOrAdminAuth`), mesmo padrão de
+  `indices_calculados` -- Admin > Reajuste lê com o PIN, botão "Histórico de Reajustes" novo em
+  Financeiro > Consumo (`ConsumoMesPage.tsx`, abre `HistoricoReajustesModal.tsx`) lê com sessão de
+  usuário. Mapeado em `permissaoResource.ts` no menu `"financeiro"`.
+- **`frontend/src/admin/ReajusteAdminPage.tsx`** (nova aba "Reajuste" em `AdminApp.tsx`, ao lado
+  de Índices): botão "Simular reajuste do mês" carrega a grid com seleção (checkbox por linha,
+  já vem marcado nos `aplicavel`), "Aplicar selecionados" confirma, e um histórico completo fica
+  sempre visível embaixo.
+
+**SQL de produção** (`backend/scripts/sql-2026-09-01-reajuste-consumo/01_criar_tabela_e_view.sql`,
+`CREATE TABLE IF NOT EXISTS`/`CREATE OR REPLACE VIEW`, idempotente): **já rodado pelo usuário**
+-- tabela e view existem em produção.
+
+**Verificação**: `tsc --noEmit` limpo nos dois lados. A lógica de cálculo inteira (fórmula,
+filtro de aniversário por mês, os 3 casos de status não-aplicável, e o dedupe de reajuste
+duplicado no mesmo mês) testada via PGlite (`npm i --no-save @electric-sql/pglite`, schema
+mínimo montado à mão com `indices_calculados` e `reajuste_eventos_detalhe` reais) -- 4 cenários
+cobertos (aplicável, sem indexador, indexador sem índice do mês corrente, aniversário em outro
+mês) mais uma segunda rodada de simulação depois de aplicar, confirmando que o contrato já
+reajustado não aparece mais como `aplicavel`. Não testado no navegador (mesma restrição de
+`DATABASE_URL`/credencial de sempre) -- o teste de ponta a ponta fica por conta do usuário: abrir
+Admin > Reajuste, simular, conferir os valores calculados e aplicar.
