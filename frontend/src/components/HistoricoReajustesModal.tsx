@@ -10,6 +10,11 @@ function formatPct(v: number): string {
 function formatMoney(v: number | null): string {
   return v != null ? v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : "";
 }
+function formatDataBr(iso: string | null): string {
+  if (!iso) return "";
+  const [ano, mes, dia] = iso.slice(0, 10).split("-");
+  return dia && mes && ano ? `${dia}/${mes}/${ano}` : iso;
+}
 
 interface HistoricoReajustesModalProps {
   onClose: () => void;
@@ -42,11 +47,18 @@ export function HistoricoReajustesModal({ onClose }: HistoricoReajustesModalProp
 
   const columns: DataGridColumn<ReajusteEventoDetalhe>[] = useMemo(
     () => [
-      { id: "reaj_data", header: "Data", value: (h) => h.reaj_data, width: 100 },
+      { id: "reaj_data", header: "Data", value: (h) => h.reaj_data, width: 100, cell: (h) => formatDataBr(h.reaj_data) },
       { id: "cliente_nome", header: "Cliente", value: (h) => h.cliente_nome, width: 200 },
       { id: "cliente_cnpj", header: "CNPJ", value: (h) => h.cliente_cnpj ?? "", width: 130 },
       { id: "produto_nome", header: "Produto", value: (h) => h.produto_nome, width: 160 },
       { id: "produto_detalhe", header: "Detalhe", value: (h) => h.produto_detalhe ?? "", width: 160 },
+      {
+        id: "pc_dat_niver",
+        header: "Aniversário do Contrato",
+        value: (h) => h.pc_dat_niver ?? "",
+        width: 120,
+        cell: (h) => formatDataBr(h.pc_dat_niver),
+      },
       { id: "reaj_index_nome", header: "Indexador", value: (h) => h.reaj_index_nome, width: 110 },
       {
         id: "reaj_taxa_acum_12m",
@@ -60,7 +72,7 @@ export function HistoricoReajustesModal({ onClose }: HistoricoReajustesModalProp
         id: "vlr_unit",
         header: "Vlr unit. (antes → depois)",
         value: (h) => h.reaj_vlr_unit_novo ?? h.reaj_vlr_unit_ant,
-        width: 200,
+        width: 150,
         align: "right",
         cell: (h) => `${formatMoney(h.reaj_vlr_unit_ant)} → ${formatMoney(h.reaj_vlr_unit_novo)}`,
       },
@@ -68,7 +80,7 @@ export function HistoricoReajustesModal({ onClose }: HistoricoReajustesModalProp
         id: "vlr_franquia",
         header: "Franquia (antes → depois)",
         value: (h) => h.reaj_vlr_franquia_novo ?? h.reaj_vlr_franquia_ant,
-        width: 200,
+        width: 150,
         align: "right",
         cell: (h) => `${formatMoney(h.reaj_vlr_franquia_ant)} → ${formatMoney(h.reaj_vlr_franquia_novo)}`,
       },

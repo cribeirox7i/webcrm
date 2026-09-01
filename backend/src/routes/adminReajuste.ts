@@ -47,7 +47,7 @@ export interface CandidatoReajuste {
   vlr_unit_novo: number | null;
   vlr_franquia_atual: number | null;
   vlr_franquia_novo: number | null;
-  status: "aplicavel" | "sem_indexador" | "sem_indice_mes_corrente" | "ja_aplicado";
+  status: "aplicavel" | "sem_indexador" | "sem_indice_mes_corrente" | "acumulado_negativo" | "ja_aplicado";
 }
 
 /** Busca os contratos com aniversário no mês/ano de referência e calcula o reajuste de cada um
@@ -81,6 +81,8 @@ async function calcularCandidatos(client: Queryer, anoRef: number, mesRef: numbe
     if (r.ja_aplicado) status = "ja_aplicado";
     else if (!r.pc_cod_index) status = "sem_indexador";
     else if (r.index_acum_12m == null) status = "sem_indice_mes_corrente";
+    // acumulado negativo (deflação) não gera reajuste pra baixo -- decisão do usuário, 2026-09-01
+    else if (r.index_acum_12m < 0) status = "acumulado_negativo";
     else status = "aplicavel";
 
     const fator = status === "aplicavel" ? 1 + (r.index_acum_12m as number) : null;

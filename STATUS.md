@@ -3106,3 +3106,27 @@ bateram. **Rodado e conferido em produção**: `08_conferencia_final.sql` confir
 criados -- cobertura completa, sem exceção. O histórico de reajustes (Admin > Reajuste e o botão
 na lista de meses) agora reflete a história real desses contratos, não só reajustes futuros
 aplicados pela tela.
+
+## Leva Ajustes na tela de Reajuste (2026-09-01)
+
+4 pedidos do usuário depois de ver o Histórico de Reajustes em produção:
+
+- **Acumulado 12m negativo não reajusta** -- `calcularCandidatos` (`adminReajuste.ts`) ganhou o
+  status `acumulado_negativo` (checado antes de `aplicavel`): deflação do indexador não gera
+  reajuste pra baixo. Testado via PGlite (IPCA positivo -> `aplicavel`, IGP-M negativo ->
+  `acumulado_negativo`).
+- **Aniversário do Contrato no histórico**: `reajuste_eventos_detalhe`
+  (`views.pg.sql`) ganhou `LEFT JOIN precos_cliente` (por `pc_id`) trazendo `pc_dat_niver` --
+  coluna nova nas duas telas de histórico (`HistoricoReajustesModal.tsx` e a seção de histórico
+  de `ReajusteAdminPage.tsx`). SQL de produção
+  (`backend/scripts/sql-2026-09-01-reajuste-detalhe-aniversario/01_atualizar_view.sql`, só
+  `CREATE OR REPLACE VIEW`) já rodado e conferido.
+- **Colunas "Vlr unit." e "Franquia" mais estreitas** (200px -> 150px) nas duas telas de
+  histórico -- estavam sobrando espaço em branco.
+- **Datas em `dd/mm/aaaa`**: `formatDataBr` (cópia local em cada arquivo, mesmo padrão do resto
+  do projeto) aplicado nas colunas Data e Aniversário das duas telas -- antes mostrava o ISO cru
+  (`aaaa-mm-dd`).
+
+**Verificação**: `tsc --noEmit` limpo nos dois lados. Regra do acumulado negativo e a view
+atualizada testadas via PGlite antes de entregar. Não testado no navegador (mesma restrição de
+sempre).

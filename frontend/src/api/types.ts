@@ -254,6 +254,7 @@ export interface ReajusteEventoDetalhe {
   reaj_vlr_unit_novo: number | null;
   reaj_vlr_franquia_ant: number | null;
   reaj_vlr_franquia_novo: number | null;
+  pc_dat_niver: string | null;
 }
 
 export interface ConsumoAna {

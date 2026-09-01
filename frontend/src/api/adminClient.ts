@@ -36,7 +36,7 @@ export interface CandidatoReajuste {
   vlr_unit_novo: number | null;
   vlr_franquia_atual: number | null;
   vlr_franquia_novo: number | null;
-  status: "aplicavel" | "sem_indexador" | "sem_indice_mes_corrente" | "ja_aplicado";
+  status: "aplicavel" | "sem_indexador" | "sem_indice_mes_corrente" | "acumulado_negativo" | "ja_aplicado";
 }
 
 /** Uma linha da planilha de medição, já mapeada pelas colunas (ver ImportarCarteiraPage). */
