@@ -54,7 +54,7 @@ export function HistoricoReajustesModal({ onClose }: HistoricoReajustesModalProp
       { id: "produto_detalhe", header: "Detalhe", value: (h) => h.produto_detalhe ?? "", width: 160 },
       {
         id: "pc_dat_niver",
-        header: "Aniversário do Contrato",
+        header: "Data Contrato",
         value: (h) => h.pc_dat_niver ?? "",
         width: 120,
         cell: (h) => formatDataBr(h.pc_dat_niver),
