@@ -6,6 +6,7 @@ import { adminRouter } from "./routes/admin";
 import { permissoesRouter } from "./routes/permissoes";
 import { indicesRouter } from "./routes/indices";
 import { adminIndicesRouter } from "./routes/adminIndices";
+import { adminReajusteRouter } from "./routes/adminReajuste";
 import { anexosRouter } from "./routes/anexos";
 import { propostaAnexoRouter } from "./routes/propostaAnexo";
 import { parametrosRouter } from "./routes/parametros";
@@ -94,6 +95,9 @@ app.use("/api/admin/importar-carteira", requireAdmin);
 app.use("/api/admin/importar-consumo", requireAdmin);
 // sync dos índices econômicos com o Banco Central (SGS): só com o PIN mestre
 app.use("/api/admin/indices", requireAdmin, adminIndicesRouter);
+// reajuste de preço de consumo por indexador (simular/aplicar): só com o PIN mestre, grava em
+// precos_cliente + reajuste_eventos dentro de uma transação (ver routes/adminReajuste.ts)
+app.use("/api/admin/reajuste", requireAdmin, adminReajusteRouter);
 // rotas dedicadas de /api/usuarios (criar com senha provisória, enviar convite) --
 // registradas depois do requireAdmin acima (mesmo prefixo), então só respondem autenticado
 app.use("/api/usuarios", usuariosRouter);
@@ -118,6 +122,10 @@ app.use("/api/cart_mes", requireUserOrAdminAuth);
 // sessão inteira do Admin (achado 2026-08-31: Admin > Índices sempre 401, e como isso limpa
 // o token do localStorage, qualquer aba clicada depois parecia "cair" também).
 app.use("/api/indices_calculados", requireUserOrAdminAuth);
+// reajuste_eventos_detalhe (a view, lida pelo roteador genérico): mesma situação de
+// indices_calculados -- Admin > Reajuste lê com o token do PIN, o botão "Histórico de
+// Reajustes" em Financeiro > Consumo (app principal) lê com sessão de usuário.
+app.use("/api/reajuste_eventos_detalhe", requireUserOrAdminAuth);
 
 // tudo daqui pra baixo exige sessão de usuário válida -- exceto quando a requisição já
 // veio autenticada como admin (req.isAdmin, setado pelo requireAdmin acima), caso em que

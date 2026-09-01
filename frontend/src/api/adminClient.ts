@@ -16,6 +16,29 @@ export interface ParametroStorageMenu {
   pasta: string;
 }
 
+// Um contrato (precos_cliente) candidato a reajuste, já com o valor novo calculado (ver
+// backend/src/routes/adminReajuste.ts) -- status decide se o checkbox nasce marcado/desabilitado
+// na tela de simulação.
+export interface CandidatoReajuste {
+  pc_id: number;
+  cliente_id: number;
+  cliente_nome: string;
+  cliente_cnpj: string | null;
+  produto_id: number;
+  produto_nome: string;
+  produto_detalhe: string | null;
+  pc_dat_niver: string;
+  pc_cod_index: string | null;
+  index_ano: number;
+  index_mes: number;
+  index_acum_12m: number | null;
+  vlr_unit_atual: number | null;
+  vlr_unit_novo: number | null;
+  vlr_franquia_atual: number | null;
+  vlr_franquia_novo: number | null;
+  status: "aplicavel" | "sem_indexador" | "sem_indice_mes_corrente" | "ja_aplicado";
+}
+
 /** Uma linha da planilha de medição, já mapeada pelas colunas (ver ImportarCarteiraPage). */
 export interface LinhaMedicao {
   nome: string | null;
@@ -225,6 +248,24 @@ export const adminApi = {
       atualizadoEm: string;
       indices: { nome: string; serie: number; mesesGravados: number; ultimoMes: string | null; ultimoValor: number | null }[];
     }>("/api/admin/indices/sync", token, { method: "POST" }),
+  // reajuste de preço de consumo -- POST /api/admin/reajuste/simular (só lê, calcula o valor
+  // novo de cada contrato com aniversário no mês corrente) e /aplicar (grava, recebe os pc_id
+  // marcados na tela). Mesmo padrão 2x de importarConsumo/importarCarteira.
+  simularReajuste: (token: string) =>
+    request<{ ok: boolean; anoRef: number; mesRef: number; candidatos: CandidatoReajuste[] }>(
+      "/api/admin/reajuste/simular",
+      token,
+      { method: "POST" }
+    ),
+  aplicarReajuste: (token: string, pcIds: number[]) =>
+    request<{
+      ok: boolean;
+      anoRef: number;
+      mesRef: number;
+      aplicados: number;
+      eventos: CandidatoReajuste[];
+      ignorados: { pc_id: number; motivo: string }[];
+    }>("/api/admin/reajuste/aplicar", token, { method: "POST", body: JSON.stringify({ pcIds }) }),
   // usuarios_permissoes_menu tem PK composta (user_id, menu_key) -- usa rota dedicada do backend
   updatePermissaoMenu: <T>(
     token: string,

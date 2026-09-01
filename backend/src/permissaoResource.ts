@@ -39,6 +39,8 @@ const MENU_BY_RESOURCE: Record<string, string> = {
   faturamento_detalhe: "financeiro",
   indices_economicos: "indices",
   indices_calculados: "indices",
+  reajuste_eventos: "financeiro",
+  reajuste_eventos_detalhe: "financeiro",
   portfolios: "projetos",
   portfolios_progresso: "projetos",
   crono: "projetos",

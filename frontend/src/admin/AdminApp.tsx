@@ -5,10 +5,11 @@ import { CartMesAdminPage } from "./CartMesAdminPage";
 import { ParametrosGeraisPage } from "./ParametrosGeraisPage";
 import { ParametrosStoragePage } from "./ParametrosStoragePage";
 import { IndicesSyncPage } from "./IndicesSyncPage";
+import { ReajusteAdminPage } from "./ReajusteAdminPage";
 
 const TOKEN_KEY = "webcrm_admin_token";
 
-type AdminPage = "usuarios" | "carteira" | "indices" | "parametros" | "armazenamento";
+type AdminPage = "usuarios" | "carteira" | "indices" | "reajuste" | "parametros" | "armazenamento";
 
 export function AdminApp() {
   const [token, setToken] = useState<string | null>(() => localStorage.getItem(TOKEN_KEY));
@@ -40,6 +41,9 @@ export function AdminApp() {
           <button className={page === "indices" ? "active" : ""} onClick={() => setPage("indices")}>
             Índices
           </button>
+          <button className={page === "reajuste" ? "active" : ""} onClick={() => setPage("reajuste")}>
+            Reajuste
+          </button>
           <button className={page === "parametros" ? "active" : ""} onClick={() => setPage("parametros")}>
             Parâmetros
           </button>
@@ -56,6 +60,7 @@ export function AdminApp() {
         {page === "usuarios" && <UsuariosAdminPage token={token} onLogout={handleLogout} />}
         {page === "carteira" && <CartMesAdminPage token={token} onLogout={handleLogout} />}
         {page === "indices" && <IndicesSyncPage token={token} onLogout={handleLogout} />}
+        {page === "reajuste" && <ReajusteAdminPage token={token} onLogout={handleLogout} />}
         {page === "parametros" && <ParametrosGeraisPage token={token} onLogout={handleLogout} />}
         {page === "armazenamento" && <ParametrosStoragePage token={token} onLogout={handleLogout} />}
       </main>

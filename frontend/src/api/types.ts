@@ -235,6 +235,27 @@ export interface IndiceCalculado extends IndiceEconomico {
   index_acum_12m: number | null;
 }
 
+// Saída da view reajuste_eventos_detalhe (views.pg.sql): reajuste_eventos + nome de cliente/produto.
+export interface ReajusteEventoDetalhe {
+  reaj_id: number;
+  pc_id: number;
+  cliente_id: number;
+  cliente_nome: string;
+  cliente_cnpj: string | null;
+  produto_id: number;
+  produto_nome: string;
+  produto_detalhe: string | null;
+  reaj_data: string;
+  reaj_index_nome: string;
+  reaj_index_ano: number;
+  reaj_index_mes: number;
+  reaj_taxa_acum_12m: number;
+  reaj_vlr_unit_ant: number | null;
+  reaj_vlr_unit_novo: number | null;
+  reaj_vlr_franquia_ant: number | null;
+  reaj_vlr_franquia_novo: number | null;
+}
+
 export interface ConsumoAna {
   consumo_id: number;
   cliente_id: number;

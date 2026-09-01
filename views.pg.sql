@@ -249,3 +249,18 @@ SELECT
         ROWS BETWEEN 11 PRECEDING AND CURRENT ROW
     ) AS index_acum_12m
 FROM var_mes vm;
+
+-- ============================================================
+-- 9) reajuste_eventos: junta nome de cliente/produto pro histórico exibido na tela de Consumo
+--    e na aba Admin > Reajuste (evita repetir esse join em cada tela)
+-- ============================================================
+CREATE VIEW reajuste_eventos_detalhe AS
+SELECT
+    re.*,
+    c.cliente_nome,
+    c.cliente_cnpj,
+    p.produto_nome,
+    p.produto_detalhe
+FROM reajuste_eventos re
+JOIN clientes c ON c.cliente_id = re.cliente_id
+JOIN produtos p ON p.produto_id = re.produto_id;
