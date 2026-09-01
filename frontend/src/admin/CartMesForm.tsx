@@ -9,7 +9,9 @@ export interface CartMesFormValues {
 function toFormValues(cartMes: CartMes | null): CartMesFormValues {
   return {
     cart_ano_mes: cartMes?.cart_ano_mes ?? "",
-    cart_vigencia_ativa: cartMes?.cart_vigencia_ativa ?? "N",
+    // mês novo nasce vigente por padrão (decisão do usuário) -- o backend já rebaixa todo o
+    // resto pra 'N' na mesma transação quando isso acontece (resource.ts).
+    cart_vigencia_ativa: cartMes?.cart_vigencia_ativa ?? "S",
   };
 }
 

@@ -1,5 +1,5 @@
 import { Router, Request, Response } from "express";
-import { query } from "../db";
+import { query, withTransaction } from "../db";
 import { catalog, quoteIdent, ensureCatalogLoaded } from "../catalog";
 import { enforceMenuPermission } from "../permissaoResource";
 
@@ -184,12 +184,24 @@ resourceRouter.post("/:resource", enforceMenuPermission("perm_insercao", "resour
   const placeholders = entries.map((_, i) => `$${i + 1}`).join(", ");
   const values = entries.map(([, value]) => value as string | number | null);
 
+  // `cart_mes` só pode ter 1 mês vigente por vez (a exclusão em cascata e outras regras do app
+  // assumem isso) -- criar um mês novo já vigente ('S') rebaixa todo o resto pra 'N' na mesma
+  // transação, decisão do usuário. Vale só na criação; o form já nasce com 'S' marcado por
+  // padrão (CartMesForm.tsx).
+  const viraVigente = info.name === "cart_mes" && entries.some(([k, v]) => k === "cart_vigencia_ativa" && v === "S");
+
   try {
-    const { rows } = await query(
-      `INSERT INTO ${quoteIdent(info.name)} (${cols}) VALUES (${placeholders}) RETURNING *`,
-      values
-    );
-    res.status(201).json(rows[0] ? redactRow(info.name, rows[0] as Record<string, unknown>) : { ok: true });
+    const row = await withTransaction(async (client) => {
+      if (viraVigente) {
+        await client.query("UPDATE cart_mes SET cart_vigencia_ativa = 'N' WHERE cart_vigencia_ativa = 'S'");
+      }
+      const { rows } = await client.query(
+        `INSERT INTO ${quoteIdent(info.name)} (${cols}) VALUES (${placeholders}) RETURNING *`,
+        values
+      );
+      return rows[0];
+    });
+    res.status(201).json(row ? redactRow(info.name, row as Record<string, unknown>) : { ok: true });
   } catch (err) {
     responderErroEscrita(res, info.name, err);
   }
@@ -225,12 +237,28 @@ resourceRouter.put("/:resource/:id", enforceMenuPermission("perm_edicao", "resou
 
   const setSql = entries.map(([key], i) => `${quoteIdent(key)} = $${i + 1}`).join(", ");
   const values = entries.map(([, value]) => value as string | number | null);
+  // capturado numa const antes do callback -- `info.pk` já foi checado como não-nulo acima,
+  // mas TypeScript não propaga essa narrowing pra dentro de uma arrow function fechada
+  // (poderia, em teoria, ter mudado entre a checagem e a execução do callback).
+  const pk = info.pk;
+
+  // mesma regra do POST -- marcar este mês como vigente rebaixa todo o resto pra 'N' (menos
+  // este, que a UPDATE de baixo já grava direto).
+  const viraVigente = info.name === "cart_mes" && entries.some(([k, v]) => k === "cart_vigencia_ativa" && v === "S");
 
   try {
-    const { rows, rowCount } = await query(
-      `UPDATE ${quoteIdent(info.name)} SET ${setSql} WHERE ${quoteIdent(info.pk)} = $${values.length + 1} RETURNING *`,
-      [...values, req.params.id]
-    );
+    const { rows, rowCount } = await withTransaction(async (client) => {
+      if (viraVigente) {
+        await client.query(
+          "UPDATE cart_mes SET cart_vigencia_ativa = 'N' WHERE cart_vigencia_ativa = 'S' AND cart_mes_id <> $1",
+          [req.params.id]
+        );
+      }
+      return client.query(
+        `UPDATE ${quoteIdent(info.name)} SET ${setSql} WHERE ${quoteIdent(pk)} = $${values.length + 1} RETURNING *`,
+        [...values, req.params.id]
+      );
+    });
 
     if (rowCount === 0) {
       res.status(404).json({ error: "registro não encontrado" });
