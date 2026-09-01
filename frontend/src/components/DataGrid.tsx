@@ -177,7 +177,9 @@ export function DataGrid<T>({
   filteredRef.current = filtered;
 
   const alignById = useMemo(() => {
-    const map: Record<string, "left" | "right" | "center"> = {};
+    // "__selection" é a coluna interna do checkbox de seleção (não passa por `columns`, ver
+    // `hasSelection` mais abaixo) -- sempre centralizada, em toda tela que usa `selection`.
+    const map: Record<string, "left" | "right" | "center"> = { __selection: "center" };
     columns.forEach((col) => {
       if (col.align) map[col.id] = col.align;
     });
@@ -525,7 +527,13 @@ export function DataGrid<T>({
                     onClick={onRowClick ? () => onRowClick(row.original as T) : undefined}
                   >
                     {row.getVisibleCells().map((cell) => (
-                      <td key={cell.id} style={{ width: displaySize(cell.column.id, cell.column.getSize()) }}>
+                      <td
+                        key={cell.id}
+                        style={{
+                          width: displaySize(cell.column.id, cell.column.getSize()),
+                          textAlign: alignById[cell.column.id],
+                        }}
+                      >
                         {flexRender(cell.column.columnDef.cell, cell.getContext())}
                       </td>
                     ))}

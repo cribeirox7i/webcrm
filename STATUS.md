@@ -2776,3 +2776,91 @@ trava de segurança pra compensar o tanto mais destrutivo que a exclusão fica.
 nem no navegador (mesma restrição de credencial) -- e o SQL de produção **ainda não foi rodado**,
 sem ele a FK continua sem cascata (só a trava de vigência do código já vale, mas excluir o mês
 vigente ainda vai dar erro de FK até o SQL rodar).
+
+**Atualização**: usuário já rodou `02_aplicar_cascade.sql` em produção -- as 5 tabelas confirmadas
+com `ON DELETE CASCADE` (conferido pelo `SELECT` de verificação no final do script).
+
+### 2ª rodada: mês novo nasce vigente, rebaixa os demais (2026-08-31)
+
+A pedido do usuário: criar um mês novo em Carteira (Admin) deve nascer com `cart_vigencia_ativa
+= 'S'` por padrão, e automaticamente rebaixar TODOS os outros meses pra `'N'` -- só existe 1 mês
+vigente por vez (premissa que a trava de exclusão da leva acima já assumia, e que a duplicação de
+`precos_cliente` na importação de consumo também meio que assume ao escolher "o mês mais
+recente").
+
+- **`backend/src/routes/resource.ts`**: caso especial pra `cart_mes` no `POST` e no `PUT`
+  genéricos -- quando o corpo grava `cart_vigencia_ativa = 'S'`, a mesma transação primeiro
+  rebaixa qualquer outro mês que estivesse `'S'` pra `'N'` (no `PUT`, com `cart_mes_id <> $1`
+  pra não rebaixar o próprio registro que está sendo salvo), só depois grava a linha de verdade.
+  Não existe rota dedicada de `cart_mes` -- é o roteador genérico mesmo (`resourceRouter`), então
+  o caso especial entra ali, igual a trava de exclusão da leva anterior.
+- **`CartMesForm.tsx`**: valor padrão de `cart_vigencia_ativa` no formulário de criação mudou de
+  `'N'` pra `'S'` -- só cosmético (o usuário ainda pode desmarcar antes de salvar), quem garante
+  a regra de verdade é o backend.
+- **Achado no meio da implementação**: `info.pk` (checado como não-nulo antes) parou de type-
+  narrowar dentro do callback de `withTransaction` depois que o `UPDATE` foi movido pra dentro
+  dele -- TypeScript não propaga a narrowing de uma checagem externa pra dentro de uma arrow
+  function fechada. Corrigido capturando `const pk = info.pk` antes do callback e usando `pk` lá
+  dentro.
+
+**Verificação**: `tsc --noEmit` limpo nos dois lados. Não testado contra o Postgres de produção
+nem no navegador (mesma restrição de credencial). **Sem migração de banco** -- é só lógica de
+aplicação em cima da coluna `cart_vigencia_ativa` que já existia.
+
+## Bug real: Admin > Índices sempre 401, derrubava a sessão inteira (2026-08-31)
+
+Usuário reportou "quando clico em Armazenamento ou Parâmetros, desloga e volta pro login" --
+depois, "não está mais logando... começa a carregar e volta pro login". Antes de mexer em
+qualquer coisa, investigado com o usuário: aba anônima conseguia logar, mas a navegação seguinte
+sempre caía -- o console do navegador mostrou a requisição real que falhava:
+`GET /api/indices_calculados?limit=20000` -- **401**.
+
+**Causa raiz**: `indices_calculados` (a view) é lida pelo roteador genérico (`resource.ts`), e
+não tinha NENHUM middleware de PIN montado especificamente pro seu path em `server.ts` --
+diferente de `usuarios`/`parametros_storage_menu` (que têm `requireAdmin` no path exato) ou de
+`cart_mes`/`parametros_gerais` (que têm um middleware dual PIN-ou-sessão). Sem isso, a requisição
+do Admin > Índices (`IndicesSyncPage.tsx`, usa o token do PIN) caía direto no `requireUserAuth`
+genérico (montado pra todo `/api`), que tentava validar o token do PIN como se fosse uma sessão
+de usuário comum, não achava nada em `usuario_sessoes`, e devolvia 401 "não autenticado" --
+**sempre**, não intermitente. Como isso limpa o token do `localStorage` (`onLogout()` no
+`AdminApp.tsx`), qualquer aba clicada DEPOIS já caía na tela de login, mesmo sendo uma aba que
+funcionaria normal (Armazenamento, Parâmetros) -- só parecia que essas duas é que causavam o
+problema, porque Índices fica bem do lado delas no menu e provavelmente foi clicada antes.
+
+Achado batendo o achado anterior documentado (leva de Índices, 2026-08-28: "Não testado: as
+grids renderizadas com dado real -- login local exige `DATABASE_URL`") -- era exatamente esse
+gap que nunca tinha sido testado de ponta a ponta.
+
+**Corrigido**: `backend/src/server.ts` -- `app.use("/api/indices_calculados",
+requireUserOrAdminAuth)`, mesmo padrão já usado pra `cart_mes` (aceita token de PIN OU sessão de
+usuário; Financeiro > Índices no app principal continua funcionando normal com sessão de
+usuário). Não foi preciso mexer em `IndicesSyncPage.tsx`/`IndicesPage.tsx` nem no roteador
+genérico -- só faltava esse middleware no lugar certo.
+
+**Verificação**: `tsc --noEmit` limpo. Conferido por grep todas as chamadas de
+`adminApi.list/getOne/create/update/remove` em `frontend/src/admin/*.tsx` contra os middlewares
+de `server.ts` -- `indices_calculados` era o único resource sem cobertura de PIN nenhuma; os
+demais (`usuarios`, `usuarios_permissoes_menu`, `cart_mes`, `parametros_gerais`,
+`parametros_storage_menu`) já tinham. Não testado no navegador (mesma restrição de credencial) --
+o teste de verdade é o usuário confirmar que Admin > Índices carrega e que navegar entre as
+abas do Admin não desloga mais.
+
+## Leva Ajuste visual em Faturamento (2026-08-31)
+
+A pedido do usuário (print da grid de Faturamento): checkbox de seleção da linha desalinhado
+(sem centralizar), coluna "CNPJ Faturamento" removida da grid, botões de ação com folga demais
+(coluna larga demais pros 3 ícones).
+
+- **`DataGrid.tsx`**: a coluna interna `__selection` (checkbox, usada só por `FaturamentoMesPage`
+  hoje) nunca tinha entrado no mapa `alignById` -- só colunas passadas via `columns` (prop da
+  página) ganhavam alinhamento. Adicionado `__selection: "center"` direto no `alignById`, e o
+  `<td>` do corpo da tabela passou a aplicar `textAlign` (antes só o `<th>` do cabeçalho
+  aplicava) -- corrige tanto o checkbox de cada linha quanto o "selecionar todas" do cabeçalho.
+  Como é mudança no componente compartilhado, vale pra qualquer tela futura que use `selection`,
+  não só Faturamento.
+- **`FaturamentoMesPage.tsx`**: coluna `cliente_cnpj_fat` removida da grid (a busca/exportação de
+  PDF/CSV continuam usando o CNPJ de faturamento por baixo, só a coluna visual saiu).
+  `actionsWidth` de 140 pra 130 (os botões já usavam `.icon-btn`, 30x30 fixo, igual toda outra
+  tela -- só a coluna estava larga demais, sobrando espaço em branco depois dos 3 ícones).
+
+**Verificação**: `tsc --noEmit` limpo. Não testado no navegador (mesma restrição de credencial).

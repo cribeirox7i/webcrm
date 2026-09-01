@@ -225,7 +225,6 @@ export function FaturamentoMesPage({ cartMesId, cartAnoMes, onBack }: Faturament
     () => [
       { id: "cliente", header: "Cliente", value: clienteNome, width: 240 },
       { id: "cliente_cnpj", header: "CNPJ", value: (f) => f.cliente_cnpj, width: 150 },
-      { id: "cliente_cnpj_fat", header: "CNPJ Faturamento", value: (f) => f.cliente_cnpj_fat, width: 150 },
       {
         id: "fat_dat_venc",
         header: "Vencimento NFE",
@@ -307,7 +306,7 @@ export function FaturamentoMesPage({ cartMesId, cartAnoMes, onBack }: Faturament
         searchPlaceholder="Buscar por cliente ou CNPJ..."
         loading={loading}
         exportFilename={`faturamento_${cartAnoMes.replace("/", "-")}`}
-        actionsWidth={140}
+        actionsWidth={130}
         selection={{ selectedIds, onToggle: toggleSelected, onToggleAll: toggleSelectedAll }}
         toolbarExtra={
           <button disabled={selectedIds.size === 0} onClick={handleCsvProtheusSelecionados} title="Gera um único CSV Protheus, uma linha por linha selecionada">
