@@ -3066,3 +3066,43 @@ usuário: não misturar dado confiável com não confiável -- **zerar** (`NULL`
 - **Efeito colateral direto**: o escopo do backfill pendente de `reajuste_eventos` (item acima)
   agora é trivial -- os únicos `pc_id` com `pc_dat_ult_reajuste` preenchido no banco inteiro são
   esses mesmos 70, sem precisar filtrar/decidir mais nada sobre origem confiável.
+
+## Leva Backfill de reajuste_eventos histórico (2026-09-01)
+
+Retomada da pendência da leva "Reajuste de preço de consumo" -- gerar evento retroativo em
+`reajuste_eventos` pros 70 contratos confiáveis (leva anterior). O plano original mudou de rumo
+duas vezes ao longo da investigação, tudo registrado em
+`backend/scripts/sql-2026-09-01-backfill-reajuste-historico/00_LEIA-ME.md`:
+
+1. **Taxa observada** (`novo/antigo - 1`, decisão inicial confirmada com o usuário) -- descartada
+   ao descobrir que **nenhum dos 70** tem uma linha de mês anterior no banco pra comparar (não
+   existe "antigo" registrado). Achado real: `precos_cliente` desses contratos nunca teve mais de
+   1 linha por cliente+produto.
+2. **Taxa via acumulado 12m do indexador** (`indices_calculados.index_acum_12m`, no mês/ano de
+   `pc_dat_ult_reajuste`) -- só 43/70 tinham dado de cara. Resincronizar os índices (Admin >
+   Índices > Atualizar agora -- precisou de 2 tentativas, a 1ª deu timeout de 15s puxando o
+   Banco Central, transitório) subiu pra 57/70. Os 11 restantes eram todos de agosto/2026 (o mês
+   que tinha acabado de fechar) -- IPCA/INPC daquele mês ainda não tinham sido publicados pelo
+   BCB (~dia 10 do mês seguinte é o normal).
+3. **Regra do mês anterior como fallback** (decisão do usuário, 2026-09-01): quando o índice do
+   mês exato não existe, usa o do mês anterior. Resolveu os 11 -- sobraram só 2 sem evento
+   (`pc_id` 23828/25108, CRESCER SECURITIZADORA S.A., sem `pc_cod_index` cadastrado -- confirmado
+   também em branco na planilha original, não é perda de dado nossa). Usuário confirmou o
+   indexador certo (IPCA) -- corrigido em
+   `sql-2026-09-01-backfill-aniversario/06_ajustar_indice_crescer.sql`, incluindo os 2 no
+   backfill final.
+
+- **`06_backfill_reajuste_eventos.sql`**: o INSERT de verdade. Valor "antes" calculado de trás
+  pra frente a partir do valor atual ("depois") e da taxa: `antes = depois / (1 + taxa)` -- mesma
+  fórmula da tela Admin > Reajuste, invertida. Idempotente (`NOT EXISTS` por `pc_id`).
+- **Achado de UX no meio do processo**: o Supabase SQL Editor só mostra o resultado da última
+  instrução do lote -- rodar `BEGIN;...;COMMIT;` sempre mostra "No rows returned" (do `COMMIT`),
+  inclusive pra um `SELECT count(*)` isolado se a aba ainda tiver o resultado antigo em cache; a
+  conferência de verdade precisa ser rodada como consulta separada, sempre.
+
+**Verificação**: testado via PGlite com 3 contratos sintéticos (mês exato disponível, fallback
+pro mês anterior, sem indexador) + reexecução confirmando idempotência -- todos os casos
+bateram. **Rodado e conferido em produção**: `08_conferencia_final.sql` confirmou **70** eventos
+criados -- cobertura completa, sem exceção. O histórico de reajustes (Admin > Reajuste e o botão
+na lista de meses) agora reflete a história real desses contratos, não só reajustes futuros
+aplicados pela tela.
