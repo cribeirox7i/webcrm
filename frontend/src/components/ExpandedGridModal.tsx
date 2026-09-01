@@ -10,6 +10,7 @@ interface ExpandedGridModalProps<T> {
   searchValue: (row: T) => string;
   searchPlaceholder?: string;
   filters?: DataGridFilter<T>[];
+  defaultFilterValues?: Record<string, string>;
   renderActions?: (row: T) => ReactNode;
   actionsWidth?: number;
   exportFilename: string;
@@ -32,6 +33,7 @@ export function ExpandedGridModal<T>({
   searchValue,
   searchPlaceholder,
   filters,
+  defaultFilterValues,
   renderActions,
   actionsWidth,
   exportFilename,
@@ -62,6 +64,7 @@ export function ExpandedGridModal<T>({
               searchValue={searchValue}
               searchPlaceholder={searchPlaceholder}
               filters={filters}
+              defaultFilterValues={defaultFilterValues}
               renderActions={renderActions}
               actionsWidth={actionsWidth}
               exportFilename={exportFilename}

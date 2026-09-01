@@ -31,6 +31,10 @@ export interface DataGridFilter<T> {
   id: string;
   label: string;
   value: (row: T) => string;
+  /** Lista fixa de opções, no lugar de derivar automaticamente dos valores distintos de `data`
+   * -- usado quando o filtro precisa oferecer uma opção que pode não aparecer no recorte de
+   * dados carregado agora (ex.: mês do cart_mes sem nenhum evento ainda). */
+  options?: string[];
 }
 
 /** Checkbox por linha + "selecionar todas" (considerando só as linhas visíveis após busca/filtro).
@@ -153,6 +157,10 @@ export function DataGrid<T>({
   const filterOptions = useMemo(() => {
     const map: Record<string, string[]> = {};
     filters.forEach((f) => {
+      if (f.options) {
+        map[f.id] = f.options;
+        return;
+      }
       const set = new Set<string>();
       data.forEach((row) => {
         const v = f.value(row);

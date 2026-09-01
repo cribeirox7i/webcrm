@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { api } from "../api/client";
 import type { CartMesResumo, ReajusteEventoDetalhe } from "../api/types";
 import { ExpandedGridModal } from "./ExpandedGridModal";
-import type { DataGridColumn } from "./DataGrid";
+import type { DataGridColumn, DataGridFilter } from "./DataGrid";
 
 /** "2026-02-05" -> "2026/02" -- mesmo formato de cart_ano_mes, pra casar o evento com a
  * competência do cart_mes clicado (reajuste_eventos não tem cart_mes_id, só a data do evento). */
@@ -24,22 +24,19 @@ function formatDataBr(iso: string | null): string {
 
 interface HistoricoReajustesModalProps {
   onClose: () => void;
-  /** Competência (cart_ano_mes) do mês cujo botão inline abriu o modal -- filtro nasce nela,
-   * mas o usuário pode trocar pra outro mês ou limpar (ver `select` no header). Omitir/`null`
-   * abre sem filtro (todos os meses). */
+  /** Competência (cart_ano_mes) do mês cujo botão inline abriu o modal -- filtro de "Mês" (ao
+   * lado da busca, mesmo padrão de toda tela com DataGrid) já nasce nela. Omitir/`null` abre
+   * sem filtro (todos os meses). */
   cartAnoMesInicial?: string | null;
 }
 
 /** Lista os eventos de reajuste já aplicados (Admin > Reajuste) -- botão "Histórico de
  * Reajustes" na lista de meses (Financeiro). Busca a própria lista ao abrir (view
  * reajuste_eventos_detalhe, mesma que a tela de Admin usa), não recebe dado pronto do card como
- * o ExpandedGridModal usual. Filtro de competência é local (client-side): a lista de opções vem
- * de `cart_mes_resumo` (todo mês cadastrado, não só os que têm reajuste), mas o filtro em si só
- * recorta o array já carregado -- não refaz a busca no backend. */
+ * o ExpandedGridModal usual. */
 export function HistoricoReajustesModal({ onClose, cartAnoMesInicial }: HistoricoReajustesModalProps) {
   const [eventos, setEventos] = useState<ReajusteEventoDetalhe[]>([]);
   const [competencias, setCompetencias] = useState<string[]>([]);
-  const [filtroMes, setFiltroMes] = useState(cartAnoMesInicial ?? "");
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
 
@@ -65,9 +62,12 @@ export function HistoricoReajustesModal({ onClose, cartAnoMesInicial }: Historic
     };
   }, []);
 
-  const eventosFiltrados = useMemo(
-    () => (filtroMes ? eventos.filter((h) => competenciaDoEvento(h.reaj_data) === filtroMes) : eventos),
-    [eventos, filtroMes]
+  // Lista fixa de opções (via `options`, não derivada de `data`): todo mês cadastrado em
+  // cart_mes precisa poder ser escolhido no filtro, mesmo o que ainda não tem nenhum reajuste
+  // (ex.: o botão inline foi clicado num mês novo) -- pedido explícito do usuário.
+  const filters: DataGridFilter<ReajusteEventoDetalhe>[] = useMemo(
+    () => [{ id: "mes", label: "Mês", value: (h) => competenciaDoEvento(h.reaj_data), options: competencias }],
+    [competencias]
   );
 
   const columns: DataGridColumn<ReajusteEventoDetalhe>[] = useMemo(
@@ -128,24 +128,16 @@ export function HistoricoReajustesModal({ onClose, cartAnoMesInicial }: Historic
     <ExpandedGridModal
       title="Histórico de Reajustes"
       onClose={onClose}
-      data={eventosFiltrados}
+      data={eventos}
       columns={columns}
       getRowId={(h) => h.reaj_id}
       searchValue={(h) => `${h.cliente_nome} ${h.cliente_cnpj ?? ""} ${h.produto_nome} ${h.reaj_index_nome}`}
       searchPlaceholder="Buscar por cliente, CNPJ, produto ou indexador..."
+      filters={filters}
+      defaultFilterValues={{ mes: cartAnoMesInicial ?? "" }}
       exportFilename="historico-reajustes"
       loading={loading}
-      emptyMessage={filtroMes ? `Nenhum reajuste em ${filtroMes}.` : "Nenhum reajuste aplicado ainda."}
-      headerExtra={
-        <select value={filtroMes} onChange={(e) => setFiltroMes(e.target.value)} aria-label="Filtrar por mês">
-          <option value="">Todos os meses</option>
-          {competencias.map((c) => (
-            <option key={c} value={c}>
-              {c}
-            </option>
-          ))}
-        </select>
-      }
+      emptyMessage="Nenhum reajuste aplicado ainda."
     />
   );
 }

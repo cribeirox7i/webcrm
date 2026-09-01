@@ -3177,3 +3177,25 @@ trocar ou limpar o filtro.
   clique do botão de Reajustes daquela linha, passado pro modal.
 
 **Verificação**: `tsc --noEmit` limpo. Não testado no navegador (mesma restrição de sempre).
+
+## Leva Filtro de mês no padrão do DataGrid (2026-09-01)
+
+Pedido do usuário: o filtro de mês do Histórico de Reajustes (leva acima) devia ficar ao lado do
+campo de busca, "conforme padrão de todas as telas" -- em vez do `<select>` avulso que eu tinha
+colocado no cabeçalho do modal (perto do "Fechar").
+
+- **`DataGridFilter<T>` (`DataGrid.tsx`) ganhou `options?: string[]`**: quando presente, o
+  dropdown do filtro usa essa lista fixa em vez de derivar automaticamente dos valores distintos
+  de `data` (o que todo outro filtro do app já faz, ex. `IndicesSyncPage`) -- sem isso, um mês
+  sem nenhum reajuste ainda não apareceria como opção selecionável. Generalização pequena,
+  reutilizável por qualquer tela futura com o mesmo problema (opção que precisa existir mesmo
+  sem aparecer no recorte de dados carregado).
+- **`ExpandedGridModal.tsx` ganhou `defaultFilterValues`** (repassado direto pro `DataGrid`) --
+  faltava esse prop pra inicializar o filtro já marcado no mês clicado.
+- **`HistoricoReajustesModal.tsx`**: trocou o `<select>` customizado por
+  `filters={[{ id: "mes", label: "Mês", value: ..., options: competencias }]}` +
+  `defaultFilterValues={{ mes: cartAnoMesInicial }}` -- mesmo mecanismo/posição de toda outra
+  tela, e o "0 registros" some via mensagem padrão do próprio `DataGrid` (não precisa mais de
+  lógica própria de "filtrado e vazio").
+
+**Verificação**: `tsc --noEmit` limpo. Não testado no navegador (mesma restrição de sempre).
