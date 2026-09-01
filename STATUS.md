@@ -2992,3 +2992,59 @@ mês) mais uma segunda rodada de simulação depois de aplicar, confirmando que 
 reajustado não aparece mais como `aplicavel`. Não testado no navegador (mesma restrição de
 `DATABASE_URL`/credencial de sempre) -- o teste de ponta a ponta fica por conta do usuário: abrir
 Admin > Reajuste, simular, conferir os valores calculados e aplicar.
+
+## Leva Botão de Reajustes movido pra lista de meses (2026-09-01)
+
+A pedido do usuário: o botão "Histórico de Reajustes" (leva anterior) saiu de dentro da tela de
+Consumo e foi pro mesmo lugar dos botões Preços/Consumo/Faturamento -- a lista de meses
+(`FinanceiroPage.tsx`, grupo CONSUMO das `row-actions-columns`). `PercentIcon` novo em
+`icons.tsx`, mesmo padrão dos outros ícones de ação. `actionsWidth` da grid ajustado de 350 pra
+386 (mais um ícone de 30px + 6px de gap no grupo) -- essa tela já teve bug de rolagem lateral por
+`actionsWidth` desalinhado com o conteúdo real, então o valor foi recalculado, não só chutado.
+
+**Verificação**: `tsc --noEmit` limpo. Não testado no navegador (mesma restrição de sempre).
+
+## Leva Backfill de Aniversário do Contrato + Último Reajuste (2026-09-01)
+
+Contexto: durante a tentativa de backfillar `reajuste_eventos` a partir do `pc_dat_ult_reajuste`
+já existente, o usuário percebeu que a planilha usada no backfill de agosto (`sql-2026-08-28-
+indices/05_backfill_ult_reajuste.sql`, 2373 linhas) era a errada. A planilha certa
+(`tabela_precos_2026-07 - V2.xlsx`) tem só 365 linhas com "Aniversário do Contrato" preenchido
+(e dessas, 70 também com "Último Reajuste") -- **muito menor e mais confiável** que a carga de
+agosto. Decisões confirmadas com o usuário: só essas 365 linhas entram, casando por `pc_id` (=
+coluna `ID` da planilha, confirmado pelo usuário) + CNPJ + produto + detalhe (mesmo padrão do
+backfill de agosto); grava `pc_dat_niver` (todas as 365) e `pc_dat_ult_reajuste` (só as 70 com
+valor -- as outras 295 mantêm o que já tinham, via `COALESCE`); não mexe em `pc_cod_index`
+(estava na planilha mas o usuário optou por deixar de fora).
+
+- **`backend/scripts/backfill-aniversario-2026-09.py`** (novo, mesmo padrão do
+  `backfill-pc-ult-reajuste.py` de agosto): lê a planilha por posição de coluna fixa (não por
+  nome -- o cabeçalho tem acento e o console do Windows corrompe a exibição, então casar por
+  índice é mais robusto), gera `precheck` (só `SELECT` de conferência) ou `update` (o `UPDATE`
+  de verdade, idempotente).
+- **`backend/scripts/sql-2026-09-01-backfill-aniversario/`**: `01_diagnostico.sql` (gerado em
+  modo precheck) e `02_backfill.sql` (gerado em modo update), já rodados em produção pelo
+  usuário -- resultado: **365/365** `pc_id` encontrados e batendo em CNPJ+produto+detalhe (0
+  divergências), aniversário **já estava correto** no banco pras 365 linhas (0 mudanças reais),
+  e **48 de 70** linhas de "Último Reajuste" realmente mudaram de valor (as outras 22 já
+  estavam certas). Conferido rodando a consulta 4 do diagnóstico de novo depois do UPDATE --
+  veio 0/0, confirmando que não sobrou nada pra aplicar.
+
+**Achado no meio do processo**: o Supabase SQL Editor só mostra o resultado da **última**
+instrução quando se roda o arquivo inteiro de uma vez -- o usuário mandou o mesmo print (da
+consulta 4) três vezes achando que eram consultas diferentes, até rodarmos cada bloco
+selecionado à parte. Mesma pegadinha já documentada (ver `## Sem acesso direto ao Postgres`),
+reforça que isso vale pra qualquer script novo com mais de 1 `SELECT`.
+
+**Verificação**: a lógica do `02_backfill.sql` (idempotência, `COALESCE` preservando
+`pc_dat_ult_reajuste` quando a planilha não tem valor, e a linha de divergência ficando de fora)
+testada via PGlite com um recorte real de 3 linhas da planilha + 1 linha de CNPJ propositalmente
+errado, rodando o UPDATE duas vezes seguidas -- todos os casos bateram, incluindo idempotência.
+Já aplicado e conferido em produção pelo usuário (ver acima).
+
+**Pendência**: o backfill de `reajuste_eventos` (histórico de reajustes aplicados antes da tela
+Admin > Reajuste existir) segue em aberto -- `backend/scripts/sql-2026-09-01-backfill-reajuste-
+historico/01_diagnostico.sql` já escrito, mas a análise foi pausada quando a planilha errada foi
+descoberta. Com `pc_dat_ult_reajuste` agora corrigido (leva acima), a base de dado pra decidir
+esse backfill mudou -- retomar do zero, não confiar na análise anterior (que rodou em cima do
+dado errado dos 2373).
