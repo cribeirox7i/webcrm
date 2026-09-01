@@ -110,6 +110,14 @@ app.use("/api", parametrosRouter);
 // (sem sessão de usuário, só o PIN) -- mesma lógica dual do parametrosRouter, mas
 // reaproveitável via middleware porque aqui o CRUD inteiro (não só GET) precisa dela.
 app.use("/api/cart_mes", requireUserOrAdminAuth);
+// indices_calculados (a view, lida pelo roteador genérico) tem a mesma situação: Admin >
+// Índices (IndicesSyncPage.tsx) lê com o token do PIN, Financeiro > Índices (app principal)
+// lê com sessão de usuário. Sem isso, o PIN nunca era reconhecido aqui (não tinha nenhum
+// requireAdmin montado nesse path específico) -- o requireUserAuth genérico logo abaixo
+// tratava o token de admin como sessão de usuário inválida, devolvia 401 e derrubava a
+// sessão inteira do Admin (achado 2026-08-31: Admin > Índices sempre 401, e como isso limpa
+// o token do localStorage, qualquer aba clicada depois parecia "cair" também).
+app.use("/api/indices_calculados", requireUserOrAdminAuth);
 
 // tudo daqui pra baixo exige sessão de usuário válida -- exceto quando a requisição já
 // veio autenticada como admin (req.isAdmin, setado pelo requireAdmin acima), caso em que
