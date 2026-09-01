@@ -3048,3 +3048,21 @@ historico/01_diagnostico.sql` já escrito, mas a análise foi pausada quando a p
 descoberta. Com `pc_dat_ult_reajuste` agora corrigido (leva acima), a base de dado pra decidir
 esse backfill mudou -- retomar do zero, não confiar na análise anterior (que rodou em cima do
 dado errado dos 2373).
+
+## Leva Zerar Último Reajuste não confiável (2026-09-01)
+
+Depois da leva acima, o usuário percebeu que os ~2303 contratos fora dos 70 confiáveis ainda
+carregavam a data de `pc_dat_ult_reajuste` da carga de agosto (a planilha errada) -- o
+`02_backfill.sql` usava `COALESCE` pra preservar o que já existia, não apagava nada. Decisão do
+usuário: não misturar dado confiável com não confiável -- **zerar** (`NULL`)
+`pc_dat_ult_reajuste` em todo `pc_id` que não está entre os 70.
+
+- **`backend/scripts/sql-2026-09-01-backfill-aniversario/04_limpar_ultimo_reajuste.sql`**:
+  `UPDATE precos_cliente SET pc_dat_ult_reajuste = NULL WHERE pc_id NOT IN (<os 70>)`.
+  Idempotente. `03_diagnostico_limpeza.sql` antes (esperava 2303 a zerar) e
+  `05_conferencia_final.sql` depois (conta total com a data preenchida).
+- **Rodado e conferido em produção**: `05_conferencia_final.sql` confirmou **70** -- exatamente
+  os contratos da planilha confiável, nenhum resto da carga de agosto.
+- **Efeito colateral direto**: o escopo do backfill pendente de `reajuste_eventos` (item acima)
+  agora é trivial -- os únicos `pc_id` com `pc_dat_ult_reajuste` preenchido no banco inteiro são
+  esses mesmos 70, sem precisar filtrar/decidir mais nada sobre origem confiável.
