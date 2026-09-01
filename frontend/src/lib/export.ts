@@ -1,7 +1,13 @@
 import ExcelJS from "exceljs";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
-import evertecLogo from "../assets/evertec-logo.png";
+// Fallback pra fundo claro (capa/cabeçalho de PDF) -- NÃO é o mesmo arquivo do Sidebar
+// (`evertec-logo.png`, estilizado pra fundo escuro: pontos laranjas + wordmark quase branco,
+// baixíssimo contraste em página branca -- achado 2026-08-31, PDF real saiu só com bordas do
+// texto visíveis). Baixado da URL oficial que o usuário passou (q4cdn, investor relations) e
+// processado (mesmo método de sempre: limiar de "brancura" só no canal alfa, recorte pro
+// bounding box do conteúdo) -- ver STATUS.md.
+import evertecLogoClaro from "../assets/evertec-logo-claro.png";
 import { getParametrosGerais } from "./parametros";
 
 export type ExportCell = string | number | null;
@@ -45,12 +51,16 @@ async function loadCoverLogoAsDataUrl(): Promise<{ dataUrl: string; width: numbe
       // URL configurada mas não carregou (offline, CORS, link quebrado) -- não trava o PDF
     }
   }
-  return loadImageAsDataUrl(evertecLogo);
+  return loadImageAsDataUrl(evertecLogoClaro);
 }
 
-/** Capa padrão (logo + título + linhas de subtítulo), reusada por todo PDF do app. */
+/** Capa padrão (logo + título + linhas de subtítulo), reusada por todo PDF do app. Cada linha
+ * (título incluso) quebra em várias quando não cabe na largura da página -- achado 2026-08-31:
+ * nome de cliente grande (razão social longa) saía cortado nas bordas em vez de quebrar. */
 async function addCoverPage(doc: jsPDF, title: string, lines: { text: string; fontSize?: number }[]) {
   const pageWidth = doc.internal.pageSize.getWidth();
+  const margin = 20;
+  const maxWidth = pageWidth - margin * 2;
   const logo = await loadCoverLogoAsDataUrl();
   // 130mm -- aumentado (era 90mm) pra ajudar a legibilidade do texto "evertec" em cinza
   // claro da logo oficial (baixo contraste em fundo branco por design deles, não alterado
@@ -61,15 +71,29 @@ async function addCoverPage(doc: jsPDF, title: string, lines: { text: string; fo
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(14);
-  doc.text(title, pageWidth / 2, 140, { align: "center" });
+  const titleLines: string[] = doc.splitTextToSize(title, maxWidth);
+  doc.text(titleLines, pageWidth / 2, 140, { align: "center" });
 
-  let y = 150;
+  let y = 140 + titleLines.length * 7 + 8;
   for (const line of lines) {
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(line.fontSize ?? 11);
-    doc.text(line.text, pageWidth / 2, y, { align: "center" });
-    y += 8;
+    const fontSize = line.fontSize ?? 11;
+    doc.setFontSize(fontSize);
+    const wrapped: string[] = doc.splitTextToSize(line.text, maxWidth);
+    doc.text(wrapped, pageWidth / 2, y, { align: "center" });
+    y += wrapped.length * (fontSize * 0.5) + 4;
   }
+}
+
+/** Logo pequena no canto superior esquerdo, pras páginas de conteúdo (não a capa) -- pedido do
+ * usuário. Devolve a coordenada Y logo abaixo da logo, pra quem chamar saber onde continuar o
+ * conteúdo sem sobrepor. */
+async function addSmallHeaderLogo(doc: jsPDF): Promise<number> {
+  const logo = await loadCoverLogoAsDataUrl();
+  const logoWidth = 22;
+  const logoHeight = (logo.height / logo.width) * logoWidth;
+  doc.addImage(logo.dataUrl, "PNG", 14, 8, logoWidth, logoHeight);
+  return 8 + logoHeight + 6;
 }
 
 /** Numeração "Página X de Y" no rodapé de todas as páginas -- chamar por último, já com o doc completo. */
@@ -150,10 +174,15 @@ interface RelatorioConsumoLinha {
   produto: string;
   detalhe: string;
   qtd: number;
+  // null quando a linha não tem valor unitário próprio cadastrado (ex. franquia cobrindo tudo
+  // sem excedente) -- exibido em branco na tabela em vez de "R$ 0,00" enganoso.
+  valorUnit: number | null;
   valorAFaturar: number;
 }
 
 interface RelatorioConsumoAnalitico {
+  // já vem pronto como "NOME" ou "NOME / DETALHE" (produto_nome + produto_detalhe) -- montado
+  // por quem chama, essa função só imprime.
   produto: string;
   data: string;
   qtd: number;
@@ -177,38 +206,64 @@ export async function exportRelatorioConsumoPdf(
   analitico: RelatorioConsumoAnalitico[]
 ) {
   const doc = new jsPDF();
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const maxWidth = pageWidth - 28; // margem de 14mm de cada lado, igual o resto do documento
 
   await addCoverPage(doc, "DOCUMENTO DE ACOMPANHAMENTO DE FATURAMENTO", [
     { text: `Detalhamento de Consumo - ${info.competencia}` },
-    { text: `${info.clienteNome} - ${info.cnpj}` },
+    // nome do cliente e CNPJ em linhas separadas (antes vinham juntos com " - ", cortando fora
+    // da página quando a razão social era grande) -- addCoverPage já quebra cada uma em várias
+    // linhas se precisar.
+    { text: info.clienteNome },
+    { text: info.cnpj, fontSize: 10 },
   ]);
 
+  // ---- página de resumo ----
   doc.addPage();
+  let y = await addSmallHeaderLogo(doc);
   doc.setFont("helvetica", "bold");
   doc.setFontSize(11);
-  doc.text(`Detalhamento de Consumo - ${info.competencia}`, 14, 15);
+  doc.text(`Detalhamento de Consumo - ${info.competencia}`, 14, y);
+  y += 7;
   doc.setFont("helvetica", "normal");
-  doc.text(`${info.clienteNome} - ${info.cnpj}`, 14, 22);
+  doc.setFontSize(10);
+  const nomeWrapped: string[] = doc.splitTextToSize(info.clienteNome, maxWidth);
+  doc.text(nomeWrapped, 14, y);
+  y += nomeWrapped.length * 5 + 1;
+  doc.text(info.cnpj, 14, y);
+  y += 6;
+
   autoTable(doc, {
-    startY: 28,
-    head: [["Produto", "Detalhe do Consumo", "Quantidade", "Valor a Faturar"]],
+    startY: y,
+    head: [["Produto", "Detalhe do Consumo", "Quantidade", "Valor Unitário", "Valor a Faturar"]],
     body: [
-      ...linhas.map((l) => [l.produto, l.detalhe, String(l.qtd), formatMoneyBr(l.valorAFaturar)]),
-      ["", "", "TOTAL", formatMoneyBr(totalAFaturar)],
+      ...linhas.map((l) => [
+        l.produto,
+        l.detalhe,
+        String(l.qtd),
+        l.valorUnit != null ? formatMoneyBr(l.valorUnit) : "",
+        formatMoneyBr(l.valorAFaturar),
+      ]),
+      ["", "", "", "TOTAL", formatMoneyBr(totalAFaturar)],
     ],
     styles: { fontSize: 8, cellPadding: 2 },
     headStyles: { fillColor: ACCENT_RGB },
-    columnStyles: { 1: { cellWidth: 70 } },
+    columnStyles: { 1: { cellWidth: 60 } },
   });
 
+  // ---- página analítica ----
   doc.addPage();
+  const y2 = await addSmallHeaderLogo(doc);
   autoTable(doc, {
-    startY: 15,
-    head: [["Produto", "Data", "Qtde", "Detalhe"]],
+    startY: y2,
+    head: [["Produto", "Data", "Qtd", "Detalhe"]],
     body: analitico.map((a) => [a.produto, a.data, a.qtd.toLocaleString("pt-BR"), a.detalhe]),
     styles: { fontSize: 7, cellPadding: 2 },
     headStyles: { fillColor: ACCENT_RGB },
-    columnStyles: { 0: { cellWidth: 55 } },
+    // Produto mais estreito (texto curto, "NOME / DETALHE") e Data com largura fixa suficiente
+    // pra nunca quebrar em 2 linhas (antes a coluna encolhia demais, sobrando espaço só pro
+    // Detalhe/Identificador, que é o texto realmente longo dessa tabela).
+    columnStyles: { 0: { cellWidth: 32 }, 1: { cellWidth: 20 }, 2: { cellWidth: 12 } },
   });
 
   addPageNumbers(doc);

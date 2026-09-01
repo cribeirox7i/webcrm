@@ -2864,3 +2864,53 @@ A pedido do usuário (print da grid de Faturamento): checkbox de seleção da li
   tela -- só a coluna estava larga demais, sobrando espaço em branco depois dos 3 ícones).
 
 **Verificação**: `tsc --noEmit` limpo. Não testado no navegador (mesma restrição de credencial).
+
+## Leva PDF de Faturamento: layout + logo errada (2026-08-31)
+
+A pedido do usuário (prints do PDF real de Faturamento, cliente com razão social grande): capa e
+cabeçalho cortavam nome de cliente grande nas bordas em vez de quebrar linha; página analítica com
+coluna Produto larga demais e Data quebrando em 2 linhas; sem coluna de valor unitário no resumo;
+sem logo no cabeçalho das páginas de conteúdo (só a capa tinha).
+
+- **`lib/export.ts`**: `addCoverPage` (compartilhada com `exportCronogramaPdf`) passou a quebrar
+  toda linha (título incluso) com `doc.splitTextToSize` antes de desenhar -- antes um nome de
+  cliente grande saía cortado nas margens da página. Nome do cliente e CNPJ separados em linhas
+  distintas (antes vinham juntos com `" - "`, um texto só, mais fácil de estourar a largura).
+  Nova função `addSmallHeaderLogo` (logo pequena, 22mm, canto superior esquerdo) chamada nas
+  páginas de resumo e analítica -- devolve a coordenada Y logo abaixo da logo, pra quem chama
+  saber onde continuar sem sobrepor. Tabela de resumo ganhou a coluna "Valor Unitário" (em branco
+  quando a linha não tem valor unitário próprio, em vez de "R$ 0,00" enganoso). Tabela analítica:
+  cabeçalho "Qtde" -> "Qtd", coluna Produto mais estreita (32mm) e Data com largura fixa (20mm)
+  suficiente pra nunca quebrar -- antes a distribuição automática do autoTable encolhia demais
+  essas duas pra sobrar espaço pro Detalhe/Identificador (o texto realmente longo da tabela).
+- **`FaturamentoMesPage.tsx`**: `precos_cliente_mes_atual` não expõe `pc_vlr_unit` (só as colunas
+  calculadas) -- carregada à parte, cru (`precos_cliente`, mesmo `cart_mes_id`), só pra achar o
+  valor unitário de cada linha do resumo. Coluna Produto do analítico passou a vir pronta como
+  "NOME" ou "NOME / DETALHE" (produto_nome + produto_detalhe, quando o produto tem detalhe
+  cadastrado) -- montada por quem chama (`produtoComDetalhe`), a função de export só imprime.
+
+**Achado real no meio do teste** (não é bug desta leva, é herdado): o fallback embutido de logo
+pro PDF (`loadCoverLogoAsDataUrl`, usado quando `parametros_gerais.param_logo_claro_url` não está
+configurado) importava o MESMO arquivo do Sidebar (`evertec-logo.png`) -- só que esse arquivo é
+estilizado pra fundo ESCURO (wordmark quase branco, baixíssimo contraste), e no PDF (fundo branco)
+saía só com as bordas do texto visíveis, ilegível. Usuário confirmou testando o relatório de
+verdade e passou a URL da logo oficial certa (q4cdn, investor relations Evertec) --
+`frontend/src/assets/evertec-logo-claro.png` (novo arquivo): baixado, fundo branco removido
+(mesmo método já documentado no projeto -- limiar de "brancura" só no canal alfa, preserva
+anti-aliasing) e recortado pro bounding box do conteúdo, processado via canvas no navegador (sem
+Python disponível nesta máquina). `export.ts` trocou o import pra esse arquivo novo -- o
+`evertec-logo.png` original (Sidebar, fundo escuro) não foi tocado.
+
+**Verificação**: `tsc --noEmit` limpo. Testado de ponta a ponta no navegador via console (dev
+server local, sem precisar de login/`DATABASE_URL`) -- `exportRelatorioConsumoPdf` importado
+direto do módulo e chamado com dados sintéticos reproduzindo o caso real (nome de cliente longo,
+produto+detalhe, textos de detalhamento longos), interceptando `URL.createObjectURL` (o
+`.save()` do jsPDF dispara um evento de clique sintético via `dispatchEvent`, não
+`HTMLAnchorElement.click()` -- a primeira tentativa de interceptar por aí não pegou nada) pra
+capturar o PDF gerado sem deixar baixar de verdade. **Confirmado visualmente**: capa com a logo
+nova (texto "evertec" legível, cinza sobre fundo branco) -- o achado da logo errada foi
+corrigido de verdade, não só no código. **Não confirmado visualmente em detalhe** (o viewer de
+PDF embutido do navegador bloqueia clique/zoom por ser tratado como cross-origin nesse ambiente
+de teste): quebra de linha do nome grande, larguras de coluna da página analítica, coluna Valor
+Unitário -- lógica revisada e usa as mesmas APIs (`splitTextToSize`, `columnStyles`) já usadas em
+outros relatórios do arquivo, mas vale o usuário conferir visualmente depois do deploy.

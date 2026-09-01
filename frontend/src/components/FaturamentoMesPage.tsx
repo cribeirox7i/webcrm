@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../api/client";
-import type { Cliente, ConsumoAna, FaturamentoDetalhe, PrecosClienteMesAtual, Produto } from "../api/types";
+import type { Cliente, ConsumoAna, FaturamentoDetalhe, PrecosCliente, PrecosClienteMesAtual, Produto } from "../api/types";
 import { StatCards } from "./StatCards";
 import { usePageTitle } from "../PageTitleContext";
 import { DataGrid, type DataGridColumn } from "./DataGrid";
@@ -45,6 +45,9 @@ export function FaturamentoMesPage({ cartMesId, cartAnoMes, onBack }: Faturament
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [produtos, setProdutos] = useState<Produto[]>([]);
   const [precosMesAtual, setPrecosMesAtual] = useState<PrecosClienteMesAtual[]>([]);
+  // `precos_cliente_mes_atual` não expõe `pc_vlr_unit` (só as colunas calculadas) -- carregado à
+  // parte (cru), só pra achar o valor unitário de cada linha no relatório PDF.
+  const [precosCliente, setPrecosCliente] = useState<PrecosCliente[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -73,16 +76,18 @@ export function FaturamentoMesPage({ cartMesId, cartAnoMes, onBack }: Faturament
     setLoading(true);
     setLoadError(null);
     try {
-      const [faturamentosRes, clientesRes, produtosRes, precosMesAtualRes] = await Promise.all([
+      const [faturamentosRes, clientesRes, produtosRes, precosMesAtualRes, precosClienteRes] = await Promise.all([
         api.list<FaturamentoDetalhe>("faturamento_detalhe", { cart_mes_id: cartMesId, limit: 20000 }),
         api.list<Cliente>("clientes", { limit: 20000 }),
         api.list<Produto>("produtos", { limit: 20000 }),
         api.list<PrecosClienteMesAtual>("precos_cliente_mes_atual", { cart_mes_id: cartMesId, limit: 20000 }),
+        api.list<PrecosCliente>("precos_cliente", { cart_mes_id: cartMesId, limit: 20000 }),
       ]);
       setFaturamentos(faturamentosRes.data);
       setClientes(clientesRes.data);
       setProdutos(produtosRes.data);
       setPrecosMesAtual(precosMesAtualRes.data);
+      setPrecosCliente(precosClienteRes.data);
     } catch (err) {
       setLoadError((err as Error).message);
     } finally {
@@ -112,6 +117,20 @@ export function FaturamentoMesPage({ cartMesId, cartAnoMes, onBack }: Faturament
     produtos.forEach((p) => map.set(p.produto_id, p));
     return map;
   }, [produtos]);
+
+  const vlrUnitPorPcId = useMemo(() => {
+    const map = new Map<number, number | null>();
+    precosCliente.forEach((p) => map.set(p.pc_id, p.pc_vlr_unit));
+    return map;
+  }, [precosCliente]);
+
+  /** "NOME" ou "NOME / DETALHE" quando o produto tem detalhe cadastrado (ex. "DIMENSA SIGN /
+   * ENVIO DE SMS") -- usado no relatório PDF de faturamento. */
+  function produtoComDetalhe(produtoId: number): string {
+    const produto = produtoById.get(produtoId);
+    if (!produto) return "";
+    return [produto.produto_nome, produto.produto_detalhe].filter(Boolean).join(" / ");
+  }
 
   function clienteNome(f: FaturamentoDetalhe): string {
     return clienteNomeById.get(f.cliente_id) ?? "";
@@ -153,6 +172,7 @@ export function FaturamentoMesPage({ cartMesId, cartAnoMes, onBack }: Faturament
           produto: produto?.produto_nome ?? "",
           detalhe: produto?.produto_detalhe ?? "",
           qtd: p.pc_mes_atu_qtd_consumo,
+          valorUnit: vlrUnitPorPcId.get(p.pc_id) ?? null,
           valorAFaturar: tipo === "BRUTO" ? brt : liq,
         };
       })
@@ -165,7 +185,7 @@ export function FaturamentoMesPage({ cartMesId, cartAnoMes, onBack }: Faturament
       limit: 20000,
     });
     const analitico = analiticoRes.data.map((a) => ({
-      produto: produtoById.get(a.produto_id)?.produto_nome ?? "",
+      produto: produtoComDetalhe(a.produto_id),
       data: formatDate(a.consumo_data),
       qtd: a.consumo_qtd ?? 0,
       detalhe: a.consumo_det ?? "",
