@@ -3225,3 +3225,40 @@ ainda não foi importada.
 **Verificação**: `tsc --noEmit` limpo nos dois lados. `refVigente()` testado via PGlite (mês
 vigente resolvido certo, nenhum mês vigente -> null, formato de `cart_ano_mes` fora do padrão ->
 null, sem quebrar). Não testado no navegador (mesma restrição de sempre).
+
+## Leva Faturamento passa a usar o pool de franquia por grupo (2026-09-01)
+
+Usuário reportou 2 problemas no mês 2026/08 (recém-criado):
+
+1. **"Vencimento NFE" vazio** -- não é bug. `faturamento.fat_dat_venc` é preenchimento 100%
+   manual (editado linha a linha na grid); a importação de Consumo só cria a linha-âncora
+   (`cliente_id`+`cart_mes_id`) em `faturamento`, nunca copia NFE/vencimento de lugar nenhum.
+   Esperado vir vazio em todo mês novo.
+2. **Totalizadores de Faturamento não batiam com "Total de consumo" da lista de meses** --
+   causa raiz real: `faturamento_detalhe.fat_vlr_liq/fat_vlr_brt` somavam
+   `pc_mes_atu_vlr_final_liq/brt` **linha a linha, por produto individual**, sem o pool de
+   franquia por `produto_grupo` que `cart_mes_resumo.total_consumo` e a tela de Consumo já usam
+   (um contrato pode cobrir vários produtos do mesmo grupo com uma franquia só -- regra
+   confirmada, ver `views.sql:104-119`). Já estava sinalizado como incerteza pelo autor original
+   desde a criação da view (`-- ATENÇÃO` em `views.sql`), nunca tinha sido resolvido. Usuário
+   confirmou: Faturamento deve usar o mesmo pool.
+
+- **`faturamento_detalhe` (`views.pg.sql`)**: reescrita com `JOIN LATERAL` calculando
+  `GREATEST(soma_franquia, soma_exced)` agrupado por `(cliente, produto_grupo)` -- mesma fórmula
+  de `cart_mes_resumo.total_consumo`, generalizada por cliente em vez de somada pro mês inteiro
+  -- com o fator fiscal BRUTO/LIQUIDO (0,9165/0,91651) aplicado por cima do total já agrupado,
+  não mais por linha.
+- **`FaturamentoMesPage.tsx`**: o relatório PDF (botão "Relatório") somava o valor calculado por
+  linha/produto (`pc_mes_atu_vlr_final_liq/brt`, sem pool) pra montar o total do relatório --
+  trocado pra usar `valorAFaturar(f)` (o mesmo total já agrupado que o StatCard e o CSV Protheus
+  usam), senão o PDF mostraria um número diferente do resto da tela mesmo depois da correção da
+  view.
+- **SQL de produção** (`backend/scripts/sql-2026-09-01-faturamento-pool-grupo/01_atualizar_view.sql`,
+  `CREATE OR REPLACE VIEW`, idempotente) inclui uma consulta de conferência no final (soma dos
+  totalizadores por competência vs. `cart_mes_resumo.total_consumo`).
+
+**Verificação**: testado via PGlite com 2 clientes (1 LIQUIDO, 1 BRUTO), cada um com 2 produtos
+no mesmo grupo (franquias 1000+500, excedentes 300+900) -- confirma que o pool agora bate
+exatamente com `cart_mes_resumo.total_consumo` (ajustado só pelo fator fiscal), pros dois regimes.
+`tsc --noEmit` limpo no frontend. Não testado no navegador (mesma restrição de sempre) -- o
+usuário ainda precisa rodar o SQL em produção e conferir o mês 2026/08 de verdade.

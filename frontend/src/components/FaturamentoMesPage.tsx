@@ -177,7 +177,11 @@ export function FaturamentoMesPage({ cartMesId, cartAnoMes, onBack }: Faturament
         };
       })
       .filter((l) => l.valorAFaturar > 0);
-    const totalAFaturar = linhas.reduce((acc, l) => acc + l.valorAFaturar, 0);
+    // NÃO soma `linhas` (cada uma é o valor líquido/bruto calculado por produto individual,
+    // sem o pool de franquia por grupo) -- usa o total já agrupado por produto_grupo que
+    // `faturamento_detalhe` calcula (mesmo valor mostrado no StatCard e no CSV Protheus),
+    // achado 2026-09-01: o relatório mostrava um total diferente do valor realmente cobrado.
+    const totalAFaturar = valorAFaturar(f);
 
     const analiticoRes = await api.list<ConsumoAna>("consumo_ana", {
       cliente_id: f.cliente_id,

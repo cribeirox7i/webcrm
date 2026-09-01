@@ -144,21 +144,41 @@ LEFT JOIN (
       AND pool.cart_mes_id = pc.cart_mes_id;
 
 -- ============================================================
--- 5) faturamento: valores líquido/bruto somados de precos_cliente (vigência ativa)
+-- 5) faturamento: valores líquido/bruto de precos_cliente (vigência ativa)
 -- ============================================================
+-- Antes (achado 2026-09-01): fat_vlr_liq/brt somavam pc_mes_atu_vlr_final_liq/brt linha a linha
+-- (por produto individual), sem o pool de franquia por produto_grupo que a tela de Consumo e
+-- cart_mes_resumo.total_consumo já usam -- resultado divergia sem nenhuma explicação visível na
+-- tela. Confirmado com o usuário: Faturamento deve usar o MESMO pool (GREATEST agrupado por
+-- cliente+produto_grupo, mesma fórmula de cart_mes_resumo.total_consumo), com o fator fiscal
+-- BRUTO/LIQUIDO aplicado por cima do total já agrupado -- não mais por linha.
 CREATE VIEW faturamento_detalhe AS
 SELECT
     f.*,
     c.cliente_cnpj,
     c.cliente_cnpj_fat,
-    (SELECT COALESCE(SUM(pcm.pc_mes_atu_vlr_final_liq), 0)
-     FROM precos_cliente_mes_atual pcm
-     WHERE pcm.cliente_id = f.cliente_id AND pcm.cart_mes_id = f.cart_mes_id) AS fat_vlr_liq,
-    (SELECT COALESCE(SUM(pcm.pc_mes_atu_vlr_final_brt), 0)
-     FROM precos_cliente_mes_atual pcm
-     WHERE pcm.cliente_id = f.cliente_id AND pcm.cart_mes_id = f.cart_mes_id) AS fat_vlr_brt
+    (pool.vlr_consumo_pool * CASE WHEN c.cliente_tip_vlr = 'BRUTO' THEN 0.9165 ELSE 1 END) AS fat_vlr_liq,
+    (CASE WHEN pool.vlr_consumo_pool > 0
+        THEN pool.vlr_consumo_pool / (CASE WHEN c.cliente_tip_vlr = 'BRUTO' THEN 1 ELSE 0.91651 END)
+        ELSE 0
+    END) AS fat_vlr_brt
 FROM faturamento f
-JOIN clientes c ON c.cliente_id = f.cliente_id;
+JOIN clientes c ON c.cliente_id = f.cliente_id
+JOIN LATERAL (
+    SELECT COALESCE(SUM(GREATEST(soma_franquia, soma_exced)), 0) AS vlr_consumo_pool
+    FROM (
+        SELECT
+            p2.produto_grupo,
+            SUM(pc2.pc_vlr_franquia) AS soma_franquia,
+            SUM(COALESCE((SELECT SUM(consumo_qtd) FROM consumo_ana ca2
+                 WHERE ca2.cliente_id = pc2.cliente_id AND ca2.produto_id = pc2.produto_id
+                   AND ca2.cart_mes_id = pc2.cart_mes_id), 0) * pc2.pc_vlr_unit) AS soma_exced
+        FROM precos_cliente pc2
+        JOIN produtos p2 ON p2.produto_id = pc2.produto_id
+        WHERE pc2.cliente_id = f.cliente_id AND pc2.cart_mes_id = f.cart_mes_id
+        GROUP BY p2.produto_grupo
+    ) sub2
+) pool ON true;
 
 -- ============================================================
 -- 6) crono: linhas "A" (agregadoras) calculam datas/percentual a partir das linhas "T"
