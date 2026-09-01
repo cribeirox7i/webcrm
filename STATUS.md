@@ -3262,3 +3262,32 @@ no mesmo grupo (franquias 1000+500, excedentes 300+900) -- confirma que o pool a
 exatamente com `cart_mes_resumo.total_consumo` (ajustado só pelo fator fiscal), pros dois regimes.
 `tsc --noEmit` limpo no frontend. Não testado no navegador (mesma restrição de sempre) -- o
 usuário ainda precisa rodar o SQL em produção e conferir o mês 2026/08 de verdade.
+
+**Atualização**: usuário rodou o SQL e conferiu -- soma de `fat_vlr_liq`/`fat_vlr_brt` do mês
+2026/08 ficou na faixa esperada em torno de `total_consumo_financeiro` (82.059,15), com a
+diferença explicada pela mistura de clientes BRUTO/LÍQUIDO no mês (cada regime aplica um fator
+fiscal diferente por cima do mesmo pool) -- consistente com o que a fórmula deveria produzir.
+
+## Leva Vencimento NFE (fat_dat_venc) passa a ser calculado (2026-09-01)
+
+Correção do usuário: eu tinha entendido `fat_dat_venc` ("Vencimento NFE") como campo manual --
+na verdade nunca teve campo nenhum no formulário de edição de Faturamento (`FaturamentoForm.tsx`
+só edita Número NFE/RPS/Observações), e deveria ser **calculado automaticamente**:
+`clientes.cliente_dia_venc_consumo` (dia do mês, cadastro do cliente) + o mês/ano do `cart_mes`
+da própria linha.
+
+- **`faturamento_detalhe` (`views.pg.sql`)**: `f.*` virou lista explícita de colunas (a coluna
+  física `fat_dat_venc` não é mais lida -- fica sempre `NULL` no banco, morta) + `fat_dat_venc`
+  calculado ao vivo via `make_date` com `LEAST(dia_cadastrado, último_dia_do_mês)` -- clampa dia
+  31 num fevereiro pro último dia real do mês. Cliente sem `cliente_dia_venc_consumo` cadastrado
+  devolve `NULL` (sinaliza cadastro incompleto, decisão do usuário -- não inventa valor).
+- **Nunca editável**: como o campo nunca teve UI de edição, nenhuma mudança de frontend foi
+  necessária além da view.
+- **SQL de produção**
+  (`backend/scripts/sql-2026-09-01-fat-dat-venc-calculado/01_atualizar_view.sql`,
+  `CREATE OR REPLACE VIEW`, idempotente) com consulta de conferência no final.
+
+**Verificação**: testado via PGlite com 3 cenários -- dia 10 num mês de 31 dias, dia 31 num
+fevereiro de 28 dias (confirma o clamp pro último dia real), e cliente sem dia cadastrado
+(confirma `NULL`) -- os 3 bateram. `tsc --noEmit` limpo nos dois lados. Não testado no navegador
+(mesma restrição de sempre) -- usuário ainda precisa rodar o SQL em produção.

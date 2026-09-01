@@ -152,18 +152,46 @@ LEFT JOIN (
 -- tela. Confirmado com o usuário: Faturamento deve usar o MESMO pool (GREATEST agrupado por
 -- cliente+produto_grupo, mesma fórmula de cart_mes_resumo.total_consumo), com o fator fiscal
 -- BRUTO/LIQUIDO aplicado por cima do total já agrupado -- não mais por linha.
+--
+-- fat_dat_venc (achado 2026-09-01, mesma leva): não é campo manual (nunca teve campo no
+-- formulário de edição -- só Número NFE/RPS/Observações) -- é calculado a partir de
+-- clientes.cliente_dia_venc_consumo + o mês/ano do cart_mes da própria linha, sempre ao vivo
+-- (nunca gravado na coluna física `faturamento.fat_dat_venc`, que fica sempre NULL e não é mais
+-- lida aqui -- por isso `f.*` virou lista explícita de colunas). Cliente sem dia cadastrado
+-- devolve NULL (sinaliza cadastro incompleto, não inventa um valor); dia maior que o último dia
+-- do mês (ex. 31 num fevereiro) usa o último dia disponível daquele mês.
 CREATE VIEW faturamento_detalhe AS
 SELECT
-    f.*,
+    f.fat_id,
+    f.cart_mes_id,
+    f.cliente_id,
+    f.fat_cod_venc_protheus,
+    f.fat_num_nfe,
+    f.fat_num_rps,
+    f.fat_obs,
     c.cliente_cnpj,
     c.cliente_cnpj_fat,
     (pool.vlr_consumo_pool * CASE WHEN c.cliente_tip_vlr = 'BRUTO' THEN 0.9165 ELSE 1 END) AS fat_vlr_liq,
     (CASE WHEN pool.vlr_consumo_pool > 0
         THEN pool.vlr_consumo_pool / (CASE WHEN c.cliente_tip_vlr = 'BRUTO' THEN 1 ELSE 0.91651 END)
         ELSE 0
-    END) AS fat_vlr_brt
+    END) AS fat_vlr_brt,
+    (CASE WHEN c.cliente_dia_venc_consumo IS NOT NULL AND cm.cart_ano_mes ~ '^\d{4}/\d{1,2}$' THEN
+        make_date(
+            split_part(cm.cart_ano_mes, '/', 1)::int,
+            split_part(cm.cart_ano_mes, '/', 2)::int,
+            LEAST(
+                c.cliente_dia_venc_consumo,
+                EXTRACT(DAY FROM (
+                    make_date(split_part(cm.cart_ano_mes, '/', 1)::int, split_part(cm.cart_ano_mes, '/', 2)::int, 1)
+                    + INTERVAL '1 month - 1 day'
+                ))::int
+            )
+        )::text
+    END) AS fat_dat_venc
 FROM faturamento f
 JOIN clientes c ON c.cliente_id = f.cliente_id
+LEFT JOIN cart_mes cm ON cm.cart_mes_id = f.cart_mes_id
 JOIN LATERAL (
     SELECT COALESCE(SUM(GREATEST(soma_franquia, soma_exced)), 0) AS vlr_consumo_pool
     FROM (
