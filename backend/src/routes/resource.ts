@@ -256,6 +256,24 @@ resourceRouter.delete("/:resource/:id", enforceMenuPermission("perm_exclusao", "
     return;
   }
 
+  // `cart_mes` agora tem DELETE CASCADE pra carteira/precos_cliente/consumo_ana/faturamento
+  // (ver schema.pg.sql) -- exclusão fica reservada pro mês vigente (cart_vigencia_ativa = 'S'),
+  // decisão do usuário, pra excluir um mês antigo por engano exigir primeiro marcá-lo como
+  // vigente (uma ação deliberada) em vez de acontecer com 1 clique.
+  if (info.name === "cart_mes") {
+    const { rows } = await query<{ cart_vigencia_ativa: string | null }>(
+      "SELECT cart_vigencia_ativa FROM cart_mes WHERE cart_mes_id = $1",
+      [req.params.id]
+    );
+    if (rows[0] && rows[0].cart_vigencia_ativa !== "S") {
+      res.status(400).json({
+        error:
+          "só é possível excluir o mês com Vigência ativa = S (a exclusão apaga em cascata carteira, preços, consumo e faturamento desse mês) -- marque este mês como vigente antes de excluir",
+      });
+      return;
+    }
+  }
+
   const { rowCount } = await query(
     `DELETE FROM ${quoteIdent(info.name)} WHERE ${quoteIdent(info.pk)} = $1`,
     [req.params.id]

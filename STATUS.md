@@ -2744,3 +2744,35 @@ contra o Postgres de produção nem no navegador (mesma restrição de `DATABASE
 e a tabela nova (`consumo_import_staging`) **ainda não existe em produção**, precisa rodar o SQL
 antes do próximo deploy valer pra alguma coisa. O teste de verdade acontece na próxima tentativa
 do usuário, já com os 64116 linhas reais.
+
+**Atualização**: usuário já rodou `01_criar_tabela.sql` em produção -- tabela existe.
+
+## Leva DELETE CASCADE em cart_mes (2026-08-31)
+
+Pergunta do usuário: excluir um `cart_mes` apaga em cascata carteira/precos_cliente/consumo_ana/
+faturamento? **Não** -- nenhuma FK tinha `ON DELETE CASCADE` (só `usuarios_permissoes_menu ->
+usuarios` tinha, sem relação); excluir um mês com dado vinculado dava erro de violação de chave
+estrangeira, nada era apagado. A pedido do usuário, implementado CASCADE de verdade, com uma
+trava de segurança pra compensar o tanto mais destrutivo que a exclusão fica.
+
+- **`schema.pg.sql`**: `ON DELETE CASCADE` adicionado na FK de `cart_mes_id` nas 5 tabelas que
+  referenciam `cart_mes` (`carteira`, `precos_cliente`, `consumo_ana`, `faturamento`, e a
+  `consumo_import_staging` da leva anterior).
+- **Trava de segurança, a pedido do usuário**: exclusão só é permitida quando
+  `cart_vigencia_ativa = 'S'` -- pra excluir um mês antigo (N) é preciso primeiro editá-lo e
+  marcar como vigente, uma ação deliberada em vez de 1 clique acidental apagar meses de dado
+  histórico. Checado nos dois lados: `backend/src/routes/resource.ts` (rota genérica de
+  `DELETE`, caso especial só pra `cart_mes` -- 400 com mensagem clara se não for o mês vigente)
+  e `CartMesAdminPage.tsx` (mesma checagem antes de chamar a API, evita a viagem só pra voltar
+  com erro; texto do `confirm()` também deixa explícito o efeito cascata e que não tem como
+  desfazer).
+- **SQL de produção** (`backend/scripts/sql-2026-08-31-cascade-cart-mes/`, ainda não rodado):
+  Postgres não permite `ALTER` na ação de `DELETE` de uma FK existente, só `DROP`+`ADD CONSTRAINT`
+  -- o script descobre o nome real de cada constraint via `pg_constraint` em vez de assumir o
+  padrão `tabela_cart_mes_id_fkey`, então funciona mesmo se algum ambiente tiver renomeado. `01`
+  só `SELECT` (mostra o estado atual de cada FK), `02` aplica e confere no final.
+
+**Verificação**: `tsc --noEmit` limpo nos dois lados. Não testado contra o Postgres de produção
+nem no navegador (mesma restrição de credencial) -- e o SQL de produção **ainda não foi rodado**,
+sem ele a FK continua sem cascata (só a trava de vigência do código já vale, mas excluir o mês
+vigente ainda vai dar erro de FK até o SQL rodar).

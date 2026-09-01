@@ -56,7 +56,22 @@ export function CartMesAdminPage({ token, onLogout }: CartMesAdminPageProps) {
   }, []);
 
   async function handleDelete(cartMes: CartMes) {
-    if (!confirm(`Excluir o mês "${cartMes.cart_ano_mes}" (#${cartMes.cart_mes_id})?`)) return;
+    // mesma regra que o backend aplica (resource.ts) -- checar aqui evita a viagem só pra
+    // voltar com erro. Excluir agora apaga em CASCATA carteira/precos_cliente/consumo_ana/
+    // faturamento daquele mês (ON DELETE CASCADE, decisão do usuário), por isso só é permitido
+    // no mês vigente -- excluir um mês antigo por engano exige marcá-lo como vigente antes.
+    if (cartMes.cart_vigencia_ativa !== "S") {
+      alert(
+        `Só é possível excluir o mês com Vigência ativa = S. Edite "${cartMes.cart_ano_mes}" e marque Vigência ativa antes de excluir.`
+      );
+      return;
+    }
+    if (
+      !confirm(
+        `Excluir o mês "${cartMes.cart_ano_mes}" (#${cartMes.cart_mes_id})? Isto apaga em CASCATA todas as linhas de carteira, preços, consumo e faturamento desse mês. Não tem como desfazer.`
+      )
+    )
+      return;
     try {
       await adminApi.remove("cart_mes", token, cartMes.cart_mes_id);
       setMeses((prev) => prev.filter((m) => m.cart_mes_id !== cartMes.cart_mes_id));
