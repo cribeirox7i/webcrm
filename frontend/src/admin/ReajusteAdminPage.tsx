@@ -31,8 +31,14 @@ function formatDataBr(iso: string | null): string {
 
 export function ReajusteAdminPage({ token, onLogout }: ReajusteAdminPageProps) {
   const [candidatos, setCandidatos] = useState<CandidatoReajuste[] | null>(null);
+  // Guardado a partir da resposta de /simular -- /aplicar precisa mandar de volta exatamente o
+  // anoRef/mesRef usado na simulação (não recalcula "vigente" de novo na hora de aplicar, pra
+  // não divergir se o mês vigente mudar entre simular e confirmar).
+  const [refUsada, setRefUsada] = useState<{ anoRef: number; mesRef: number; cartAnoMes: string; origem: "atual" | "vigente" } | null>(
+    null
+  );
   const [selectedIds, setSelectedIds] = useState<Set<string | number>>(new Set());
-  const [simulando, setSimulando] = useState(false);
+  const [simulando, setSimulando] = useState<"atual" | "vigente" | null>(null);
   const [aplicando, setAplicando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [resumo, setResumo] = useState<{ aplicados: number; ignorados: { pc_id: number; motivo: string }[] } | null>(null);
@@ -65,29 +71,30 @@ export function ReajusteAdminPage({ token, onLogout }: ReajusteAdminPageProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function handleSimular() {
-    setSimulando(true);
+  async function handleSimular(origem: "atual" | "vigente") {
+    setSimulando(origem);
     setErro(null);
     setResumo(null);
     try {
-      const r = await adminApi.simularReajuste(token);
+      const r = await adminApi.simularReajuste(token, origem);
       setCandidatos(r.candidatos);
+      setRefUsada({ anoRef: r.anoRef, mesRef: r.mesRef, cartAnoMes: r.cartAnoMes, origem });
       setSelectedIds(new Set(r.candidatos.filter((c) => c.status === "aplicavel").map((c) => c.pc_id)));
     } catch (err) {
       if (!handleAuthError(err)) setErro((err as Error).message);
     } finally {
-      setSimulando(false);
+      setSimulando(null);
     }
   }
 
   async function handleAplicar() {
-    if (selectedIds.size === 0) return;
+    if (selectedIds.size === 0 || !refUsada) return;
     setAplicando(true);
     setErro(null);
     try {
-      const r = await adminApi.aplicarReajuste(token, [...selectedIds] as number[]);
+      const r = await adminApi.aplicarReajuste(token, [...selectedIds] as number[], refUsada.anoRef, refUsada.mesRef);
       setResumo({ aplicados: r.aplicados, ignorados: r.ignorados });
-      await Promise.all([handleSimular(), loadHistorico()]);
+      await Promise.all([handleSimular(refUsada.origem), loadHistorico()]);
     } catch (err) {
       if (!handleAuthError(err)) setErro((err as Error).message);
     } finally {
@@ -195,18 +202,28 @@ export function ReajusteAdminPage({ token, onLogout }: ReajusteAdminPageProps) {
       <h1>Reajuste de Preço de Consumo</h1>
       <p className="page-subtitle">
         Reajusta o valor unitário e a franquia dos contratos (Tabela de Preços) com aniversário no mês
-        corrente, aplicando o acumulado de 12 meses do indexador de cada contrato: novo valor = valor
-        atual × (1 + acumulado 12m). Simule antes de aplicar -- nada é gravado até confirmar.
+        de referência, aplicando o acumulado de 12 meses do indexador de cada contrato: novo valor =
+        valor atual × (1 + acumulado 12m). "Mês atual" usa o calendário; "competência vigente" usa o
+        mês marcado como vigência ativa em Carteira (útil quando a carga de dados está atrasada em
+        relação ao calendário). Simule antes de aplicar -- nada é gravado até confirmar.
       </p>
 
-      <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 16 }}>
-        <button className="primary" onClick={handleSimular} disabled={simulando}>
-          {simulando ? "Simulando..." : "Simular reajuste do mês"}
+      <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 16, flexWrap: "wrap" }}>
+        <button className="primary" onClick={() => handleSimular("atual")} disabled={simulando !== null}>
+          {simulando === "atual" ? "Simulando..." : "Simular reajuste do mês atual"}
+        </button>
+        <button onClick={() => handleSimular("vigente")} disabled={simulando !== null}>
+          {simulando === "vigente" ? "Simulando..." : "Simular reajuste da competência vigente"}
         </button>
         {candidatos && (
           <button onClick={handleAplicar} disabled={aplicando || selectedIds.size === 0}>
             {aplicando ? "Aplicando..." : `Aplicar selecionados (${selectedIds.size})`}
           </button>
+        )}
+        {refUsada && (
+          <span className="page-subtitle">
+            Competência usada: {refUsada.cartAnoMes} ({refUsada.origem === "vigente" ? "vigência ativa" : "mês atual"})
+          </span>
         )}
       </div>
 

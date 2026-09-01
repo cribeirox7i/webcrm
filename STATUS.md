@@ -3199,3 +3199,29 @@ colocado no cabeçalho do modal (perto do "Fechar").
   lógica própria de "filtrado e vazio").
 
 **Verificação**: `tsc --noEmit` limpo. Não testado no navegador (mesma restrição de sempre).
+
+## Leva Reajuste pela competência vigente (2026-09-01)
+
+Pedido do usuário: Admin > Reajuste sempre usava o mês do calendário real (`refAtual()`) --
+precisava de um jeito de reajustar pela **competência vigente** de Carteira
+(`cart_mes.cart_vigencia_ativa = 'S'`), que pode ficar atrás do calendário quando a carga do mês
+ainda não foi importada.
+
+- **`backend/src/routes/adminReajuste.ts`**: `refVigente()` (nova) lê `cart_mes` vigente e faz
+  parse de `cart_ano_mes` (texto livre, ex. "2026/08") -- devolve `null` se não tem mês vigente
+  ou o formato foge do padrão, sem quebrar a rota. `resolverReferencia(origem, res)` decide entre
+  `refAtual()` (default, "atual") e `refVigente()` ("vigente"), já respondendo 400 com mensagem
+  clara quando "vigente" é pedido mas não resolve.
+- **`POST /simular` aceita `{ origem: "atual" | "vigente" }`** no body (default "atual", mesmo
+  comportamento de sempre) e devolve `cartAnoMes` (a competência resolvida, pra exibir na tela).
+- **`POST /aplicar` agora EXIGE `{ pcIds, anoRef, mesRef }`** -- não recalcula mais a referência
+  sozinho (antes sempre usava `refAtual()`, ignorando de qual simulação os `pcIds` vieram). O
+  frontend manda de volta exatamente o `anoRef`/`mesRef` que `/simular` devolveu, garantindo que
+  aplica na mesma referência simulada mesmo que o mês vigente mude no meio do caminho.
+- **`ReajusteAdminPage.tsx`**: 2 botões -- "Simular reajuste do mês atual" e "Simular reajuste da
+  competência vigente" -- alimentam a mesma tabela/seleção/confirmação de sempre. Subtítulo novo
+  mostra qual competência foi usada na última simulação.
+
+**Verificação**: `tsc --noEmit` limpo nos dois lados. `refVigente()` testado via PGlite (mês
+vigente resolvido certo, nenhum mês vigente -> null, formato de `cart_ano_mes` fora do padrão ->
+null, sem quebrar). Não testado no navegador (mesma restrição de sempre).

@@ -109,32 +109,79 @@ async function calcularCandidatos(client: Queryer, anoRef: number, mesRef: numbe
   });
 }
 
-function refAtual(): { anoRef: number; mesRef: number } {
+function refAtual(): { anoRef: number; mesRef: number; cartAnoMes: string } {
   const hoje = new Date();
-  return { anoRef: hoje.getFullYear(), mesRef: hoje.getMonth() + 1 };
+  const anoRef = hoje.getFullYear();
+  const mesRef = hoje.getMonth() + 1;
+  return { anoRef, mesRef, cartAnoMes: `${anoRef}/${String(mesRef).padStart(2, "0")}` };
 }
 
-// POST /simular -- só lê, não grava nada. Devolve todos os contratos com aniversário no mês
-// corrente, cada um com o status (aplicável / sem indexador / sem índice do mês corrente ainda
+/** Resolve a competência a partir do mês marcado como vigente em `cart_mes`
+ * (`cart_vigencia_ativa = 'S'`) -- pode ser diferente do mês do calendário quando a carga de
+ * dados está atrasada (a Carteira/Consumo do mês corrente ainda não foi importada). `cart_ano_mes`
+ * é texto livre (ex. "2026/08"); devolve `null` quando não tem mês vigente ou o formato foge do
+ * padrão esperado, pro caller decidir como reportar isso ao usuário. */
+async function refVigente(): Promise<{ anoRef: number; mesRef: number; cartAnoMes: string } | null> {
+  const { rows } = await query<{ cart_ano_mes: string }>(
+    "SELECT cart_ano_mes FROM cart_mes WHERE cart_vigencia_ativa = 'S' LIMIT 1"
+  );
+  const cartAnoMes = rows[0]?.cart_ano_mes;
+  if (!cartAnoMes) return null;
+  const m = /^(\d{4})\/(\d{1,2})$/.exec(cartAnoMes.trim());
+  if (!m) return null;
+  return { anoRef: Number(m[1]), mesRef: Number(m[2]), cartAnoMes };
+}
+
+/** `origem` vem do body ("atual" é o default, mantém o comportamento de sempre) -- "vigente"
+ * troca a referência pro mês marcado como vigência ativa em Carteira. Devolve `null` (e já
+ * envia a resposta de erro) quando "vigente" foi pedido mas não tem mês vigente cadastrado ou o
+ * formato de `cart_ano_mes` é inesperado -- chamador só precisa dar `return` nesse caso. */
+async function resolverReferencia(
+  origem: unknown,
+  res: import("express").Response
+): Promise<{ anoRef: number; mesRef: number; cartAnoMes: string } | null> {
+  if (origem !== "vigente") return refAtual();
+  const ref = await refVigente();
+  if (!ref) {
+    res.status(400).json({
+      error:
+        "nenhum mês está marcado como vigência ativa em Carteira (ou o formato do Ano/Mês foge do padrão AAAA/MM) -- marque um mês vigente antes de reajustar pela competência vigente",
+    });
+    return null;
+  }
+  return ref;
+}
+
+// POST /simular -- só lê, não grava nada. Devolve todos os contratos com aniversário no mês de
+// referência (mês do calendário por padrão, ou o mês vigente de Carteira se `origem: "vigente"`
+// no body), cada um com o status (aplicável / sem indexador / sem índice do mês corrente ainda
 // sincronizado / já reajustado este mês) e o valor novo já calculado pros aplicáveis.
-adminReajusteRouter.post("/simular", async (_req, res) => {
-  const { anoRef, mesRef } = refAtual();
+adminReajusteRouter.post("/simular", async (req, res) => {
+  const ref = await resolverReferencia(req.body?.origem, res);
+  if (!ref) return;
+  const { anoRef, mesRef, cartAnoMes } = ref;
   const candidatos = await calcularCandidatos({ query }, anoRef, mesRef);
-  res.json({ ok: true, anoRef, mesRef, candidatos });
+  res.json({ ok: true, anoRef, mesRef, cartAnoMes, candidatos });
 });
 
-// POST /aplicar -- body: { pcIds: number[] } (os pc_id marcados pelo usuário na tela, normalmente
-// só os "aplicavel" da simulação). Recalcula do zero dentro da transação e só grava os que ainda
-// estiverem "aplicavel" nesse recálculo -- qualquer um que mudou de status entre a simulação e a
-// confirmação (outro reajuste aplicado nesse meio-tempo, índice removido etc.) é reportado em
-// `ignorados`, não interrompe os demais.
+// POST /aplicar -- body: { pcIds: number[], anoRef: number, mesRef: number } (anoRef/mesRef são
+// exatamente o que /simular devolveu -- o frontend repassa de volta, garante que aplica na
+// MESMA referência que foi simulada, mesmo que o mês vigente mude no meio do caminho). Recalcula
+// do zero dentro da transação e só grava os que ainda estiverem "aplicavel" nesse recálculo --
+// qualquer um que mudou de status entre a simulação e a confirmação (outro reajuste aplicado
+// nesse meio-tempo, índice removido etc.) é reportado em `ignorados`, não interrompe os demais.
 adminReajusteRouter.post("/aplicar", async (req, res) => {
   const pcIds = Array.isArray(req.body?.pcIds) ? (req.body.pcIds as unknown[]).map(Number).filter(Number.isFinite) : [];
   if (!pcIds.length) {
     res.status(400).json({ error: "pcIds vazio" });
     return;
   }
-  const { anoRef, mesRef } = refAtual();
+  const anoRef = Number(req.body?.anoRef);
+  const mesRef = Number(req.body?.mesRef);
+  if (!Number.isFinite(anoRef) || !Number.isFinite(mesRef)) {
+    res.status(400).json({ error: "anoRef/mesRef inválidos ou ausentes -- devem ser os mesmos devolvidos por /simular" });
+    return;
+  }
   const pcIdsSet = new Set(pcIds);
 
   const resultado = await withTransaction(async (client) => {

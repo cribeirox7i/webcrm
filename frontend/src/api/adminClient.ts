@@ -251,13 +251,19 @@ export const adminApi = {
   // reajuste de preço de consumo -- POST /api/admin/reajuste/simular (só lê, calcula o valor
   // novo de cada contrato com aniversário no mês corrente) e /aplicar (grava, recebe os pc_id
   // marcados na tela). Mesmo padrão 2x de importarConsumo/importarCarteira.
-  simularReajuste: (token: string) =>
-    request<{ ok: boolean; anoRef: number; mesRef: number; candidatos: CandidatoReajuste[] }>(
+  // `origem: "vigente"` troca o mês/ano corrente (calendário) pelo mês marcado como vigência
+  // ativa em Carteira (cart_mes.cart_vigencia_ativa = 'S') -- útil quando a carga de dados está
+  // atrasada em relação ao calendário real.
+  simularReajuste: (token: string, origem: "atual" | "vigente" = "atual") =>
+    request<{ ok: boolean; anoRef: number; mesRef: number; cartAnoMes: string; candidatos: CandidatoReajuste[] }>(
       "/api/admin/reajuste/simular",
       token,
-      { method: "POST" }
+      { method: "POST", body: JSON.stringify({ origem }) }
     ),
-  aplicarReajuste: (token: string, pcIds: number[]) =>
+  // anoRef/mesRef precisam ser exatamente os que /simular devolveu -- garante que aplica na
+  // mesma referência que foi simulada e conferida na tela, mesmo que o mês vigente mude no meio
+  // do caminho (ex.: outro admin marca outro mês como vigente numa aba diferente).
+  aplicarReajuste: (token: string, pcIds: number[], anoRef: number, mesRef: number) =>
     request<{
       ok: boolean;
       anoRef: number;
@@ -265,7 +271,7 @@ export const adminApi = {
       aplicados: number;
       eventos: CandidatoReajuste[];
       ignorados: { pc_id: number; motivo: string }[];
-    }>("/api/admin/reajuste/aplicar", token, { method: "POST", body: JSON.stringify({ pcIds }) }),
+    }>("/api/admin/reajuste/aplicar", token, { method: "POST", body: JSON.stringify({ pcIds, anoRef, mesRef }) }),
   // usuarios_permissoes_menu tem PK composta (user_id, menu_key) -- usa rota dedicada do backend
   updatePermissaoMenu: <T>(
     token: string,
