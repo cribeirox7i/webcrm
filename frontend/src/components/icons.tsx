@@ -179,6 +179,16 @@ export function TagIcon() {
   );
 }
 
+export function PercentIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <path d="M19 5L5 19" strokeLinecap="round" />
+      <circle cx="7" cy="7" r="2.5" />
+      <circle cx="17" cy="17" r="2.5" />
+    </svg>
+  );
+}
+
 export function WalletIcon() {
   return (
     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">

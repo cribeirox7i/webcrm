@@ -4,7 +4,6 @@ import type { Cliente, PrecosCliente, PrecosClienteMesAtual, Produto } from "../
 import { StatCards } from "./StatCards";
 import { usePageTitle } from "../PageTitleContext";
 import { ConsumoAnaDetalhePage } from "./ConsumoAnaDetalhePage";
-import { HistoricoReajustesModal } from "./HistoricoReajustesModal";
 import { ALERTA_LABEL, type AlertaKey } from "./TabelaPrecosPage";
 import { exportToCsv, exportToPdf, exportToXlsx, shareExport, type ExportCell } from "../lib/export";
 import { CsvIcon, PdfIcon, ShareIcon, XlsIcon } from "./icons";
@@ -44,7 +43,6 @@ export function ConsumoMesPage({ cartMesId, cartAnoMes, onBack, onAbrirAlertaPre
   const [detalhe, setDetalhe] = useState<{ clienteId: number; clienteNome: string; produtoId: number; produtoNome: string } | null>(
     null
   );
-  const [historicoAberto, setHistoricoAberto] = useState(false);
 
   async function loadAll() {
     setLoading(true);
@@ -254,7 +252,6 @@ export function ConsumoMesPage({ cartMesId, cartAnoMes, onBack, onAbrirAlertaPre
           </span>
         </div>
         <div className="datagrid-toolbar-right">
-          <button onClick={() => setHistoricoAberto(true)}>Histórico de Reajustes</button>
           {(["cliente_inativo", "sem_indexador", "sem_valor"] as const).map((key) => (
             <button
               key={key}
@@ -395,8 +392,6 @@ export function ConsumoMesPage({ cartMesId, cartAnoMes, onBack, onAbrirAlertaPre
         ))}
         {!loading && filtrados.length === 0 && <p className="dashboard-empty">Nenhum grupo de consumo encontrado.</p>}
       </div>
-
-      {historicoAberto && <HistoricoReajustesModal onClose={() => setHistoricoAberto(false)} />}
     </div>
   );
 }

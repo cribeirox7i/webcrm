@@ -7,7 +7,8 @@ import { TabelaPrecosPage, type AlertaKey } from "./TabelaPrecosPage";
 import { CarteiraMesPage } from "./CarteiraMesPage";
 import { ConsumoMesPage } from "./ConsumoMesPage";
 import { FaturamentoMesPage } from "./FaturamentoMesPage";
-import { ChartIcon, InvoiceIcon, TagIcon, WalletIcon } from "./icons";
+import { HistoricoReajustesModal } from "./HistoricoReajustesModal";
+import { ChartIcon, InvoiceIcon, PercentIcon, TagIcon, WalletIcon } from "./icons";
 
 type Drill =
   | { mode: "precos" | "carteira" | "consumo" | "faturamento"; cartMesId: number; cartAnoMes: string; alerta?: AlertaKey }
@@ -26,6 +27,7 @@ export function FinanceiroPage() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [drill, setDrill] = useState<Drill>(null);
+  const [historicoAberto, setHistoricoAberto] = useState(false);
 
   async function loadAll() {
     setLoading(true);
@@ -127,13 +129,11 @@ export function FinanceiroPage() {
         searchPlaceholder="Buscar por ano/mês..."
         loading={loading}
         exportFilename="financeiro"
-        // 350, não 280: a célula de ações desta tela mede 346px reais (2 grupos rotulados
-        // CARTEIRA/CONSUMO + 5 botões de ícone, medido no navegador em px lógicos). Com 280
-        // declarados, o navegador não conseguia encolher a célula abaixo do conteúdo e a tabela
-        // renderizava ~66px além do que o DataGrid tinha calculado -- causa real da rolagem
-        // lateral nesta tela, e não a largura das colunas de valor (que aqui até sobra espaço:
-        // elas estavam sendo ESTICADAS pelo DataGrid).
-        actionsWidth={350}
+        // 386: a célula de ações desta tela mede 346px reais com 5 botões de ícone (2 grupos
+        // rotulados CARTEIRA/CONSUMO, medido no navegador em px lógicos -- ver histórico da
+        // rolagem lateral desta tela). O botão de Reajustes (2026-09-01) virou o 6º ícone no
+        // grupo CONSUMO -- +30px do botão +6px do gap entre botões = +36px.
+        actionsWidth={386}
         renderActions={(m) => (
           <div className="row-actions-columns">
             <span className="row-actions-group">
@@ -176,10 +176,15 @@ export function FinanceiroPage() {
               >
                 <InvoiceIcon />
               </button>
+              <button className="icon-btn" title="Histórico de Reajustes" aria-label="Reajustes" onClick={() => setHistoricoAberto(true)}>
+                <PercentIcon />
+              </button>
             </span>
           </div>
         )}
       />
+
+      {historicoAberto && <HistoricoReajustesModal onClose={() => setHistoricoAberto(false)} />}
     </div>
   );
 }
