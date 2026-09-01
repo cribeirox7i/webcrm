@@ -28,6 +28,7 @@ export function FinanceiroPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [drill, setDrill] = useState<Drill>(null);
   const [historicoAberto, setHistoricoAberto] = useState(false);
+  const [historicoMesInicial, setHistoricoMesInicial] = useState<string | null>(null);
 
   async function loadAll() {
     setLoading(true);
@@ -176,7 +177,15 @@ export function FinanceiroPage() {
               >
                 <InvoiceIcon />
               </button>
-              <button className="icon-btn" title="Histórico de Reajustes" aria-label="Reajustes" onClick={() => setHistoricoAberto(true)}>
+              <button
+                className="icon-btn"
+                title="Histórico de Reajustes"
+                aria-label="Reajustes"
+                onClick={() => {
+                  setHistoricoMesInicial(m.cart_ano_mes);
+                  setHistoricoAberto(true);
+                }}
+              >
                 <PercentIcon />
               </button>
             </span>
@@ -184,7 +193,9 @@ export function FinanceiroPage() {
         )}
       />
 
-      {historicoAberto && <HistoricoReajustesModal onClose={() => setHistoricoAberto(false)} />}
+      {historicoAberto && (
+        <HistoricoReajustesModal cartAnoMesInicial={historicoMesInicial} onClose={() => setHistoricoAberto(false)} />
+      )}
     </div>
   );
 }

@@ -3157,3 +3157,23 @@ também não deveriam ter reduzido o preço na época. Pedido: reverter
 **Verificação**: testado via PGlite (2 contratos sintéticos -- 1 negativo revertido, 1 positivo
 intocado) antes de entregar. Rodado e conferido em produção pelo usuário: `restam_negativos`
 confirmou **0** depois do UPDATE/DELETE.
+
+## Leva Filtro de competência no Histórico de Reajustes (2026-09-01)
+
+Pedido do usuário: o botão inline de Histórico (por linha da lista de meses, `FinanceiroPage.tsx`)
+abria sempre com TODOS os eventos -- devia nascer filtrado no mês daquela linha, com opção de
+trocar ou limpar o filtro.
+
+- **`HistoricoReajustesModal.tsx`**: nova prop `cartAnoMesInicial` (a competência do mês
+  clicado) inicializa o estado `filtroMes`. `reajuste_eventos` não tem `cart_mes_id` (o evento é
+  datado por `reaj_data`, não ligado a um cart_mes) -- `competenciaDoEvento` converte
+  `reaj_data` (`AAAA-MM-DD`) pro mesmo formato de `cart_ano_mes` (`AAAA/MM`) pra poder comparar.
+  Filtro é 100% client-side (recorta o array já carregado, não refaz request).
+- **Opções do filtro vêm de `cart_mes_resumo`** (mesmo recurso que `FinanceiroPage` já usa), não
+  dos eventos em si -- assim todo mês cadastrado aparece na lista, mesmo os que não têm nenhum
+  reajuste ainda (pedido explícito do usuário: "itens do filtro são as competências de
+  cart_mes").
+- **`FinanceiroPage.tsx`**: novo estado `historicoMesInicial`, setado com `m.cart_ano_mes` no
+  clique do botão de Reajustes daquela linha, passado pro modal.
+
+**Verificação**: `tsc --noEmit` limpo. Não testado no navegador (mesma restrição de sempre).
