@@ -3130,3 +3130,30 @@ aplicados pela tela.
 **Verificação**: `tsc --noEmit` limpo nos dois lados. Regra do acumulado negativo e a view
 atualizada testadas via PGlite antes de entregar. Não testado no navegador (mesma restrição de
 sempre).
+
+## Leva Reverter reajustes negativos do backfill histórico (2026-09-01)
+
+Depois de ver o histórico em produção, o usuário notou que o backfill retroativo (leva anterior)
+tinha gravado 12 eventos com acumulado negativo (IGP-M em deflação, -1,81%/-2,67% em fev/mar
+2026) -- coerente com a regra nova ("acumulado negativo não reajusta"), decidiu que esses 12
+também não deveriam ter reduzido o preço na época. Pedido: reverter
+`precos_cliente.pc_vlr_unit`/`pc_vlr_franquia` pro valor de antes (guardado no próprio evento,
+`reaj_vlr_unit_ant`/`reaj_vlr_franquia_ant`) e remover o evento do histórico.
+
+- **`backend/scripts/sql-2026-09-01-reverter-reajustes-negativos/02_reverter.sql`**: `UPDATE
+  precos_cliente ... FROM reajuste_eventos WHERE reaj_taxa_acum_12m < 0` (lê o valor "antes" do
+  próprio evento antes de apagá-lo) + `DELETE FROM reajuste_eventos WHERE reaj_taxa_acum_12m <
+  0`, mesma transação, UPDATE antes do DELETE (a ordem importa -- o UPDATE depende do dado que o
+  DELETE remove). Como nenhum desses 70 contratos tem mês anterior duplicado em
+  `precos_cliente` (achado da leva do backfill), corrigir a única linha existente já cobre
+  "daqui pra frente".
+- **Diagnóstico antes de gravar** (`01_diagnostico.sql`): lista completa das 12 linhas conferida
+  com o usuário (cliente, produto, valor atual vs. valor de volta) -- nenhuma anomalia, todas
+  batendo com o padrão esperado do IGP-M negativo.
+- **`pc_dat_ult_reajuste` não foi tocado** -- essa data veio da planilha confiável (fato de
+  negócio externo, independente da taxa calculada), decisão de manter escopo restrito ao que foi
+  pedido (valor + histórico).
+
+**Verificação**: testado via PGlite (2 contratos sintéticos -- 1 negativo revertido, 1 positivo
+intocado) antes de entregar. Rodado e conferido em produção pelo usuário: `restam_negativos`
+confirmou **0** depois do UPDATE/DELETE.
