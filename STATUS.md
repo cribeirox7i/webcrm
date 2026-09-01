@@ -2914,3 +2914,32 @@ PDF embutido do navegador bloqueia clique/zoom por ser tratado como cross-origin
 de teste): quebra de linha do nome grande, larguras de coluna da página analítica, coluna Valor
 Unitário -- lógica revisada e usa as mesmas APIs (`splitTextToSize`, `columnStyles`) já usadas em
 outros relatórios do arquivo, mas vale o usuário conferir visualmente depois do deploy.
+
+## Leva Complexidade de senha (2026-08-31)
+
+Usuário perguntou se a definição de senha no 1º login exige complexidade -- resposta: não, só
+tamanho mínimo (8 caracteres), pendência registrada desde a leva original de login. A pedido do
+usuário, virou maiúscula + minúscula + número + símbolo, nos 3 lugares que recebem senha nova.
+
+- **`backend/src/convite.ts`**: nova função `erroComplexidadeSenha(senha)` (ao lado de
+  `MIN_SENHA_LEN`, que continua existindo) -- devolve a mensagem de erro certa (qual regra faltou)
+  ou `null`. Usada em `auth.ts` (`POST /convite/:token/definir-senha` -- 1º login; e
+  `POST /trocar-senha` -- usuário logado trocando) e `usuarios.ts`
+  (`PUT /usuarios/:id/senha` -- admin definindo direto).
+- **`frontend/src/lib/senha.ts`** (novo): mesma regra em JS, mais `DICA_SENHA` (texto pronto pro
+  placeholder dos campos). Usado em `DefinirSenhaPage.tsx`, `TrocarSenhaPage.tsx` e
+  `UsuariosAdminPage.tsx` -- validação aqui é só UX (evita round-trip só pra descobrir que falta
+  um número), o backend é quem garante de verdade.
+- **Achado no meio da implementação**: `UsuariosAdminPage.tsx` tem um botão "gerar senha
+  aleatória" (`gerarSenhaAleatoria`) pro admin não precisar inventar uma na hora -- o gerador
+  antigo sorteava de um conjunto SEM símbolo nenhum, então toda senha gerada ia falhar na
+  validação nova (o botão ficaria quebrado). Reescrito pra sortear 1 caractere obrigatório de
+  cada categoria (maiúscula/minúscula/número/símbolo) e completar o resto do conjunto inteiro,
+  depois embaralhar (Fisher-Yates) -- sem isso, os 4 primeiros caracteres sempre sairiam na
+  mesma ordem de categoria. Alfabeto sem caracteres ambíguos (0/O, 1/l/I), igual antes.
+
+**Verificação**: `tsc --noEmit` limpo nos dois lados. `erroComplexidadeSenha` testado via script
+Node contra casos de cada regra faltando isoladamente. `gerarSenhaAleatoria` testado gerando 2000
+senhas e validando cada uma contra `erroComplexidadeSenha` -- 2000/2000 passaram. Não testado no
+navegador (mesma restrição de `DATABASE_URL`/credencial) -- o teste de verdade é o usuário tentar
+definir uma senha fraca em cada uma das 3 telas e confirmar a mensagem de erro certa.

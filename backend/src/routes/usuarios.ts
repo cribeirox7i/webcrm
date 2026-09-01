@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { query, withTransaction } from "../db";
 import { generateProvisionalPassword, hashPassword } from "../authCrypto";
-import { gerarEEnviarConvite, MIN_SENHA_LEN } from "../convite";
+import { erroComplexidadeSenha, gerarEEnviarConvite } from "../convite";
 import { redactRow } from "./resource";
 
 export const usuariosRouter = Router();
@@ -61,8 +61,13 @@ usuariosRouter.post("/:id/convite", async (req, res) => {
 // próximo login -- atômico (BEGIN/COMMIT), mesma garantia do self-service em auth.ts.
 usuariosRouter.put("/:id/senha", async (req, res) => {
   const { novaSenha } = (req.body ?? {}) as { novaSenha?: unknown };
-  if (typeof novaSenha !== "string" || novaSenha.length < MIN_SENHA_LEN) {
-    res.status(400).json({ error: `senha (mín. ${MIN_SENHA_LEN} caracteres) é obrigatória` });
+  if (typeof novaSenha !== "string") {
+    res.status(400).json({ error: "senha é obrigatória" });
+    return;
+  }
+  const erroSenha = erroComplexidadeSenha(novaSenha);
+  if (erroSenha) {
+    res.status(400).json({ error: erroSenha });
     return;
   }
 

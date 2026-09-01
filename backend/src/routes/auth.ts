@@ -2,7 +2,7 @@ import { Router } from "express";
 import { query, withTransaction } from "../db";
 import { hashPassword, verifyPassword } from "../authCrypto";
 import { createSession, deleteSession, requireUserAuth } from "../mainAuth";
-import { gerarEEnviarConvite, MIN_SENHA_LEN } from "../convite";
+import { erroComplexidadeSenha, gerarEEnviarConvite } from "../convite";
 import { loginRateLimiter, esqueciSenhaRateLimiter } from "../rateLimit";
 
 export const authRouter = Router();
@@ -81,8 +81,13 @@ authRouter.get("/minhas-permissoes", requireUserAuth, async (req, res) => {
 // POST /api/auth/trocar-senha -- exige a sessão atual (mesmo com troca pendente)
 authRouter.post("/trocar-senha", requireUserAuth, async (req, res) => {
   const { senhaAtual, novaSenha } = (req.body ?? {}) as { senhaAtual?: unknown; novaSenha?: unknown };
-  if (typeof senhaAtual !== "string" || typeof novaSenha !== "string" || novaSenha.length < MIN_SENHA_LEN) {
-    res.status(400).json({ error: `senha atual e nova senha (mín. ${MIN_SENHA_LEN} caracteres) são obrigatórias` });
+  if (typeof senhaAtual !== "string" || typeof novaSenha !== "string") {
+    res.status(400).json({ error: "senha atual e nova senha são obrigatórias" });
+    return;
+  }
+  const erroSenha = erroComplexidadeSenha(novaSenha);
+  if (erroSenha) {
+    res.status(400).json({ error: erroSenha });
     return;
   }
 
@@ -155,8 +160,13 @@ authRouter.get("/convite/:token", async (req, res) => {
 // POST /api/auth/convite/:token/definir-senha -- define a senha real e já loga o usuário
 authRouter.post("/convite/:token/definir-senha", async (req, res) => {
   const { novaSenha } = (req.body ?? {}) as { novaSenha?: unknown };
-  if (typeof novaSenha !== "string" || novaSenha.length < MIN_SENHA_LEN) {
-    res.status(400).json({ error: `senha (mín. ${MIN_SENHA_LEN} caracteres) é obrigatória` });
+  if (typeof novaSenha !== "string") {
+    res.status(400).json({ error: "senha é obrigatória" });
+    return;
+  }
+  const erroSenha = erroComplexidadeSenha(novaSenha);
+  if (erroSenha) {
+    res.status(400).json({ error: erroSenha });
     return;
   }
 

@@ -9,6 +9,20 @@ const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:5183";
  * senha nova (trocar-senha, definir-senha via convite, definir-senha pelo admin). */
 export const MIN_SENHA_LEN = 8;
 
+/** Regra única de complexidade de senha (2026-08-31, a pedido do usuário -- antes só exigia o
+ * tamanho mínimo): mín. `MIN_SENHA_LEN` caracteres, com maiúscula, minúscula, número e símbolo.
+ * Devolve a mensagem de erro pra mostrar (em português, pronta pra ir na resposta) ou `null`
+ * quando a senha passa em tudo. Mesma regra nos 3 lugares que recebem senha nova -- ver
+ * `MIN_SENHA_LEN` acima pro motivo de ser compartilhada. */
+export function erroComplexidadeSenha(senha: string): string | null {
+  if (senha.length < MIN_SENHA_LEN) return `A senha precisa ter ao menos ${MIN_SENHA_LEN} caracteres.`;
+  if (!/[A-Z]/.test(senha)) return "A senha precisa ter ao menos 1 letra maiúscula.";
+  if (!/[a-z]/.test(senha)) return "A senha precisa ter ao menos 1 letra minúscula.";
+  if (!/[0-9]/.test(senha)) return "A senha precisa ter ao menos 1 número.";
+  if (!/[^A-Za-z0-9]/.test(senha)) return "A senha precisa ter ao menos 1 símbolo (ex.: ! @ # $ % *).";
+  return null;
+}
+
 interface UsuarioParaConvite {
   user_id: number;
   user_nome: string;

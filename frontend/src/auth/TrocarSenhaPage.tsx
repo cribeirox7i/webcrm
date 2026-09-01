@@ -2,8 +2,7 @@ import { useState } from "react";
 import { authApi } from "../api/authApi";
 import { useAuth } from "./AuthContext";
 import { PasswordInput } from "../components/PasswordInput";
-
-const MIN_SENHA_LEN = 8;
+import { DICA_SENHA, erroComplexidadeSenha } from "../lib/senha";
 
 export function TrocarSenhaPage() {
   const { token, usuario, onSenhaTrocada, logout } = useAuth();
@@ -15,8 +14,9 @@ export function TrocarSenhaPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (novaSenha.length < MIN_SENHA_LEN) {
-      setError(`A nova senha precisa ter ao menos ${MIN_SENHA_LEN} caracteres.`);
+    const erroSenha = erroComplexidadeSenha(novaSenha);
+    if (erroSenha) {
+      setError(erroSenha);
       return;
     }
     if (novaSenha !== confirmar) {
@@ -47,7 +47,7 @@ export function TrocarSenhaPage() {
         <PasswordInput
           value={novaSenha}
           onChange={setNovaSenha}
-          placeholder={`Nova senha (mín. ${MIN_SENHA_LEN} caracteres)`}
+          placeholder={`Nova senha (${DICA_SENHA})`}
           required
         />
         <PasswordInput value={confirmar} onChange={setConfirmar} placeholder="Confirmar nova senha" required />

@@ -8,16 +8,38 @@ import { UsuarioPermissoesMenuPage } from "./UsuarioPermissoesMenuPage";
 import { PasswordInput } from "../components/PasswordInput";
 import { EditIcon, KeyIcon, MailIcon, ShieldIcon, TrashIcon } from "../components/icons";
 import { clearFilterKeys, toggleFilterValue } from "../lib/filterValues";
+import { DICA_SENHA, erroComplexidadeSenha } from "../lib/senha";
 
-const MIN_SENHA_LEN = 8;
-const SENHA_CHARSET = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
+// sem caracteres ambíguos (0/O, 1/l/I) -- senha só é mostrada uma vez pro admin, precisa dar
+// pra digitar/ler sem confundir. Símbolo restrito a um conjunto que não atrapalha copiar/colar
+// em nenhum lugar comum (sem aspas, sem espaço).
+const MAIUSCULAS = "ABCDEFGHJKLMNPQRSTUVWXYZ";
+const MINUSCULAS = "abcdefghijkmnopqrstuvwxyz";
+const NUMEROS = "23456789";
+const SIMBOLOS = "!@#$%*-_+=";
+const SENHA_CHARSET = MAIUSCULAS + MINUSCULAS + NUMEROS + SIMBOLOS;
 
-function gerarSenhaAleatoria(length = 12): string {
-  const bytes = new Uint8Array(length);
+function charAleatorio(charset: string): string {
+  const bytes = new Uint8Array(1);
   crypto.getRandomValues(bytes);
-  return Array.from(bytes)
-    .map((b) => SENHA_CHARSET[b % SENHA_CHARSET.length])
-    .join("");
+  return charset[bytes[0] % charset.length];
+}
+
+/** Sempre passa em `erroComplexidadeSenha` -- 1 caractere de cada categoria obrigatória, o
+ * resto sorteado do conjunto inteiro, depois embaralhado (senão os 4 primeiros caracteres
+ * sempre seguiriam a mesma ordem maiúscula/minúscula/número/símbolo). */
+function gerarSenhaAleatoria(length = 12): string {
+  const obrigatorios = [charAleatorio(MAIUSCULAS), charAleatorio(MINUSCULAS), charAleatorio(NUMEROS), charAleatorio(SIMBOLOS)];
+  const resto = Array.from({ length: length - obrigatorios.length }, () => charAleatorio(SENHA_CHARSET));
+  const todos = [...obrigatorios, ...resto];
+  // embaralha (Fisher-Yates) usando a mesma fonte de aleatoriedade
+  for (let i = todos.length - 1; i > 0; i--) {
+    const bytes = new Uint8Array(1);
+    crypto.getRandomValues(bytes);
+    const j = bytes[0] % (i + 1);
+    [todos[i], todos[j]] = [todos[j], todos[i]];
+  }
+  return todos.join("");
 }
 
 interface UsuariosAdminPageProps {
@@ -112,8 +134,9 @@ export function UsuariosAdminPage({ token, onLogout }: UsuariosAdminPageProps) {
   async function handleDefinirSenha(e: React.FormEvent) {
     e.preventDefault();
     if (!definindoSenhaFor) return;
-    if (novaSenhaAdmin.length < MIN_SENHA_LEN) {
-      setSenhaError(`A senha precisa ter ao menos ${MIN_SENHA_LEN} caracteres.`);
+    const erroSenha = erroComplexidadeSenha(novaSenhaAdmin);
+    if (erroSenha) {
+      setSenhaError(erroSenha);
       return;
     }
     if (novaSenhaAdmin !== confirmarSenhaAdmin) {
@@ -305,7 +328,13 @@ export function UsuariosAdminPage({ token, onLogout }: UsuariosAdminPageProps) {
 
             <div className="form-row">
               <label htmlFor="nova_senha_admin">Nova senha</label>
-              <PasswordInput id="nova_senha_admin" value={novaSenhaAdmin} onChange={setNovaSenhaAdmin} required />
+              <PasswordInput
+                id="nova_senha_admin"
+                value={novaSenhaAdmin}
+                onChange={setNovaSenhaAdmin}
+                placeholder={DICA_SENHA}
+                required
+              />
             </div>
             <button
               type="button"
