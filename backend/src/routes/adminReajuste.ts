@@ -11,6 +11,9 @@ type Queryer = { query: <T>(text: string, params?: unknown[]) => Promise<{ rows:
 // de 12 meses do indexador do contrato (pc_cod_index) no mês/ano corrente (indices_calculados.
 // index_acum_12m). Fórmula (decisão do usuário, 2026-09-01): novo_valor = valor_atual * (1 +
 // index_acum_12m) -- index_acum_12m já vem como fração decimal da view, não percentual.
+// Reajuste é anual: só entra contrato com pelo menos 1 ano de vida (pc_dat_niver de ano <= anoRef
+// - 1) -- achado real 2026-09-02, um contrato com aniversário 18/08/2026 apareceu como candidato
+// pro reajuste de Agosto/26 mesmo tendo sido criado no próprio mês.
 // Montado sob requireAdmin (server.ts) -- só o PIN mestre do Admin dispara.
 export const adminReajusteRouter = Router();
 
@@ -72,6 +75,7 @@ async function calcularCandidatos(client: Queryer, anoRef: number, mesRef: numbe
        ON ic.index_nome = pc.pc_cod_index AND ic.index_ano = $1 AND ic.index_mes = $2
      WHERE pc.pc_dat_niver ~ '^\\d{4}-\\d{2}-\\d{2}'
        AND EXTRACT(MONTH FROM pc.pc_dat_niver::date) = $2
+       AND EXTRACT(YEAR FROM pc.pc_dat_niver::date) <= $1 - 1
      ORDER BY c.cliente_nome, p.produto_nome`,
     [anoRef, mesRef]
   );
