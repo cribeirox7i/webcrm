@@ -121,6 +121,13 @@ export function ReajusteAdminPage({ token, onLogout }: ReajusteAdminPageProps) {
       { id: "cliente_cnpj", header: "CNPJ", value: (c) => c.cliente_cnpj ?? "", width: 130 },
       { id: "produto_nome", header: "Produto", value: (c) => c.produto_nome, width: 160 },
       { id: "produto_detalhe", header: "Detalhe", value: (c) => c.produto_detalhe ?? "", width: 160 },
+      {
+        id: "pc_dat_niver",
+        header: "Aniversário",
+        value: (c) => c.pc_dat_niver ?? "",
+        width: 110,
+        cell: (c) => formatDataBr(c.pc_dat_niver),
+      },
       { id: "pc_cod_index", header: "Indexador", value: (c) => c.pc_cod_index ?? "", width: 110 },
       {
         id: "index_acum_12m",
@@ -202,17 +209,14 @@ export function ReajusteAdminPage({ token, onLogout }: ReajusteAdminPageProps) {
       <h1>Reajuste de Preço de Consumo</h1>
       <p className="page-subtitle">
         Reajusta o valor unitário e a franquia dos contratos (Tabela de Preços) com aniversário no mês
-        de referência, aplicando o acumulado de 12 meses do indexador de cada contrato: novo valor =
-        valor atual × (1 + acumulado 12m). "Mês atual" usa o calendário; "competência vigente" usa o
-        mês marcado como vigência ativa em Carteira (útil quando a carga de dados está atrasada em
-        relação ao calendário). Simule antes de aplicar -- nada é gravado até confirmar.
+        da competência vigente (`cart_mes.cart_vigencia_ativa`) -- o mês de Carteira/Consumo que acabou
+        de ser importado, não o mês do calendário -- aplicando o acumulado de 12 meses do indexador de
+        cada contrato: novo valor = valor atual × (1 + acumulado 12m). Simule antes de aplicar -- nada é
+        gravado até confirmar.
       </p>
 
       <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 16, flexWrap: "wrap" }}>
-        <button className="primary" onClick={() => handleSimular("atual")} disabled={simulando !== null}>
-          {simulando === "atual" ? "Simulando..." : "Simular reajuste do mês atual"}
-        </button>
-        <button onClick={() => handleSimular("vigente")} disabled={simulando !== null}>
+        <button className="primary" onClick={() => handleSimular("vigente")} disabled={simulando !== null}>
           {simulando === "vigente" ? "Simulando..." : "Simular reajuste da competência vigente"}
         </button>
         {candidatos && (
@@ -220,11 +224,7 @@ export function ReajusteAdminPage({ token, onLogout }: ReajusteAdminPageProps) {
             {aplicando ? "Aplicando..." : `Aplicar selecionados (${selectedIds.size})`}
           </button>
         )}
-        {refUsada && (
-          <span className="page-subtitle">
-            Competência usada: {refUsada.cartAnoMes} ({refUsada.origem === "vigente" ? "vigência ativa" : "mês atual"})
-          </span>
-        )}
+        {refUsada && <span className="page-subtitle">Competência usada: {refUsada.cartAnoMes}</span>}
       </div>
 
       {erro && <p className="form-error">{erro}</p>}
