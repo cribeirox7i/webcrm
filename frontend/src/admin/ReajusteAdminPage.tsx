@@ -11,7 +11,7 @@ interface ReajusteAdminPageProps {
 const STATUS_LABEL: Record<CandidatoReajuste["status"], string> = {
   aplicavel: "Aplicável",
   sem_indexador: "Sem indexador cadastrado",
-  sem_indice_mes_corrente: "Índice do mês corrente ainda não sincronizado",
+  sem_indice_mes_corrente: "Índice do mês de apuração ainda não sincronizado",
   acumulado_negativo: "Acumulado 12m negativo (não reajusta)",
   ja_aplicado: "Já reajustado este mês",
 };
@@ -210,9 +210,15 @@ export function ReajusteAdminPage({ token, onLogout }: ReajusteAdminPageProps) {
       <p className="page-subtitle">
         Reajusta o valor unitário e a franquia dos contratos (Tabela de Preços) com aniversário no mês
         da competência vigente (`cart_mes.cart_vigencia_ativa`) -- o mês de Carteira/Consumo que acabou
-        de ser importado, não o mês do calendário -- aplicando o acumulado de 12 meses do indexador de
-        cada contrato: novo valor = valor atual × (1 + acumulado 12m). Simule antes de aplicar -- nada é
-        gravado até confirmar.
+        de ser importado, não o mês do calendário -- e que já tenham pelo menos 1 ano de vida no
+        contrato, aplicando o acumulado de 12 meses do indexador de cada contrato: novo valor = valor
+        atual × (1 + acumulado 12m). Simule antes de aplicar -- nada é gravado até confirmar.
+      </p>
+      <p className="page-subtitle">
+        <strong>Acumulado 12m apurado no mês anterior à competência</strong>: reajuste de Agosto usa o
+        acumulado fechado em Julho (12 meses terminando em Julho, de Agosto do ano anterior a Julho do
+        ano corrente) -- não o de Agosto, cujo índice (IPCA/INPC) o Banco Central ainda não publicou
+        no momento em que a competência de Agosto normalmente é reajustada.
       </p>
 
       <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 16, flexWrap: "wrap" }}>
