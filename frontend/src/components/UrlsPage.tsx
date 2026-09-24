@@ -94,6 +94,12 @@ export function UrlsPage() {
     return map;
   }, [servidores]);
 
+  const servidorAmbienteById = useMemo(() => {
+    const map = new Map<number, string>();
+    servidores.forEach((s) => map.set(s.server_id, s.server_ambiente ?? ""));
+    return map;
+  }, [servidores]);
+
   function clienteNome(u: Url): string {
     return clienteNomeById.get(u.cliente_id) ?? "";
   }
@@ -105,6 +111,9 @@ export function UrlsPage() {
   }
   function servidorNome(u: Url): string {
     return u.server_id != null ? servidorNomeById.get(u.server_id) ?? "" : "";
+  }
+  function servidorAmbiente(u: Url): string {
+    return u.server_id != null ? servidorAmbienteById.get(u.server_id) ?? "" : "";
   }
 
   async function handleDelete(url: Url) {
@@ -184,6 +193,13 @@ export function UrlsPage() {
     [clienteNomeById, produtoNomeById, produtoSuiteById, servidorNomeById]
   );
 
+  // Só entra no XLS/PDF/CSV, não na tela -- Suíte já é coluna visível (e por isso já sai na
+  // exportação também), Ambiente (do servidor) só foi pedido pra exportação.
+  const extraExportColumns = useMemo(
+    () => [{ header: "Ambiente", value: servidorAmbiente }],
+    [servidorAmbienteById]
+  );
+
   const filters: DataGridFilter<Url>[] = useMemo(
     () => [
       { id: "url_exc", label: "Exclusão", value: (u) => u.url_exc ?? "" },
@@ -239,6 +255,7 @@ export function UrlsPage() {
         filters={filters}
         loading={loading}
         exportFilename="urls"
+        extraExportColumns={extraExportColumns}
         filterValues={filterValues}
         onFilterValuesChange={setFilterValues}
         onFilteredChange={({ countWith }) =>

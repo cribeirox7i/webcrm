@@ -578,7 +578,7 @@ main {
 /* ---- page header / toolbar ---- */
 
 .search {
-  width: 280px;
+  width: 252px;
   max-width: 50vw;
 }
 
@@ -631,7 +631,7 @@ main {
 }
 
 .datagrid-filter select {
-  width: 170px;
+  width: 153px;
   text-overflow: ellipsis;
 }
 
