@@ -639,6 +639,21 @@ main {
   white-space: normal;
 }
 
+.datagrid-clear-btn {
+  border: none;
+  background: none;
+  padding: 0;
+  color: var(--accent);
+  font-size: 13px;
+  text-decoration: underline;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.datagrid-clear-btn:hover {
+  opacity: 0.75;
+}
+
 .datagrid-toolbar-right {
   display: flex;
   align-items: center;

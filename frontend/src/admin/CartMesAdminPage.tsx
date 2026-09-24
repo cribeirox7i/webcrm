@@ -28,6 +28,9 @@ export function CartMesAdminPage({ token, onLogout }: CartMesAdminPageProps) {
   // Filtro do DataGrid levantado pra cá (controlado) pra os cards de StatCards poderem
   // alternar o mesmo filtro que o dropdown "Vigência ativa" já mostra.
   const [filterValues, setFilterValues] = useState<Record<string, string>>({});
+  // Contagens dos StatCards, recalculadas pelo DataGrid a cada busca/filtro -- cada uma ignora o
+  // próprio filtro de vigência (ver `countWith`) pra não zerar quando outro card estiver ativo.
+  const [cardCounts, setCardCounts] = useState({ total: 0, vigenciaAtiva: 0 });
 
   function handleAuthError(err: unknown): boolean {
     if ((err as Error).message === "não autenticado") {
@@ -132,14 +135,14 @@ export function CartMesAdminPage({ token, onLogout }: CartMesAdminPageProps) {
         stats={[
           {
             label: "Meses cadastrados",
-            value: meses.length,
+            value: cardCounts.total,
             tone: "accent",
             onClick: () => setFilterValues((prev) => clearFilterKeys(prev, ["cart_vigencia_ativa"])),
             active: !filterValues.cart_vigencia_ativa,
           },
           {
             label: "Vigência ativa",
-            value: meses.filter((m) => m.cart_vigencia_ativa === "S").length,
+            value: cardCounts.vigenciaAtiva,
             tone: "green",
             onClick: () => setFilterValues((prev) => toggleFilterValue(prev, "cart_vigencia_ativa", "S")),
             active: filterValues.cart_vigencia_ativa === "S",
@@ -164,6 +167,12 @@ export function CartMesAdminPage({ token, onLogout }: CartMesAdminPageProps) {
         exportFilename="cart_mes"
         filterValues={filterValues}
         onFilterValuesChange={setFilterValues}
+        onFilteredChange={({ countWith }) =>
+          setCardCounts({
+            total: countWith({ cart_vigencia_ativa: undefined }),
+            vigenciaAtiva: countWith({ cart_vigencia_ativa: "S" }),
+          })
+        }
         actionsWidth={180}
         renderActions={(m) => (
           <div className="row-actions">

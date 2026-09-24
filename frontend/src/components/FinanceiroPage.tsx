@@ -29,6 +29,7 @@ export function FinanceiroPage() {
   const [drill, setDrill] = useState<Drill>(null);
   const [historicoAberto, setHistoricoAberto] = useState(false);
   const [historicoMesInicial, setHistoricoMesInicial] = useState<string | null>(null);
+  const [filteredRows, setFilteredRows] = useState<CartMesResumo[]>([]);
 
   async function loadAll() {
     setLoading(true);
@@ -114,7 +115,7 @@ export function FinanceiroPage() {
 
   return (
     <div className="page">
-      <StatCards stats={[{ label: "Meses cadastrados", value: meses.length, tone: "accent" }]} />
+      <StatCards stats={[{ label: "Meses cadastrados", value: filteredRows.length, tone: "accent" }]} />
 
       {loadError && (
         <div className="banner-error">
@@ -130,6 +131,7 @@ export function FinanceiroPage() {
         searchPlaceholder="Buscar por ano/mês..."
         loading={loading}
         exportFilename="financeiro"
+        onFilteredChange={({ filtered }) => setFilteredRows(filtered)}
         // 386: a célula de ações desta tela mede 346px reais com 5 botões de ícone (2 grupos
         // rotulados CARTEIRA/CONSUMO, medido no navegador em px lógicos -- ver histórico da
         // rolagem lateral desta tela). O botão de Reajustes (2026-09-01) virou o 6º ícone no

@@ -20,6 +20,7 @@ export function FornecedoresPage({ onOpenFornecedor }: FornecedoresPageProps) {
   const [editing, setEditing] = useState<Fornecedor | null | "new">(null);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [filteredRows, setFilteredRows] = useState<Fornecedor[]>([]);
 
   async function loadAll() {
     setLoading(true);
@@ -87,7 +88,7 @@ export function FornecedoresPage({ onOpenFornecedor }: FornecedoresPageProps) {
 
   return (
     <div className="page">
-      <StatCards stats={[{ label: "Total de fornecedores", value: fornecedores.length, tone: "accent" }]} />
+      <StatCards stats={[{ label: "Total de fornecedores", value: filteredRows.length, tone: "accent" }]} />
 
       {loadError && (
         <div className="banner-error">
@@ -104,6 +105,7 @@ export function FornecedoresPage({ onOpenFornecedor }: FornecedoresPageProps) {
         filters={filters}
         loading={loading}
         exportFilename="fornecedores"
+        onFilteredChange={({ filtered }) => setFilteredRows(filtered)}
         onRowClick={(f) => onOpenFornecedor(f.fornecedor_id)}
         actionsWidth={100}
         renderActions={

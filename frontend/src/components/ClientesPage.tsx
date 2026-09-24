@@ -26,6 +26,9 @@ export function ClientesPage({ onOpenCliente }: ClientesPageProps) {
   // Estado dos filtros do DataGrid levantado pra cá (controlado) pra os cards de StatCards
   // poderem alternar o mesmo filtro que o dropdown "Status" já mostra -- ver DESIGN_SYSTEM.md.
   const [filterValues, setFilterValues] = useState<Record<string, string>>({ cliente_status: "ATIVO" });
+  // Contagens dos StatCards, recalculadas pelo DataGrid a cada busca/filtro -- cada uma ignora o
+  // próprio filtro de status (ver `countWith`) pra não zerar quando outro card estiver ativo.
+  const [cardCounts, setCardCounts] = useState({ total: 0, ativos: 0, inativos: 0 });
 
   async function loadAll() {
     setLoading(true);
@@ -121,21 +124,21 @@ export function ClientesPage({ onOpenCliente }: ClientesPageProps) {
         stats={[
           {
             label: "Total de clientes",
-            value: clientes.length,
+            value: cardCounts.total,
             tone: "accent",
             onClick: () => setFilterValues((prev) => clearFilterKeys(prev, ["cliente_status"])),
             active: !filterValues.cliente_status,
           },
           {
             label: "Ativos",
-            value: clientes.filter((c) => c.cliente_status === "ATIVO").length,
+            value: cardCounts.ativos,
             tone: "green",
             onClick: () => setFilterValues((prev) => toggleFilterValue(prev, "cliente_status", "ATIVO")),
             active: filterValues.cliente_status === "ATIVO",
           },
           {
             label: "Inativos",
-            value: clientes.filter((c) => c.cliente_status !== "ATIVO").length,
+            value: cardCounts.inativos,
             tone: "red",
             onClick: () => setFilterValues((prev) => toggleFilterValue(prev, "cliente_status", "INATIVO")),
             active: filterValues.cliente_status === "INATIVO",
@@ -160,6 +163,13 @@ export function ClientesPage({ onOpenCliente }: ClientesPageProps) {
         exportFilename="clientes"
         filterValues={filterValues}
         onFilterValuesChange={setFilterValues}
+        onFilteredChange={({ countWith }) =>
+          setCardCounts({
+            total: countWith({ cliente_status: undefined }),
+            ativos: countWith({ cliente_status: "ATIVO" }),
+            inativos: countWith({ cliente_status: "INATIVO" }),
+          })
+        }
         onRowClick={(c) => onOpenCliente(c.cliente_id)}
         actionsWidth={100}
         renderActions={

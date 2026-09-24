@@ -22,6 +22,9 @@ export function ContatosPage() {
   // Filtro do DataGrid levantado pra cá (controlado) pra os cards de StatCards poderem
   // alternar o mesmo filtro que o dropdown "Status" já mostra.
   const [filterValues, setFilterValues] = useState<Record<string, string>>({});
+  // Contagens dos StatCards, recalculadas pelo DataGrid a cada busca/filtro -- cada uma ignora o
+  // próprio filtro de status (ver `countWith`) pra não zerar quando outro card estiver ativo.
+  const [cardCounts, setCardCounts] = useState({ total: 0, ativos: 0, inativos: 0 });
 
   async function loadAll() {
     setLoading(true);
@@ -116,21 +119,21 @@ export function ContatosPage() {
         stats={[
           {
             label: "Total de contatos",
-            value: contatos.length,
+            value: cardCounts.total,
             tone: "accent",
             onClick: () => setFilterValues((prev) => clearFilterKeys(prev, ["contato_status"])),
             active: !filterValues.contato_status,
           },
           {
             label: "Ativos",
-            value: contatos.filter((c) => c.contato_status === "ATIVO").length,
+            value: cardCounts.ativos,
             tone: "green",
             onClick: () => setFilterValues((prev) => toggleFilterValue(prev, "contato_status", "ATIVO")),
             active: filterValues.contato_status === "ATIVO",
           },
           {
             label: "Inativos",
-            value: contatos.filter((c) => c.contato_status === "INATIVO").length,
+            value: cardCounts.inativos,
             tone: "red",
             onClick: () => setFilterValues((prev) => toggleFilterValue(prev, "contato_status", "INATIVO")),
             active: filterValues.contato_status === "INATIVO",
@@ -155,6 +158,13 @@ export function ContatosPage() {
         exportFilename="contatos"
         filterValues={filterValues}
         onFilterValuesChange={setFilterValues}
+        onFilteredChange={({ countWith }) =>
+          setCardCounts({
+            total: countWith({ contato_status: undefined }),
+            ativos: countWith({ contato_status: "ATIVO" }),
+            inativos: countWith({ contato_status: "INATIVO" }),
+          })
+        }
         actionsWidth={100}
         renderActions={
           podeEditar || podeExcluir

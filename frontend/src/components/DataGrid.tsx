@@ -73,6 +73,17 @@ interface DataGridProps<T> {
    * estado internamente, como sempre foi. Os dois precisam vir juntos. */
   filterValues?: Record<string, string>;
   onFilterValuesChange?: (next: Record<string, string>) => void;
+  /** Chamado com o recorte de busca+filtro sempre que ele muda -- pra telas cujos StatCards
+   * precisam refletir a busca/filtros atuais da grid em vez de contar sobre `data` bruto.
+   * `countWith(overrides)` conta sobre busca + filtros atuais, substituindo (ou removendo, com
+   * `undefined`) as chaves passadas -- necessário pro próprio card que controla aquele filtro
+   * (ex. "Ativos" alternando `cliente_status`): se ele contasse sobre `filtered` puro, ficaria
+   * zerado sempre que outro card do mesmo grupo estivesse ativo, porque `filtered` já viria
+   * filtrado por aquele status. */
+  onFilteredChange?: (info: {
+    filtered: T[];
+    countWith: (overrides?: Record<string, string | undefined>) => number;
+  }) => void;
   /** Ativa a coluna de checkbox (seleção múltipla) -- omitir pra grid sem seleção (padrão). */
   selection?: DataGridSelection;
   /** Colunas que só entram no XLS/PDF/CSV/compartilhar -- nunca aparecem na tela. Útil pra dado
@@ -109,6 +120,7 @@ export function DataGrid<T>({
   defaultFilterValues,
   filterValues: controlledFilterValues,
   onFilterValuesChange,
+  onFilteredChange,
   selection,
   extraExportColumns = NO_EXTRA_EXPORT as unknown as Pick<DataGridColumn<T>, "header" | "value">[],
 }: DataGridProps<T>) {
@@ -183,6 +195,29 @@ export function DataGrid<T>({
     });
   }, [data, search, filterValues, filters]);
   filteredRef.current = filtered;
+
+  const countWith = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    return (overrides: Record<string, string | undefined> = {}) => {
+      const effective = { ...filterValues, ...overrides };
+      return data.filter((row) => {
+        if (term && !searchValueRef.current(row).toLowerCase().includes(term)) return false;
+        for (const f of filters) {
+          const active = effective[f.id];
+          if (active && f.value(row) !== active) return false;
+        }
+        return true;
+      }).length;
+    };
+  }, [data, search, filterValues, filters]);
+
+  const onFilteredChangeRef = useRef(onFilteredChange);
+  onFilteredChangeRef.current = onFilteredChange;
+  useEffect(() => {
+    onFilteredChangeRef.current?.({ filtered, countWith });
+  }, [filtered, countWith]);
+
+  const hasActiveFilterValues = Object.values(filterValues).some((v) => !!v);
 
   const alignById = useMemo(() => {
     // "__selection" é a coluna interna do checkbox de seleção (não passa por `columns`, ver
@@ -417,6 +452,16 @@ export function DataGrid<T>({
                   </select>
                 </span>
               ))}
+              {search && (
+                <button type="button" className="datagrid-clear-btn" onClick={() => setSearch("")}>
+                  Limpar busca
+                </button>
+              )}
+              {hasActiveFilterValues && (
+                <button type="button" className="datagrid-clear-btn" onClick={() => setFilterValues({})}>
+                  Limpar filtros
+                </button>
+              )}
             </div>
             <div className="datagrid-toolbar-right">
               <button className="icon-btn" title="Exportar XLS" aria-label="Exportar XLS" onClick={handleExportXlsx}>

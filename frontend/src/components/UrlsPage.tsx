@@ -37,8 +37,11 @@ export function UrlsPage() {
   const [formError, setFormError] = useState<string | null>(null);
 
   // Filtro do DataGrid levantado pra cá (controlado) pra os cards de StatCards poderem
-  // alternar o mesmo filtro que o dropdown "Status" já mostra.
+  // alternar o mesmo filtro de status, mesmo sem mais existir um dropdown "Status" correspondente.
   const [filterValues, setFilterValues] = useState<Record<string, string>>({});
+  // Contagens dos StatCards, recalculadas pelo DataGrid a cada busca/filtro -- cada uma ignora o
+  // próprio filtro de status (ver `countWith`) pra não zerar quando outro card estiver ativo.
+  const [cardCounts, setCardCounts] = useState({ total: 0, ativas: 0, bloqueadas: 0 });
 
   async function loadAll() {
     setLoading(true);
@@ -79,6 +82,12 @@ export function UrlsPage() {
     return map;
   }, [produtos]);
 
+  const produtoSuiteById = useMemo(() => {
+    const map = new Map<number, string>();
+    produtos.forEach((p) => map.set(p.produto_id, p.produto_suite ?? ""));
+    return map;
+  }, [produtos]);
+
   const servidorNomeById = useMemo(() => {
     const map = new Map<number, string>();
     servidores.forEach((s) => map.set(s.server_id, s.server_nome));
@@ -90,6 +99,9 @@ export function UrlsPage() {
   }
   function produtoNome(u: Url): string {
     return u.produto_id != null ? produtoNomeById.get(u.produto_id) ?? "" : "";
+  }
+  function produtoSuite(u: Url): string {
+    return u.produto_id != null ? produtoSuiteById.get(u.produto_id) ?? "" : "";
   }
   function servidorNome(u: Url): string {
     return u.server_id != null ? servidorNomeById.get(u.server_id) ?? "" : "";
@@ -131,6 +143,7 @@ export function UrlsPage() {
       { id: "url_path", header: "Caminho", value: (u) => u.url_path, width: 280 },
       { id: "cliente", header: "Cliente", value: clienteNome, width: 240 },
       { id: "produto", header: "Produto", value: produtoNome, width: 160 },
+      { id: "suite", header: "Suíte", value: produtoSuite, width: 140 },
       { id: "servidor", header: "Servidor", value: servidorNome, width: 130 },
       {
         id: "url_status",
@@ -168,17 +181,17 @@ export function UrlsPage() {
         cell: (u) => formatDate(u.url_dt_exc),
       },
     ],
-    [clienteNomeById, produtoNomeById, servidorNomeById]
+    [clienteNomeById, produtoNomeById, produtoSuiteById, servidorNomeById]
   );
 
   const filters: DataGridFilter<Url>[] = useMemo(
     () => [
-      { id: "url_status", label: "Status", value: (u) => u.url_status ?? "" },
       { id: "url_exc", label: "Exclusão", value: (u) => u.url_exc ?? "" },
       { id: "produto", label: "Produto", value: produtoNome },
+      { id: "suite", label: "Suíte", value: produtoSuite },
       { id: "servidor", label: "Servidor", value: servidorNome },
     ],
-    [produtoNomeById, servidorNomeById]
+    [produtoNomeById, produtoSuiteById, servidorNomeById]
   );
 
   return (
@@ -187,21 +200,21 @@ export function UrlsPage() {
         stats={[
           {
             label: "Total de URLs",
-            value: urls.length,
+            value: cardCounts.total,
             tone: "accent",
             onClick: () => setFilterValues((prev) => clearFilterKeys(prev, ["url_status"])),
             active: !filterValues.url_status,
           },
           {
             label: "Ativas",
-            value: urls.filter((u) => u.url_status === "ATIVO").length,
+            value: cardCounts.ativas,
             tone: "green",
             onClick: () => setFilterValues((prev) => toggleFilterValue(prev, "url_status", "ATIVO")),
             active: filterValues.url_status === "ATIVO",
           },
           {
             label: "Bloqueadas",
-            value: urls.filter((u) => u.url_status === "BLOQUEADO").length,
+            value: cardCounts.bloqueadas,
             tone: "red",
             onClick: () => setFilterValues((prev) => toggleFilterValue(prev, "url_status", "BLOQUEADO")),
             active: filterValues.url_status === "BLOQUEADO",
@@ -220,14 +233,21 @@ export function UrlsPage() {
         columns={columns}
         getRowId={(u) => u.url_id}
         searchValue={(u) =>
-          `${u.url_path} ${clienteNome(u)} ${produtoNome(u)} ${servidorNome(u)} ${u.url_status ?? ""} ${u.url_exc ?? ""}`
+          `${u.url_path} ${clienteNome(u)} ${produtoNome(u)} ${produtoSuite(u)} ${servidorNome(u)} ${u.url_status ?? ""} ${u.url_exc ?? ""}`
         }
-        searchPlaceholder="Buscar por caminho, cliente, produto, status..."
+        searchPlaceholder="Buscar por caminho, cliente, produto, suíte, status..."
         filters={filters}
         loading={loading}
         exportFilename="urls"
         filterValues={filterValues}
         onFilterValuesChange={setFilterValues}
+        onFilteredChange={({ countWith }) =>
+          setCardCounts({
+            total: countWith({ url_status: undefined }),
+            ativas: countWith({ url_status: "ATIVO" }),
+            bloqueadas: countWith({ url_status: "BLOQUEADO" }),
+          })
+        }
         actionsWidth={100}
         renderActions={
           podeEditar || podeExcluir

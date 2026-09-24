@@ -45,6 +45,9 @@ export function PortfolioPage() {
   // Filtro do DataGrid levantado pra cá (controlado) pra os cards de StatCards poderem
   // alternar o mesmo filtro que o dropdown "Status" já mostra.
   const [filterValues, setFilterValues] = useState<Record<string, string>>({ port_status: "ANDAMENTO" });
+  // Contagens dos StatCards, recalculadas pelo DataGrid a cada busca/filtro -- cada uma ignora o
+  // próprio filtro de status (ver `countWith`) pra não zerar quando outro card estiver ativo.
+  const [cardCounts, setCardCounts] = useState({ total: 0, andamento: 0, concluidos: 0, cancelados: 0 });
 
   async function loadAll() {
     setLoading(true);
@@ -186,28 +189,28 @@ export function PortfolioPage() {
         stats={[
           {
             label: "Total de projetos",
-            value: portfolios.length,
+            value: cardCounts.total,
             tone: "accent",
             onClick: () => setFilterValues((prev) => clearFilterKeys(prev, ["port_status"])),
             active: !filterValues.port_status,
           },
           {
             label: "Em andamento",
-            value: portfolios.filter((p) => p.port_status === "ANDAMENTO").length,
+            value: cardCounts.andamento,
             tone: "green",
             onClick: () => setFilterValues((prev) => toggleFilterValue(prev, "port_status", "ANDAMENTO")),
             active: filterValues.port_status === "ANDAMENTO",
           },
           {
             label: "Concluídos",
-            value: portfolios.filter((p) => p.port_status === "CONCLUÍDO").length,
+            value: cardCounts.concluidos,
             tone: "gray",
             onClick: () => setFilterValues((prev) => toggleFilterValue(prev, "port_status", "CONCLUÍDO")),
             active: filterValues.port_status === "CONCLUÍDO",
           },
           {
             label: "Cancelados",
-            value: portfolios.filter((p) => p.port_status === "CANCELADO").length,
+            value: cardCounts.cancelados,
             tone: "red",
             onClick: () => setFilterValues((prev) => toggleFilterValue(prev, "port_status", "CANCELADO")),
             active: filterValues.port_status === "CANCELADO",
@@ -230,6 +233,14 @@ export function PortfolioPage() {
         filters={filters}
         filterValues={filterValues}
         onFilterValuesChange={setFilterValues}
+        onFilteredChange={({ countWith }) =>
+          setCardCounts({
+            total: countWith({ port_status: undefined }),
+            andamento: countWith({ port_status: "ANDAMENTO" }),
+            concluidos: countWith({ port_status: "CONCLUÍDO" }),
+            cancelados: countWith({ port_status: "CANCELADO" }),
+          })
+        }
         loading={loading}
         exportFilename="portfolio_completo"
         actionsWidth={140}

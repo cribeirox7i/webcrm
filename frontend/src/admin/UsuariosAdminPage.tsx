@@ -65,6 +65,9 @@ export function UsuariosAdminPage({ token, onLogout }: UsuariosAdminPageProps) {
   // Filtro do DataGrid levantado pra cá (controlado) pra os cards de StatCards poderem
   // alternar o mesmo filtro que o dropdown "Status" já mostra.
   const [filterValues, setFilterValues] = useState<Record<string, string>>({});
+  // Contagens dos StatCards, recalculadas pelo DataGrid a cada busca/filtro -- cada uma ignora o
+  // próprio filtro de status (ver `countWith`) pra não zerar quando outro card estiver ativo.
+  const [cardCounts, setCardCounts] = useState({ total: 0, ativos: 0 });
   const [novaSenhaAdmin, setNovaSenhaAdmin] = useState("");
   const [confirmarSenhaAdmin, setConfirmarSenhaAdmin] = useState("");
   const [savingSenha, setSavingSenha] = useState(false);
@@ -219,14 +222,14 @@ export function UsuariosAdminPage({ token, onLogout }: UsuariosAdminPageProps) {
         stats={[
           {
             label: "Total de usuários",
-            value: usuarios.length,
+            value: cardCounts.total,
             tone: "accent",
             onClick: () => setFilterValues((prev) => clearFilterKeys(prev, ["user_status"])),
             active: !filterValues.user_status,
           },
           {
             label: "Ativos",
-            value: usuarios.filter((u) => u.user_status === "ATIVO").length,
+            value: cardCounts.ativos,
             tone: "green",
             onClick: () => setFilterValues((prev) => toggleFilterValue(prev, "user_status", "ATIVO")),
             active: filterValues.user_status === "ATIVO",
@@ -251,6 +254,12 @@ export function UsuariosAdminPage({ token, onLogout }: UsuariosAdminPageProps) {
         exportFilename="usuarios"
         filterValues={filterValues}
         onFilterValuesChange={setFilterValues}
+        onFilteredChange={({ countWith }) =>
+          setCardCounts({
+            total: countWith({ user_status: undefined }),
+            ativos: countWith({ user_status: "ATIVO" }),
+          })
+        }
         actionsWidth={200}
         renderActions={(u) => (
           <div className="row-actions">

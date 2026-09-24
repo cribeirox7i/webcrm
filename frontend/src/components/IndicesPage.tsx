@@ -35,6 +35,12 @@ export function IndicesPage() {
   const [formError, setFormError] = useState<string | null>(null);
 
   const [filterValues, setFilterValues] = useState<Record<string, string>>({});
+  // Contagens dos StatCards, recalculadas pelo DataGrid a cada busca/filtro -- cada uma ignora o
+  // próprio filtro de índice (ver `countWith`) pra não zerar quando outro card estiver ativo.
+  const [cardCounts, setCardCounts] = useState<{ total: number; porNome: Record<string, number> }>({
+    total: 0,
+    porNome: {},
+  });
 
   async function loadAll() {
     setLoading(true);
@@ -150,14 +156,14 @@ export function IndicesPage() {
         stats={[
           {
             label: "Registros",
-            value: indices.length,
+            value: cardCounts.total,
             tone: "accent",
             onClick: () => setFilterValues((prev) => clearFilterKeys(prev, ["index_nome"])),
             active: !filterValues.index_nome,
           },
           ...nomes.map((n) => ({
             label: n,
-            value: indices.filter((i) => i.index_nome === n).length,
+            value: cardCounts.porNome[n] ?? 0,
             tone: "gray" as const,
             onClick: () => setFilterValues((prev) => toggleFilterValue(prev, "index_nome", n)),
             active: filterValues.index_nome === n,
@@ -180,6 +186,12 @@ export function IndicesPage() {
         filters={filters}
         filterValues={filterValues}
         onFilterValuesChange={setFilterValues}
+        onFilteredChange={({ countWith }) =>
+          setCardCounts({
+            total: countWith({ index_nome: undefined }),
+            porNome: Object.fromEntries(nomes.map((n) => [n, countWith({ index_nome: n })])),
+          })
+        }
         loading={loading}
         exportFilename="indices"
         actionsWidth={100}

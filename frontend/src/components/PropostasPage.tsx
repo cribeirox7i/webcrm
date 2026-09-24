@@ -21,6 +21,7 @@ export function PropostasPage() {
   const [editing, setEditing] = useState<Proposta | null | "new">(null);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [filteredRows, setFilteredRows] = useState<Proposta[]>([]);
 
   async function loadAll() {
     setLoading(true);
@@ -136,7 +137,7 @@ export function PropostasPage() {
 
   return (
     <div className="page">
-      <StatCards stats={[{ label: "Total de propostas", value: propostas.length, tone: "accent" }]} />
+      <StatCards stats={[{ label: "Total de propostas", value: filteredRows.length, tone: "accent" }]} />
 
       {loadError && (
         <div className="banner-error">
@@ -153,6 +154,7 @@ export function PropostasPage() {
         filters={filters}
         loading={loading}
         exportFilename="propostas"
+        onFilteredChange={({ filtered }) => setFilteredRows(filtered)}
         actionsWidth={126}
         renderActions={(p) => (
           <div className="row-actions">

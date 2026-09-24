@@ -21,6 +21,7 @@ export function PagadoriaPage() {
   const [editing, setEditing] = useState<FornPagadoria | null | "new">(null);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [filteredRows, setFilteredRows] = useState<FornPagadoria[]>([]);
 
   async function loadAll() {
     setLoading(true);
@@ -124,7 +125,7 @@ export function PagadoriaPage() {
 
   return (
     <div className="page">
-      <StatCards stats={[{ label: "Total de pagamentos", value: pagamentos.length, tone: "accent" }]} />
+      <StatCards stats={[{ label: "Total de pagamentos", value: filteredRows.length, tone: "accent" }]} />
 
       {loadError && (
         <div className="banner-error">
@@ -141,6 +142,7 @@ export function PagadoriaPage() {
         filters={filters}
         loading={loading}
         exportFilename="pagadoria"
+        onFilteredChange={({ filtered }) => setFilteredRows(filtered)}
         actionsWidth={90}
         renderActions={
           podeEditar || podeExcluir

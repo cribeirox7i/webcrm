@@ -55,6 +55,7 @@ export function FaturamentoMesPage({ cartMesId, cartAnoMes, onBack }: Faturament
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [filteredRows, setFilteredRows] = useState<FaturamentoDetalhe[]>([]);
 
   function toggleSelected(id: string | number) {
     setSelectedIds((prev) => {
@@ -234,7 +235,7 @@ export function FaturamentoMesPage({ cartMesId, cartAnoMes, onBack }: Faturament
 
   const totais = useMemo(
     () =>
-      faturamentos.reduce(
+      filteredRows.reduce(
         (acc, f) => ({
           liq: acc.liq + f.fat_vlr_liq,
           brt: acc.brt + f.fat_vlr_brt,
@@ -242,7 +243,7 @@ export function FaturamentoMesPage({ cartMesId, cartAnoMes, onBack }: Faturament
         }),
         { liq: 0, brt: 0, aFaturar: 0 }
       ),
-    [faturamentos, clienteById]
+    [filteredRows, clienteById]
   );
 
   const columns: DataGridColumn<FaturamentoDetalhe>[] = useMemo(
@@ -309,7 +310,7 @@ export function FaturamentoMesPage({ cartMesId, cartAnoMes, onBack }: Faturament
 
       <StatCards
         stats={[
-          { label: "Clientes faturados", value: faturamentos.length, tone: "accent" },
+          { label: "Clientes faturados", value: filteredRows.length, tone: "accent" },
           { label: "Valor líquido total", value: formatMoney(totais.liq), tone: "green" },
           { label: "Valor bruto total", value: formatMoney(totais.brt), tone: "gray" },
           { label: "Valor a faturar total", value: formatMoney(totais.aFaturar), tone: "accent" },
@@ -330,6 +331,7 @@ export function FaturamentoMesPage({ cartMesId, cartAnoMes, onBack }: Faturament
         searchPlaceholder="Buscar por cliente ou CNPJ..."
         loading={loading}
         exportFilename={`faturamento_${cartAnoMes.replace("/", "-")}`}
+        onFilteredChange={({ filtered }) => setFilteredRows(filtered)}
         actionsWidth={130}
         selection={{ selectedIds, onToggle: toggleSelected, onToggleAll: toggleSelectedAll }}
         toolbarExtra={

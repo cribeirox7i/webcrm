@@ -52,6 +52,7 @@ export function TabelaPrecosPage({ cartMesId, cartAnoMes, alertaInicial, onBack 
   const [editing, setEditing] = useState<PrecosCliente | null>(null);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [filteredRows, setFilteredRows] = useState<PrecosCliente[]>([]);
 
   async function loadAll() {
     setLoading(true);
@@ -227,7 +228,7 @@ export function TabelaPrecosPage({ cartMesId, cartAnoMes, alertaInicial, onBack 
         <button onClick={onBack}>&larr; Voltar</button>
       </div>
 
-      <StatCards stats={[{ label: "Total de preços", value: precos.length, tone: "accent" }]} />
+      <StatCards stats={[{ label: "Total de preços", value: filteredRows.length, tone: "accent" }]} />
 
       {loadError && (
         <div className="banner-error">
@@ -252,6 +253,7 @@ export function TabelaPrecosPage({ cartMesId, cartAnoMes, alertaInicial, onBack 
         loading={loading}
         exportFilename={`tabela_precos_${cartAnoMes.replace("/", "-")}`}
         extraExportColumns={extraExportColumns}
+        onFilteredChange={({ filtered }) => setFilteredRows(filtered)}
         renderActions={
           podeEditar
             ? (p) => (

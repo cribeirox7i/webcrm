@@ -30,6 +30,9 @@ export function ServidoresPage() {
   // alternar o mesmo filtro que os dropdowns "Status"/"Ambiente" já mostram. "Família" (3º
   // dropdown, sem card correspondente) não é tocado pelo clique nos cards.
   const [filterValues, setFilterValues] = useState<Record<string, string>>({});
+  // Contagens dos StatCards, recalculadas pelo DataGrid a cada busca/filtro -- cada uma ignora o
+  // próprio filtro que ela alterna (ver `countWith`) pra não zerar quando outro card estiver ativo.
+  const [cardCounts, setCardCounts] = useState({ total: 0, ativos: 0, prod: 0 });
 
   async function loadAll() {
     setLoading(true);
@@ -111,21 +114,21 @@ export function ServidoresPage() {
         stats={[
           {
             label: "Total de servidores",
-            value: servidores.length,
+            value: cardCounts.total,
             tone: "accent",
             onClick: () => setFilterValues((prev) => clearFilterKeys(prev, ["server_status", "server_ambiente"])),
             active: !filterValues.server_status && !filterValues.server_ambiente,
           },
           {
             label: "Ativos",
-            value: servidores.filter((s) => s.server_status === "ATIVO").length,
+            value: cardCounts.ativos,
             tone: "green",
             onClick: () => setFilterValues((prev) => toggleFilterValue(prev, "server_status", "ATIVO")),
             active: filterValues.server_status === "ATIVO",
           },
           {
             label: "Produção",
-            value: servidores.filter((s) => s.server_ambiente === "PROD").length,
+            value: cardCounts.prod,
             tone: "gray",
             onClick: () => setFilterValues((prev) => toggleFilterValue(prev, "server_ambiente", "PROD")),
             active: filterValues.server_ambiente === "PROD",
@@ -150,6 +153,13 @@ export function ServidoresPage() {
         exportFilename="servidores"
         filterValues={filterValues}
         onFilterValuesChange={setFilterValues}
+        onFilteredChange={({ countWith }) =>
+          setCardCounts({
+            total: countWith({ server_status: undefined, server_ambiente: undefined }),
+            ativos: countWith({ server_status: "ATIVO" }),
+            prod: countWith({ server_ambiente: "PROD" }),
+          })
+        }
         actionsWidth={100}
         renderActions={
           podeEditar || podeExcluir

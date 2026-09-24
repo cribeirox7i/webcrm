@@ -27,6 +27,7 @@ export function ConsumoAnaDetalhePage({
   const [registros, setRegistros] = useState<ConsumoAna[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [filteredRows, setFilteredRows] = useState<ConsumoAna[]>([]);
 
   async function loadAll() {
     setLoading(true);
@@ -50,7 +51,7 @@ export function ConsumoAnaDetalhePage({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clienteId, produtoId, cartMesId]);
 
-  const totalQtd = useMemo(() => registros.reduce((acc, r) => acc + (r.consumo_qtd ?? 0), 0), [registros]);
+  const totalQtd = useMemo(() => filteredRows.reduce((acc, r) => acc + (r.consumo_qtd ?? 0), 0), [filteredRows]);
 
   const columns: DataGridColumn<ConsumoAna>[] = useMemo(
     () => [
@@ -77,7 +78,7 @@ export function ConsumoAnaDetalhePage({
 
       <StatCards
         stats={[
-          { label: "Registros", value: registros.length, tone: "accent" },
+          { label: "Registros", value: filteredRows.length, tone: "accent" },
           { label: "Quantidade total", value: totalQtd, tone: "green" },
         ]}
       />
@@ -96,6 +97,7 @@ export function ConsumoAnaDetalhePage({
         searchPlaceholder="Buscar por data ou detalhe..."
         loading={loading}
         exportFilename={`consumo_ana_${clienteId}_${produtoId}_${cartAnoMes.replace("/", "-")}`}
+        onFilteredChange={({ filtered }) => setFilteredRows(filtered)}
       />
     </div>
   );

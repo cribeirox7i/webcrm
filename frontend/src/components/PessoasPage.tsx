@@ -21,6 +21,9 @@ export function PessoasPage() {
   // Filtro do DataGrid levantado pra cá (controlado) pra os cards de StatCards poderem
   // alternar o mesmo filtro que o dropdown "Status" já mostra.
   const [filterValues, setFilterValues] = useState<Record<string, string>>({});
+  // Contagens dos StatCards, recalculadas pelo DataGrid a cada busca/filtro -- cada uma ignora o
+  // próprio filtro de status (ver `countWith`) pra não zerar quando outro card estiver ativo.
+  const [cardCounts, setCardCounts] = useState({ total: 0, ativas: 0, inativas: 0 });
 
   async function loadAll() {
     setLoading(true);
@@ -113,21 +116,21 @@ export function PessoasPage() {
         stats={[
           {
             label: "Total de pessoas",
-            value: pessoas.length,
+            value: cardCounts.total,
             tone: "accent",
             onClick: () => setFilterValues((prev) => clearFilterKeys(prev, ["pessoa_status"])),
             active: !filterValues.pessoa_status,
           },
           {
             label: "Ativas",
-            value: pessoas.filter((p) => p.pessoa_status === "ATIVO").length,
+            value: cardCounts.ativas,
             tone: "green",
             onClick: () => setFilterValues((prev) => toggleFilterValue(prev, "pessoa_status", "ATIVO")),
             active: filterValues.pessoa_status === "ATIVO",
           },
           {
             label: "Inativas",
-            value: pessoas.filter((p) => p.pessoa_status === "INATIVO").length,
+            value: cardCounts.inativas,
             tone: "red",
             onClick: () => setFilterValues((prev) => toggleFilterValue(prev, "pessoa_status", "INATIVO")),
             active: filterValues.pessoa_status === "INATIVO",
@@ -152,6 +155,13 @@ export function PessoasPage() {
         exportFilename="pessoas"
         filterValues={filterValues}
         onFilterValuesChange={setFilterValues}
+        onFilteredChange={({ countWith }) =>
+          setCardCounts({
+            total: countWith({ pessoa_status: undefined }),
+            ativas: countWith({ pessoa_status: "ATIVO" }),
+            inativas: countWith({ pessoa_status: "INATIVO" }),
+          })
+        }
         actionsWidth={100}
         renderActions={
           podeEditar || podeExcluir

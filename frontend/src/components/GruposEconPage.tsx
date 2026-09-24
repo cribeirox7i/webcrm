@@ -16,6 +16,7 @@ export function GruposEconPage() {
   const [editing, setEditing] = useState<GrupoEcon | null | "new">(null);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [filteredRows, setFilteredRows] = useState<GrupoEcon[]>([]);
 
   async function loadAll() {
     setLoading(true);
@@ -74,7 +75,7 @@ export function GruposEconPage() {
 
   return (
     <div className="page">
-      <StatCards stats={[{ label: "Total de grupos econômicos", value: grupos.length, tone: "accent" }]} />
+      <StatCards stats={[{ label: "Total de grupos econômicos", value: filteredRows.length, tone: "accent" }]} />
 
       {loadError && (
         <div className="banner-error">
@@ -90,6 +91,7 @@ export function GruposEconPage() {
         searchPlaceholder="Buscar por nome..."
         loading={loading}
         exportFilename="grupos_economicos"
+        onFilteredChange={({ filtered }) => setFilteredRows(filtered)}
         actionsWidth={100}
         renderActions={
           podeEditar || podeExcluir

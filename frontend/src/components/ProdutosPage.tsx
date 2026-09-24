@@ -16,6 +16,7 @@ export function ProdutosPage() {
   const [editing, setEditing] = useState<Produto | null | "new">(null);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [filteredRows, setFilteredRows] = useState<Produto[]>([]);
 
   async function loadAll() {
     setLoading(true);
@@ -93,7 +94,7 @@ export function ProdutosPage() {
 
   return (
     <div className="page">
-      <StatCards stats={[{ label: "Total de produtos", value: produtos.length, tone: "accent" }]} />
+      <StatCards stats={[{ label: "Total de produtos", value: filteredRows.length, tone: "accent" }]} />
 
       {loadError && (
         <div className="banner-error">
@@ -110,6 +111,7 @@ export function ProdutosPage() {
         filters={filters}
         loading={loading}
         exportFilename="produtos"
+        onFilteredChange={({ filtered }) => setFilteredRows(filtered)}
         actionsWidth={100}
         renderActions={
           podeEditar || podeExcluir
