@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { Cliente, GrupoEcon } from "../api/types";
+import { formatDate } from "../lib/formatDate";
 
 /** Máscara de CNPJ alfanumérico (Receita Federal, a partir de 2026): os 12 primeiros
  * caracteres podem ser letra ou número, só os 2 dígitos verificadores no fim continuam
@@ -106,7 +107,7 @@ export function ClienteForm({ cliente, grupos, saving, error, onCancel, onSubmit
             </div>
             <div className="form-row">
               <label>Data bloqueio (automático)</label>
-              <span>{cliente.cliente_dat_bloqueio ?? "—"}</span>
+              <span>{cliente.cliente_dat_bloqueio ? formatDate(cliente.cliente_dat_bloqueio) : "—"}</span>
             </div>
           </>
         )}

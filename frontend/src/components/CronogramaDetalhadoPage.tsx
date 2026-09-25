@@ -139,9 +139,9 @@ export function CronogramaDetalhadoPage({ portfolio, clienteNome, onBack }: Cron
     () => [
       { id: "crono_grp_tpc", header: "#", value: (c) => c.crono_grp_tpc, width: 60, minWidth: 50 },
       { id: "crono_atividade", header: "Atividade", value: (c) => c.crono_atividade, width: 280 },
-      { id: "crono_inicio_calc", header: "Início", value: (c) => c.crono_inicio_calc, width: 95, align: "center", cell: (c) => formatDate(c.crono_inicio_calc) },
-      { id: "crono_fim_calc", header: "Término", value: (c) => c.crono_fim_calc, width: 95, align: "center", cell: (c) => formatDate(c.crono_fim_calc) },
-      { id: "crono_replan", header: "Replan", value: (c) => c.crono_replan, width: 95, align: "center", cell: (c) => formatDate(c.crono_replan) },
+      { id: "crono_inicio_calc", header: "Início", value: (c) => c.crono_inicio_calc, width: 95, align: "center", cell: (c) => formatDate(c.crono_inicio_calc), exportValue: (c) => formatDate(c.crono_inicio_calc) },
+      { id: "crono_fim_calc", header: "Término", value: (c) => c.crono_fim_calc, width: 95, align: "center", cell: (c) => formatDate(c.crono_fim_calc), exportValue: (c) => formatDate(c.crono_fim_calc) },
+      { id: "crono_replan", header: "Replan", value: (c) => c.crono_replan, width: 95, align: "center", cell: (c) => formatDate(c.crono_replan), exportValue: (c) => formatDate(c.crono_replan) },
       { id: "crono_perc_atual_calc", header: "% Atual", value: (c) => c.crono_perc_atual_calc, width: 80, align: "right", cell: (c) => formatPercent(c.crono_perc_atual_calc) },
       { id: "crono_perc_esperado", header: "% Esperado", value: (c) => c.crono_perc_esperado, width: 90, align: "right", cell: (c) => formatPercent(c.crono_perc_esperado) },
       {

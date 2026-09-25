@@ -7,6 +7,7 @@ import { DataGrid, type DataGridColumn, type DataGridFilter } from "./DataGrid";
 import { EditIcon, TrashIcon } from "./icons";
 import { usePermissao } from "../auth/usePermissao";
 import { clearFilterKeys, toggleFilterValue } from "../lib/filterValues";
+import { formatDate } from "../lib/formatDate";
 
 interface ClientesPageProps {
   onOpenCliente: (clienteId: number) => void;
@@ -105,7 +106,15 @@ export function ClientesPage({ onOpenCliente }: ClientesPageProps) {
         width: 100,
         cell: (c) => <span className={`badge badge-${c.cliente_status.toLowerCase()}`}>{c.cliente_status}</span>,
       },
-      { id: "cliente_dat_bloqueio", header: "Data bloqueio", value: (c) => c.cliente_dat_bloqueio ?? "", width: 110 },
+      {
+        id: "cliente_dat_bloqueio",
+        header: "Data bloqueio",
+        value: (c) => c.cliente_dat_bloqueio ?? "",
+        width: 110,
+        align: "center",
+        cell: (c) => formatDate(c.cliente_dat_bloqueio),
+        exportValue: (c) => formatDate(c.cliente_dat_bloqueio),
+      },
     ],
     [grupoNomeById]
   );

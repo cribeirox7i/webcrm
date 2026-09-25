@@ -173,6 +173,7 @@ export function UrlsPage() {
         width: 110,
         align: "center",
         cell: (u) => formatDate(u.url_dt_status),
+        exportValue: (u) => formatDate(u.url_dt_status),
       },
       {
         id: "url_exc",
@@ -188,6 +189,7 @@ export function UrlsPage() {
         width: 110,
         align: "center",
         cell: (u) => formatDate(u.url_dt_exc),
+        exportValue: (u) => formatDate(u.url_dt_exc),
       },
     ],
     [clienteNomeById, produtoNomeById, produtoSuiteById, servidorNomeById]

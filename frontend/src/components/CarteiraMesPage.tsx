@@ -6,6 +6,7 @@ import { DataGrid, type DataGridColumn } from "./DataGrid";
 import { usePageTitle } from "../PageTitleContext";
 import { useAuth } from "../auth/AuthContext";
 import { ExternalLinkIcon } from "./icons";
+import { formatDate } from "../lib/formatDate";
 
 function formatMoney(v: number | null): string {
   return v != null ? v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : "";
@@ -124,14 +125,32 @@ export function CarteiraMesPage({ cartMesId, cartAnoMes, onBack }: CarteiraMesPa
         cell: (c) => formatValor(c.cart_emprestimos_mes),
       },
       { id: "cart_prod", header: "Produto", value: (c) => c.cart_prod, width: 120 },
-      { id: "cart_ult_def", header: "Último deferimento", value: (c) => c.cart_ult_def, width: 140, align: "center" },
-      { id: "cart_data_base", header: "Data base", value: (c) => c.cart_data_base, width: 110, align: "center" },
+      {
+        id: "cart_ult_def",
+        header: "Último deferimento",
+        value: (c) => c.cart_ult_def,
+        width: 140,
+        align: "center",
+        cell: (c) => formatDate(c.cart_ult_def),
+        exportValue: (c) => formatDate(c.cart_ult_def),
+      },
+      {
+        id: "cart_data_base",
+        header: "Data base",
+        value: (c) => c.cart_data_base,
+        width: 110,
+        align: "center",
+        cell: (c) => formatDate(c.cart_data_base),
+        exportValue: (c) => formatDate(c.cart_data_base),
+      },
       {
         id: "cart_dat_extracao",
         header: "Data da extração",
         value: (c) => c.cart_dat_extracao,
         width: 150,
         align: "center",
+        cell: (c) => formatDate(c.cart_dat_extracao),
+        exportValue: (c) => formatDate(c.cart_dat_extracao),
       },
     ],
     [clienteNomeById]

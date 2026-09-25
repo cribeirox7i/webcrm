@@ -72,7 +72,7 @@ export function HistoricoReajustesModal({ onClose, cartAnoMesInicial }: Historic
 
   const columns: DataGridColumn<ReajusteEventoDetalhe>[] = useMemo(
     () => [
-      { id: "reaj_data", header: "Data", value: (h) => h.reaj_data, width: 100, cell: (h) => formatDataBr(h.reaj_data) },
+      { id: "reaj_data", header: "Data", value: (h) => h.reaj_data, width: 100, cell: (h) => formatDataBr(h.reaj_data), exportValue: (h) => formatDataBr(h.reaj_data) },
       { id: "cliente_nome", header: "Cliente", value: (h) => h.cliente_nome, width: 200 },
       { id: "cliente_cnpj", header: "CNPJ", value: (h) => h.cliente_cnpj ?? "", width: 130 },
       { id: "produto_nome", header: "Produto", value: (h) => h.produto_nome, width: 160 },
@@ -83,6 +83,7 @@ export function HistoricoReajustesModal({ onClose, cartAnoMesInicial }: Historic
         value: (h) => h.pc_dat_niver ?? "",
         width: 120,
         cell: (h) => formatDataBr(h.pc_dat_niver),
+        exportValue: (h) => formatDataBr(h.pc_dat_niver),
       },
       { id: "reaj_index_nome", header: "Indexador", value: (h) => h.reaj_index_nome, width: 110 },
       {

@@ -157,6 +157,7 @@ export function TabelaPrecosPage({ cartMesId, cartAnoMes, alertaInicial, onBack 
         header: "Último Reajuste",
         value: (p) => p.pc_dat_ult_reajuste ?? "",
         cell: (p) => formatDataBr(p.pc_dat_ult_reajuste),
+        exportValue: (p) => formatDataBr(p.pc_dat_ult_reajuste),
         width: 120,
         align: "center",
       },

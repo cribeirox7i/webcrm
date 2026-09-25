@@ -90,7 +90,7 @@ export function AnexosSection({ filterKey, filterId, menuKey }: AnexosSectionPro
 
   const columns: DataGridColumn<Anexo>[] = [
     { id: "anexo_nome", header: "Nome do anexo", value: (a) => a.anexo_nome ?? "", width: 220 },
-    { id: "anexo_data", header: "Data", value: (a) => a.anexo_data, width: 100, align: "center", cell: (a) => formatDate(a.anexo_data) },
+    { id: "anexo_data", header: "Data", value: (a) => a.anexo_data, width: 100, align: "center", cell: (a) => formatDate(a.anexo_data), exportValue: (a) => formatDate(a.anexo_data) },
   ];
 
   const rowActions = (a: Anexo) => (

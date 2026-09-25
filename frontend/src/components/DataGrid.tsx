@@ -17,10 +17,16 @@ import { CsvIcon, PdfIcon, ShareIcon, XlsIcon } from "./icons";
 export interface DataGridColumn<T> {
   id: string;
   header: string;
-  /** Raw value: used for sort, export and (by default) display. */
+  /** Raw value: used for sort and (by default) export and display. */
   value: (row: T) => ExportCell;
   /** Optional custom render (e.g. a colored badge). Falls back to value(). */
   cell?: (row: T) => React.ReactNode;
+  /** Texto pro XLS/PDF/CSV/compartilhar, quando `cell` formata a tela de um jeito que `value`
+   * (usado pro sort) não reflete -- ex. data crua em `value` (pra ordenar certo como string ISO)
+   * com `cell` formatando pra dd/mm/aaaa: sem isso o export sairia com a data no formato cru,
+   * porque ele não consegue reaproveitar `cell` (que pode devolver JSX, não texto). Cai pra
+   * `value` quando omitido. */
+  exportValue?: (row: T) => ExportCell;
   width?: number;
   minWidth?: number;
   /** Alinhamento do cabeçalho e do conteúdo -- "right" pra valores monetários, "center" pra datas. */
@@ -393,7 +399,7 @@ export function DataGrid<T>({
     return {
       headers,
       rows: filtered.map((row) => [
-        ...columns.map((c) => c.value(row)),
+        ...columns.map((c) => (c.exportValue ?? c.value)(row)),
         ...extraExportColumns.map((c) => c.value(row)),
       ]),
     };

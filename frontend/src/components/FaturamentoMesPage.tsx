@@ -257,6 +257,7 @@ export function FaturamentoMesPage({ cartMesId, cartAnoMes, onBack }: Faturament
         width: 130,
         align: "center",
         cell: (f) => formatDate(f.fat_dat_venc),
+        exportValue: (f) => formatDate(f.fat_dat_venc),
       },
       {
         id: "fat_vlr_liq",

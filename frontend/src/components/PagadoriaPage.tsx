@@ -6,6 +6,7 @@ import { StatCards } from "./StatCards";
 import { DataGrid, type DataGridColumn, type DataGridFilter } from "./DataGrid";
 import { EditIcon, TrashIcon } from "./icons";
 import { usePermissao } from "../auth/usePermissao";
+import { formatDate } from "../lib/formatDate";
 
 function formatMoney(v: number | null): string {
   return v != null ? v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : "";
@@ -92,7 +93,15 @@ export function PagadoriaPage() {
       { id: "forn_pag_tipo", header: "Tipo", value: (p) => p.forn_pag_tipo, width: 140 },
       { id: "forn_pag_tipo_detalhado", header: "Subtipo", value: (p) => p.forn_pag_tipo_detalhado, width: 140 },
       { id: "forn_pag_competencia", header: "Competência", value: (p) => p.forn_pag_competencia, width: 110, align: "center" },
-      { id: "forn_pag_dat", header: "Pagamento", value: (p) => p.forn_pag_dat, width: 110, align: "center" },
+      {
+        id: "forn_pag_dat",
+        header: "Pagamento",
+        value: (p) => p.forn_pag_dat,
+        width: 110,
+        align: "center",
+        cell: (p) => formatDate(p.forn_pag_dat),
+        exportValue: (p) => formatDate(p.forn_pag_dat),
+      },
       { id: "forn_pag_nome_prf", header: "Alocado", value: (p) => p.forn_pag_nome_prf, width: 160 },
       {
         id: "forn_pag_tot_liq",

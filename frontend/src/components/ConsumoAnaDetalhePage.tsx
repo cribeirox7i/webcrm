@@ -4,6 +4,7 @@ import type { ConsumoAna } from "../api/types";
 import { StatCards } from "./StatCards";
 import { DataGrid, type DataGridColumn } from "./DataGrid";
 import { usePageTitle } from "../PageTitleContext";
+import { formatDate } from "../lib/formatDate";
 
 interface ConsumoAnaDetalhePageProps {
   clienteId: number;
@@ -56,7 +57,15 @@ export function ConsumoAnaDetalhePage({
   const columns: DataGridColumn<ConsumoAna>[] = useMemo(
     () => [
       { id: "consumo_id", header: "ID", value: (r) => r.consumo_id, width: 70, minWidth: 60 },
-      { id: "consumo_data", header: "Data", value: (r) => r.consumo_data, width: 120, align: "center" },
+      {
+        id: "consumo_data",
+        header: "Data",
+        value: (r) => r.consumo_data,
+        width: 120,
+        align: "center",
+        cell: (r) => formatDate(r.consumo_data),
+        exportValue: (r) => formatDate(r.consumo_data),
+      },
       { id: "consumo_qtd", header: "Quantidade", value: (r) => r.consumo_qtd, width: 110 },
       { id: "consumo_det", header: "Detalhe", value: (r) => r.consumo_det ?? "", width: 240 },
       { id: "consumo_consit", header: "Consistência", value: (r) => r.consumo_consit ?? "", width: 160 },
