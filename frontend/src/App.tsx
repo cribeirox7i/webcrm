@@ -185,6 +185,9 @@ function App() {
             <button className="sidebar-user-logout" onClick={logout}>
               Sair
             </button>
+            <span className="sidebar-build">
+              {__COMMIT_HASH__} · {__BUILD_DATE__}
+            </span>
           </div>
         }
       />

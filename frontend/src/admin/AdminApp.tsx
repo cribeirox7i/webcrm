@@ -64,6 +64,9 @@ export function AdminApp() {
         {page === "parametros" && <ParametrosGeraisPage token={token} onLogout={handleLogout} />}
         {page === "armazenamento" && <ParametrosStoragePage token={token} onLogout={handleLogout} />}
       </main>
+      <footer className="admin-build-footer">
+        {__COMMIT_HASH__} · {__BUILD_DATE__}
+      </footer>
     </div>
   );
 }

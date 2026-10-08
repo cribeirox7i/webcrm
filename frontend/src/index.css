@@ -282,6 +282,23 @@ button:focus-visible {
   flex-shrink: 0;
 }
 
+.sidebar-build {
+  display: block;
+  font-size: 10px;
+  opacity: 0.45;
+  color: var(--sidebar-text);
+  margin-top: 6px;
+  letter-spacing: 0.03em;
+}
+
+.admin-build-footer {
+  text-align: center;
+  font-size: 10px;
+  opacity: 0.4;
+  padding: 8px;
+  color: var(--text-muted, #888);
+}
+
 .sidebar-user-logout:hover {
   opacity: 1;
   color: var(--sidebar-text-active);
