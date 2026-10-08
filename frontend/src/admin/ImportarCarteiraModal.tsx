@@ -53,28 +53,22 @@ function valorCru(v: ExcelJS.CellValue): unknown {
   return v;
 }
 
-/** Lê o txt/csv exportado manualmente da pasta do Drive (uma linha por planilha: nome do arquivo
- * .xlsx e o link/id do arquivo no Drive) -- sem integração com a API do Drive, ver conversa com o
- * usuário. Tolerante ao formato real que apareceu na prática: separador vírgula, ponto-e-vírgula
- * ou tab, com colunas vazias/decorativas no meio (ex. exportos de planilha que colam uma coluna
- * ";" solta entre nome e link) -- por isso ignora tokens vazios em vez de assumir posição fixa, e
- * usa sempre o PRIMEIRO token como nome e o ÚLTIMO como link/id. Se o último token já for uma URL
- * (começa com "http"), usa ela direto; se for só o id do arquivo, monta o link do Drive. */
-function parsePlanilhasAnaliticas(texto: string): PlanilhaAnalitica[] {
+const BASE_URL_LS_KEY = "webcrm_onedrive_base_url";
+const DEFAULT_BASE_URL =
+  "https://sinqiacloud-my.sharepoint.com/personal/carlos_asribeiro_evertecinc_com_br/Documents/_PUBLICO/CARTEIRA";
+
+/** Lê os .xlsx de uma pasta selecionada pelo usuário no Explorer e constrói as URLs do SharePoint
+ * concatenando baseUrl + webkitRelativePath de cada arquivo. O webkitRelativePath inclui o nome
+ * da pasta selecionada como primeiro segmento (ex.: "2026_09/cliente.xlsx"), então baseUrl deve
+ * apontar para o pai dessa pasta no SharePoint (ex.: ".../CARTEIRA"). */
+function lerPastaOneDrive(files: FileList, baseUrl: string): PlanilhaAnalitica[] {
   const out: PlanilhaAnalitica[] = [];
-  for (const linhaBruta of texto.split(/\r?\n/)) {
-    const linha = linhaBruta.trim();
-    if (!linha) continue;
-    const partes = linha
-      .split(/[,;\t]/)
-      .map((p) => p.trim().replace(/^["']|["']$/g, ""))
-      .filter(Boolean);
-    if (partes.length < 2) continue;
-    const nome = partes[0];
-    const idOuUrl = partes[partes.length - 1];
-    if (nome.toLowerCase() === "nome" && idOuUrl.toLowerCase() === "id") continue; // cabeçalho
-    const url = /^https?:\/\//i.test(idOuUrl) ? idOuUrl : `https://drive.google.com/file/d/${idOuUrl}/view`;
-    out.push({ nome, url });
+  const base = baseUrl.replace(/\/$/, "");
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i];
+    if (!file.name.toLowerCase().endsWith(".xlsx")) continue;
+    const rel = file.webkitRelativePath.replace(/\\/g, "/");
+    out.push({ nome: file.name, url: `${base}/${rel}` });
   }
   return out;
 }
@@ -83,7 +77,10 @@ export function ImportarCarteiraModal({ cartMes, token, onClose, onLogout }: Imp
   const [linhas, setLinhas] = useState<LinhaMedicao[] | null>(null);
   const [nomeArquivo, setNomeArquivo] = useState("");
   const [planilhas, setPlanilhas] = useState<PlanilhaAnalitica[]>([]);
-  const [nomeArquivoPlanilhas, setNomeArquivoPlanilhas] = useState("");
+  const [nomePasta, setNomePasta] = useState("");
+  const [baseUrl, setBaseUrl] = useState<string>(
+    () => localStorage.getItem(BASE_URL_LS_KEY) ?? DEFAULT_BASE_URL
+  );
   const [relatorio, setRelatorio] = useState<RelatorioImportacao | null>(null);
   const [concluido, setConcluido] = useState<RelatorioImportacao | null>(null);
   const [erro, setErro] = useState<string | null>(null);
@@ -156,14 +153,17 @@ export function ImportarCarteiraModal({ cartMes, token, onClose, onLogout }: Imp
     }
   }
 
-  async function lerListaPlanilhas(file: File) {
-    setNomeArquivoPlanilhas(file.name);
-    try {
-      const texto = await file.text();
-      setPlanilhas(parsePlanilhasAnaliticas(texto));
-    } catch (err) {
-      setErro(`Falha ao ler a lista de planilhas: ${(err as Error).message}`);
-    }
+  function selecionarPasta(files: FileList | null) {
+    if (!files || files.length === 0) return;
+    // webkitRelativePath: "nomePasta/sub/arquivo.xlsx" -- primeiro segmento é o nome da pasta
+    const pasta = files[0].webkitRelativePath.split("/")[0];
+    setNomePasta(pasta);
+    setPlanilhas(lerPastaOneDrive(files, baseUrl));
+  }
+
+  function salvarBaseUrl(valor: string) {
+    setBaseUrl(valor);
+    try { localStorage.setItem(BASE_URL_LS_KEY, valor); } catch { /* privado/bloqueado */ }
   }
 
   async function analisar() {
@@ -255,7 +255,7 @@ export function ImportarCarteiraModal({ cartMes, token, onClose, onLogout }: Imp
       setNomeArquivo("");
       setPlanilhas([]);
       setUrlsManuais({});
-      setNomeArquivoPlanilhas("");
+      setNomePasta("");
       setCorrecoes({});
       setAtribuindoCliente({});
     } catch (err) {
@@ -301,22 +301,47 @@ export function ImportarCarteiraModal({ cartMes, token, onClose, onLogout }: Imp
 
         {!concluido && (
           <div className="form-row">
-            <label htmlFor="arquivo_planilhas">Lista de planilhas do Drive (.txt/.csv, opcional)</label>
-            <input
-              id="arquivo_planilhas"
-              type="file"
-              accept=".txt,.csv"
-              disabled={ocupado}
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) lerListaPlanilhas(f);
-              }}
-            />
-            <p className="page-subtitle">
-              {planilhas.length > 0
-                ? `${nomeArquivoPlanilhas}: ${planilhas.length} planilhas lidas.`
-                : "Uma linha por planilha: nome do arquivo + link (ou id) do Drive, separados por vírgula, ponto-e-vírgula ou tab — usado pra preencher o botão \"Planilha\" de cada linha da carteira. Sem esse arquivo, a importação segue igual, só sem esse link."}
+            <label>Pasta de planilhas do OneDrive (opcional)</label>
+            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+              <label
+                style={{
+                  cursor: ocupado ? "not-allowed" : "pointer",
+                  padding: "4px 12px",
+                  border: "1px solid var(--border)",
+                  borderRadius: 4,
+                  background: "var(--surface)",
+                  fontSize: "0.9em",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                Selecionar pasta…
+                <input
+                  type="file"
+                  style={{ display: "none" }}
+                  disabled={ocupado}
+                  {...({ webkitdirectory: "" } as React.InputHTMLAttributes<HTMLInputElement>)}
+                  onChange={(e) => selecionarPasta(e.target.files)}
+                />
+              </label>
+              {nomePasta && (
+                <span className="page-subtitle" style={{ margin: 0 }}>
+                  {nomePasta}: {planilhas.length} planilha(s)
+                </span>
+              )}
+            </div>
+            <p className="page-subtitle" style={{ marginTop: 6 }}>
+              Selecione a pasta do mês no Explorer (ex.: 2026_09). O sistema monta as URLs do
+              SharePoint automaticamente usando a URL base abaixo — sem isso a importação segue
+              igual, só sem o link de planilha.
             </p>
+            <input
+              type="text"
+              value={baseUrl}
+              disabled={ocupado}
+              style={{ width: "100%", fontSize: "0.82em", marginTop: 4 }}
+              aria-label="URL base do SharePoint"
+              onChange={(e) => salvarBaseUrl(e.target.value)}
+            />
           </div>
         )}
 
