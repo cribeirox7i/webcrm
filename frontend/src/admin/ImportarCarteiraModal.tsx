@@ -330,9 +330,9 @@ export function ImportarCarteiraModal({ cartMes, token, onClose, onLogout }: Imp
               )}
             </div>
             <p className="page-subtitle" style={{ marginTop: 6 }}>
-              Selecione a pasta do mês no Explorer (ex.: 2026_09). O sistema monta as URLs do
-              SharePoint automaticamente usando a URL base abaixo — sem isso a importação segue
-              igual, só sem o link de planilha.
+              Selecione a pasta do <strong>mês</strong> no Explorer (ex.: 2026_09), não as
+              subpastas dentro dela. O sistema varre recursivamente e monta as URLs do SharePoint
+              usando a URL base abaixo — sem isso a importação segue igual, só sem o link de planilha.
             </p>
             <input
               type="text"
