@@ -57,17 +57,25 @@ const BASE_URL_LS_KEY = "webcrm_onedrive_base_url";
 const DEFAULT_BASE_URL =
   "https://sinqiacloud-my.sharepoint.com/personal/carlos_asribeiro_evertecinc_com_br/Documents/_PUBLICO/CARTEIRA";
 
-/** Lê os .xlsx de uma pasta selecionada pelo usuário no Explorer e constrói as URLs do SharePoint
- * concatenando baseUrl + webkitRelativePath de cada arquivo. O webkitRelativePath inclui o nome
- * da pasta selecionada como primeiro segmento (ex.: "2026_09/cliente.xlsx"), então baseUrl deve
- * apontar para o pai dessa pasta no SharePoint (ex.: ".../CARTEIRA"). */
+/** Lê os .xlsx de uma pasta selecionada pelo usuário no Explorer e constrói as URLs do SharePoint.
+ * Funciona com a pasta do mês (ex.: 2026_09) OU com uma subpasta (ex.: Analitico):
+ * - Pasta de mês (YYYY_MM): usa o webkitRelativePath direto.
+ * - Subpasta: extrai o mês do nome do arquivo (_YYYY-MM-DD_) e prefixa o segmento YYYY_MM. */
 function lerPastaOneDrive(files: FileList, baseUrl: string): PlanilhaAnalitica[] {
   const out: PlanilhaAnalitica[] = [];
   const base = baseUrl.replace(/\/$/, "");
+  const topFolder = files[0]?.webkitRelativePath.split("/")[0] ?? "";
+  const isMesFolder = /^\d{4}_\d{2}$/.test(topFolder);
+
   for (let i = 0; i < files.length; i++) {
     const file = files[i];
     if (!file.name.toLowerCase().endsWith(".xlsx")) continue;
-    const rel = file.webkitRelativePath.replace(/\\/g, "/");
+    let rel = file.webkitRelativePath.replace(/\\/g, "/");
+    if (!isMesFolder) {
+      // Subpasta selecionada: infere o mes pelo nome do arquivo (ex.: _2026-09-01_)
+      const m = file.name.match(/_(\d{4})-(\d{2})-\d{2}_/);
+      if (m) rel = `${m[1]}_${m[2]}/${rel}`;
+    }
     out.push({ nome: file.name, url: `${base}/${rel}` });
   }
   return out;
@@ -330,9 +338,9 @@ export function ImportarCarteiraModal({ cartMes, token, onClose, onLogout }: Imp
               )}
             </div>
             <p className="page-subtitle" style={{ marginTop: 6 }}>
-              Selecione a pasta do <strong>mês</strong> no Explorer (ex.: 2026_09), não as
-              subpastas dentro dela. O sistema varre recursivamente e monta as URLs do SharePoint
-              usando a URL base abaixo — sem isso a importação segue igual, só sem o link de planilha.
+              Selecione a pasta do mês (ex.: 2026_09) ou qualquer subpasta dentro dela. O
+              sistema monta as URLs do SharePoint automaticamente usando a URL base abaixo — sem
+              isso a importação segue igual, só sem o link de planilha.
             </p>
             <input
               type="text"
