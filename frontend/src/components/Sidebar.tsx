@@ -12,6 +12,7 @@ interface SidebarProps {
   active: string;
   onSelect: (id: string) => void;
   footer?: React.ReactNode;
+  buildInfo?: React.ReactNode;
   /** Sobrescreve a logo padrão (Parâmetros Gerais > logo fundo escuro, no Admin) -- cai
    * pro asset embutido do bundle quando não configurada. */
   logoUrl?: string | null;
@@ -24,7 +25,7 @@ interface SidebarProps {
 
 export type { NavItem };
 
-export function Sidebar({ items, active, onSelect, footer, logoUrl, mobileOpen, onClose }: SidebarProps) {
+export function Sidebar({ items, active, onSelect, footer, buildInfo, logoUrl, mobileOpen, onClose }: SidebarProps) {
   function handleSelect(id: string) {
     onSelect(id);
     onClose?.();
@@ -73,6 +74,7 @@ export function Sidebar({ items, active, onSelect, footer, logoUrl, mobileOpen, 
         <a className="sidebar-admin-link" href="/admin">
           Administração
         </a>
+        {buildInfo}
       </aside>
     </>
   );

@@ -179,15 +179,13 @@ function App() {
         logoUrl={logoEscuroUrl}
         mobileOpen={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
+        buildInfo={<span className="sidebar-build">{__COMMIT_HASH__} · {__BUILD_DATE__}</span>}
         footer={
           <div className="sidebar-user">
             <span className="sidebar-user-nome">{usuario.nome}</span>
             <button className="sidebar-user-logout" onClick={logout}>
               Sair
             </button>
-            <span className="sidebar-build">
-              {__COMMIT_HASH__} · {__BUILD_DATE__}
-            </span>
           </div>
         }
       />
