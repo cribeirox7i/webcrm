@@ -292,6 +292,7 @@ importarConsumoRouter.post("/admin/importar-consumo", async (req, res) => {
 
   // ---- gravação (substitui o mês inteiro nas 3 tabelas, decisão do usuário) ----
   let precosDuplicados = 0;
+  let faturamentoInseridos = 0;
   try {
     await withTransaction(async (client) => {
       await client.query("DELETE FROM consumo_ana WHERE cart_mes_id = $1", [mesId]);
@@ -333,10 +334,19 @@ importarConsumoRouter.post("/admin/importar-consumo", async (req, res) => {
         precosDuplicados = dup.rowCount ?? 0;
       }
 
-      const clienteIdsDistintos = [...new Set(paraInserir.map((p) => p.clienteId))];
-      if (clienteIdsDistintos.length > 0) {
+      // Cria âncoras de faturamento para TODOS os clientes com preço no mês, não só os que
+      // apareceram no arquivo de consumo. Clientes que só pagam franquia (sem transações) têm
+      // precos_cliente duplicado acima mas não geram linhas em consumo_ana -- sem essa query
+      // eles ficariam invisíveis em Faturamento, exibindo R$0 indevidamente.
+      const { rows: pcClienteIds } = await client.query<{ cliente_id: number }>(
+        "SELECT DISTINCT cliente_id FROM precos_cliente WHERE cart_mes_id = $1",
+        [mesId]
+      );
+      const clienteIdsParaFaturamento = pcClienteIds.map((r) => r.cliente_id);
+      faturamentoInseridos = clienteIdsParaFaturamento.length;
+      if (clienteIdsParaFaturamento.length > 0) {
         const valores: unknown[] = [];
-        const tuplas = clienteIdsDistintos.map((clienteId, idx) => {
+        const tuplas = clienteIdsParaFaturamento.map((clienteId, idx) => {
           valores.push(clienteId, mesId);
           return `($${idx * 2 + 1},$${idx * 2 + 2})`;
         });
@@ -358,7 +368,7 @@ importarConsumoRouter.post("/admin/importar-consumo", async (req, res) => {
     consumoApagados: existentesConsumo[0].n,
     precosDuplicados,
     precosApagados: existentesPrecos[0].n,
-    faturamentoInseridos: new Set(paraInserir.map((p) => p.clienteId)).size,
+    faturamentoInseridos,
     faturamentoApagados: existentesFaturamento[0].n,
   });
 });
