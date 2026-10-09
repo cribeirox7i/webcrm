@@ -188,6 +188,7 @@ export function ClientesPage({ onOpenCliente }: ClientesPageProps) {
         value: (c) => [...(clienteProdutos.get(c.cliente_id) ?? [])].join("|"),
         options: todosProdutos,
         match: (c, active) => clienteProdutos.get(c.cliente_id)?.has(active) ?? false,
+        multiSelect: true,
       },
       {
         id: "suite",
@@ -195,6 +196,7 @@ export function ClientesPage({ onOpenCliente }: ClientesPageProps) {
         value: (c) => [...(clienteSuites.get(c.cliente_id) ?? [])].join("|"),
         options: todasSuites,
         match: (c, active) => clienteSuites.get(c.cliente_id)?.has(active) ?? false,
+        multiSelect: true,
       },
     ],
     [grupoNomeById, clienteProdutos, clienteSuites, todosProdutos, todasSuites]

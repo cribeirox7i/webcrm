@@ -668,6 +668,73 @@ main {
   white-space: normal;
 }
 
+.datagrid-filter-multi {
+  position: relative;
+}
+
+.datagrid-filter-btn {
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 13px;
+  cursor: pointer;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.datagrid-filter-btn.active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.datagrid-filter-arrow {
+  opacity: 0.55;
+  font-size: 11px;
+}
+
+.datagrid-filter-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 200;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.18);
+  min-width: 180px;
+  max-height: 260px;
+  overflow-y: auto;
+  padding: 6px 0;
+}
+
+.datagrid-filter-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  font-size: 13px;
+  cursor: pointer;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.datagrid-filter-option:hover {
+  background: var(--hover);
+}
+
+.datagrid-filter-option input[type="checkbox"] {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
 .datagrid-clear-btn {
   border: none;
   background: none;

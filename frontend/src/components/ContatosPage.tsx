@@ -171,6 +171,7 @@ export function ContatosPage() {
         value: (c) => [...(clienteProdutos.get(c.cliente_id) ?? [])].join("|"),
         options: todosProdutos,
         match: (c, active) => clienteProdutos.get(c.cliente_id)?.has(active) ?? false,
+        multiSelect: true,
       },
       {
         id: "suite",
@@ -178,6 +179,7 @@ export function ContatosPage() {
         value: (c) => [...(clienteSuites.get(c.cliente_id) ?? [])].join("|"),
         options: todasSuites,
         match: (c, active) => clienteSuites.get(c.cliente_id)?.has(active) ?? false,
+        multiSelect: true,
       },
     ],
     [clienteNomeById, clienteProdutos, clienteSuites, todosProdutos, todasSuites]

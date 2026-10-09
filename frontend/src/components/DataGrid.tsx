@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type SetStateAction } from "react";
+import { useEffect, useRef, useMemo, useState, type SetStateAction } from "react";
 import {
   createColumnHelper,
   flexRender,
@@ -44,6 +44,9 @@ export interface DataGridFilter<T> {
   /** Sobrescreve a comparação padrão `value(row) === active` -- necessário quando uma linha pode
    * corresponder a múltiplos valores do filtro (ex.: cliente com vários produtos). */
   match?: (row: T, active: string) => boolean;
+  /** Dropdown com checkboxes em vez de select simples. Valores ativos ficam em filterValues[id]
+   * como string separada por "|". Requer `options` ou deriva das opções existentes. */
+  multiSelect?: boolean;
 }
 
 /** Checkbox por linha + "selecionar todas" (considerando só as linhas visíveis após busca/filtro).
@@ -134,6 +137,7 @@ export function DataGrid<T>({
   extraExportColumns = NO_EXTRA_EXPORT as unknown as Pick<DataGridColumn<T>, "header" | "value">[],
 }: DataGridProps<T>) {
   const [search, setSearch] = useState("");
+  const [openMultiFilter, setOpenMultiFilter] = useState<string | null>(null);
   const [internalFilterValues, setInternalFilterValues] = useState<Record<string, string>>(
     defaultFilterValues ?? {}
   );
@@ -192,16 +196,26 @@ export function DataGrid<T>({
     return map;
   }, [data, filters]);
 
+  function rowMatchesFilter<R>(f: DataGridFilter<R>, row: R, active: string): boolean {
+    if (f.multiSelect) {
+      const vals = active.split("|").filter(Boolean);
+      if (vals.length === 0) return true;
+      return vals.some((v) => (f.match ? f.match(row, v) : f.value(row) === v));
+    }
+    return f.match ? f.match(row, active) : f.value(row) === active;
+  }
+
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
     return data.filter((row) => {
       if (term && !searchValueRef.current(row).toLowerCase().includes(term)) return false;
       for (const f of filters) {
         const active = filterValues[f.id];
-        if (active && !(f.match ? f.match(row, active) : f.value(row) === active)) return false;
+        if (active && !rowMatchesFilter(f, row, active)) return false;
       }
       return true;
     });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data, search, filterValues, filters]);
   filteredRef.current = filtered;
 
@@ -213,11 +227,12 @@ export function DataGrid<T>({
         if (term && !searchValueRef.current(row).toLowerCase().includes(term)) return false;
         for (const f of filters) {
           const active = effective[f.id];
-          if (active && !(f.match ? f.match(row, active) : f.value(row) === active)) return false;
+          if (active && !rowMatchesFilter(f, row, active)) return false;
         }
         return true;
       }).length;
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data, search, filterValues, filters]);
 
   const onFilteredChangeRef = useRef(onFilteredChange);
@@ -225,6 +240,24 @@ export function DataGrid<T>({
   useEffect(() => {
     onFilteredChangeRef.current?.({ filtered, countWith });
   }, [filtered, countWith]);
+
+  useEffect(() => {
+    if (!openMultiFilter) return;
+    function handleOutside(e: MouseEvent) {
+      const target = e.target as HTMLElement;
+      if (!target.closest(".datagrid-filter-multi")) setOpenMultiFilter(null);
+    }
+    document.addEventListener("mousedown", handleOutside);
+    return () => document.removeEventListener("mousedown", handleOutside);
+  }, [openMultiFilter]);
+
+  function toggleMultiOption(filterId: string, opt: string) {
+    setFilterValues((prev) => {
+      const vals = prev[filterId] ? prev[filterId].split("|") : [];
+      const next = vals.includes(opt) ? vals.filter((v) => v !== opt) : [...vals, opt];
+      return { ...prev, [filterId]: next.join("|") };
+    });
+  }
 
   const hasActiveFilterValues = Object.values(filterValues).some((v) => !!v);
 
@@ -444,23 +477,55 @@ export function DataGrid<T>({
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
               />
-              {filters.map((f) => (
-                <span className="datagrid-filter" key={f.id}>
-                  <select
-                    value={filterValues[f.id] ?? ""}
-                    onChange={(e) =>
-                      setFilterValues((prev) => ({ ...prev, [f.id]: e.target.value }))
-                    }
-                  >
-                    <option value="">{f.label} (todos)</option>
-                    {(filterOptions[f.id] ?? []).map((opt) => (
-                      <option key={opt} value={opt}>
-                        {opt}
-                      </option>
-                    ))}
-                  </select>
-                </span>
-              ))}
+              {filters.map((f) => {
+                const active = filterValues[f.id] ?? "";
+                if (f.multiSelect) {
+                  const selected = active ? active.split("|") : [];
+                  return (
+                    <span className="datagrid-filter datagrid-filter-multi" key={f.id}>
+                      <button
+                        type="button"
+                        className={`datagrid-filter-btn${selected.length ? " active" : ""}`}
+                        onClick={() => setOpenMultiFilter(openMultiFilter === f.id ? null : f.id)}
+                      >
+                        {selected.length ? `${f.label} (${selected.length})` : `${f.label} (todos)`}
+                        <span className="datagrid-filter-arrow">▾</span>
+                      </button>
+                      {openMultiFilter === f.id && (
+                        <div className="datagrid-filter-dropdown">
+                          {(filterOptions[f.id] ?? []).map((opt) => (
+                            <label key={opt} className="datagrid-filter-option">
+                              <input
+                                type="checkbox"
+                                checked={selected.includes(opt)}
+                                onChange={() => toggleMultiOption(f.id, opt)}
+                              />
+                              {opt}
+                            </label>
+                          ))}
+                        </div>
+                      )}
+                    </span>
+                  );
+                }
+                return (
+                  <span className="datagrid-filter" key={f.id}>
+                    <select
+                      value={active}
+                      onChange={(e) =>
+                        setFilterValues((prev) => ({ ...prev, [f.id]: e.target.value }))
+                      }
+                    >
+                      <option value="">{f.label} (todos)</option>
+                      {(filterOptions[f.id] ?? []).map((opt) => (
+                        <option key={opt} value={opt}>
+                          {opt}
+                        </option>
+                      ))}
+                    </select>
+                  </span>
+                );
+              })}
               {search && (
                 <button type="button" className="datagrid-clear-btn" onClick={() => setSearch("")}>
                   Limpar busca
