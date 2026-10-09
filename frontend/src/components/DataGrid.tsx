@@ -489,7 +489,7 @@ export function DataGrid<T>({
                         onClick={() => setOpenMultiFilter(openMultiFilter === f.id ? null : f.id)}
                       >
                         <span>{selected.length ? `${f.label} (${selected.length})` : `${f.label} (todos)`}</span>
-                        <span className="datagrid-filter-arrow">▾</span>
+                        <span className="datagrid-filter-arrow" />
                       </button>
                       {openMultiFilter === f.id && (
                         <div className="datagrid-filter-dropdown">

@@ -674,20 +674,17 @@ main {
 
 .datagrid-filter-btn {
   width: 153px;
-  height: 32px;
-  padding: 0 10px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
+  font: inherit;
+  padding: 6px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
   background: var(--surface);
-  color: var(--text);
-  font-size: 13px;
+  color: var(--text-h);
   cursor: pointer;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
 }
 
 .datagrid-filter-btn.active {
@@ -702,8 +699,12 @@ main {
 }
 
 .datagrid-filter-arrow {
-  opacity: 0.55;
-  font-size: 11px;
+  width: 0;
+  height: 0;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-top: 5px solid currentColor;
+  opacity: 0.6;
   flex-shrink: 0;
 }
 
