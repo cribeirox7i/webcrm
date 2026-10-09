@@ -488,7 +488,7 @@ export function DataGrid<T>({
                         className={`datagrid-filter-btn${selected.length ? " active" : ""}`}
                         onClick={() => setOpenMultiFilter(openMultiFilter === f.id ? null : f.id)}
                       >
-                        {selected.length ? `${f.label} (${selected.length})` : `${f.label} (todos)`}
+                        <span>{selected.length ? `${f.label} (${selected.length})` : `${f.label} (todos)`}</span>
                         <span className="datagrid-filter-arrow">▾</span>
                       </button>
                       {openMultiFilter === f.id && (

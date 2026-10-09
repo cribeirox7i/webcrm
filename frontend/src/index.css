@@ -673,6 +673,7 @@ main {
 }
 
 .datagrid-filter-btn {
+  width: 153px;
   height: 32px;
   padding: 0 10px;
   border: 1px solid var(--border);
@@ -682,6 +683,8 @@ main {
   font-size: 13px;
   cursor: pointer;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -692,9 +695,16 @@ main {
   color: var(--accent);
 }
 
+.datagrid-filter-btn span:first-child {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .datagrid-filter-arrow {
   opacity: 0.55;
   font-size: 11px;
+  flex-shrink: 0;
 }
 
 .datagrid-filter-dropdown {
