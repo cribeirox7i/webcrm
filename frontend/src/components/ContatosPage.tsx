@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../api/client";
-import type { Cliente, Contato } from "../api/types";
+import type { Cliente, Contato, Produto, Url } from "../api/types";
 import { ContatoForm, valuesToPayload, type ContatoFormValues } from "./ContatoForm";
 import { StatCards } from "./StatCards";
 import { DataGrid, type DataGridColumn, type DataGridFilter } from "./DataGrid";
@@ -12,6 +12,8 @@ export function ContatosPage() {
   const { podeInserir, podeEditar, podeExcluir } = usePermissao("contatos");
   const [contatos, setContatos] = useState<Contato[]>([]);
   const [clientes, setClientes] = useState<Cliente[]>([]);
+  const [produtos, setProdutos] = useState<Produto[]>([]);
+  const [urls, setUrls] = useState<Url[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -30,12 +32,16 @@ export function ContatosPage() {
     setLoading(true);
     setLoadError(null);
     try {
-      const [contatosRes, clientesRes] = await Promise.all([
+      const [contatosRes, clientesRes, produtosRes, urlsRes] = await Promise.all([
         api.list<Contato>("contatos", { limit: 20000 }),
         api.list<Cliente>("clientes", { limit: 20000 }),
+        api.list<Produto>("produtos", { limit: 20000 }),
+        api.list<Url>("urls", { limit: 20000 }),
       ]);
       setContatos(contatosRes.data);
       setClientes(clientesRes.data);
+      setProdutos(produtosRes.data);
+      setUrls(urlsRes.data);
     } catch (err) {
       setLoadError((err as Error).message);
     } finally {
@@ -56,6 +62,54 @@ export function ContatosPage() {
   function clienteNome(c: Contato): string {
     return clienteNomeById.get(c.cliente_id) ?? "";
   }
+
+  const produtoNomeById = useMemo(() => {
+    const map = new Map<number, string>();
+    produtos.forEach((p) => map.set(p.produto_id, p.produto_nome));
+    return map;
+  }, [produtos]);
+
+  const produtoSuiteById = useMemo(() => {
+    const map = new Map<number, string>();
+    produtos.forEach((p) => map.set(p.produto_id, p.produto_suite ?? ""));
+    return map;
+  }, [produtos]);
+
+  const clienteProdutos = useMemo(() => {
+    const map = new Map<number, Set<string>>();
+    urls.forEach((u) => {
+      if (u.produto_id == null) return;
+      const nome = produtoNomeById.get(u.produto_id);
+      if (!nome) return;
+      const s = map.get(u.cliente_id) ?? new Set<string>();
+      s.add(nome);
+      map.set(u.cliente_id, s);
+    });
+    return map;
+  }, [urls, produtoNomeById]);
+
+  const clienteSuites = useMemo(() => {
+    const map = new Map<number, Set<string>>();
+    urls.forEach((u) => {
+      if (u.produto_id == null) return;
+      const suite = produtoSuiteById.get(u.produto_id);
+      if (!suite) return;
+      const s = map.get(u.cliente_id) ?? new Set<string>();
+      s.add(suite);
+      map.set(u.cliente_id, s);
+    });
+    return map;
+  }, [urls, produtoSuiteById]);
+
+  const todosProdutos = useMemo(
+    () => [...new Set(urls.map((u) => (u.produto_id != null ? produtoNomeById.get(u.produto_id) : undefined)).filter(Boolean) as string[])].sort(),
+    [urls, produtoNomeById]
+  );
+
+  const todasSuites = useMemo(
+    () => [...new Set(urls.map((u) => (u.produto_id != null ? produtoSuiteById.get(u.produto_id) : undefined)).filter(Boolean) as string[])].sort(),
+    [urls, produtoSuiteById]
+  );
 
   async function handleDelete(contato: Contato) {
     if (!confirm(`Excluir o contato "${contato.contato_nome}" (#${contato.contato_id})?`)) return;
@@ -109,8 +163,22 @@ export function ContatosPage() {
     () => [
       { id: "contato_status", label: "Status", value: (c) => c.contato_status ?? "" },
       { id: "cliente", label: "Cliente", value: clienteNome },
+      {
+        id: "produto",
+        label: "Produto",
+        value: (c) => [...(clienteProdutos.get(c.cliente_id) ?? [])].join("|"),
+        options: todosProdutos,
+        match: (c, active) => clienteProdutos.get(c.cliente_id)?.has(active) ?? false,
+      },
+      {
+        id: "suite",
+        label: "Suíte",
+        value: (c) => [...(clienteSuites.get(c.cliente_id) ?? [])].join("|"),
+        options: todasSuites,
+        match: (c, active) => clienteSuites.get(c.cliente_id)?.has(active) ?? false,
+      },
     ],
-    [clienteNomeById]
+    [clienteNomeById, clienteProdutos, clienteSuites, todosProdutos, todasSuites]
   );
 
   return (

@@ -3,6 +3,7 @@ import { PageTitleContext } from "./PageTitleContext";
 import { useAuth } from "./auth/AuthContext";
 import { LoginPage } from "./auth/LoginPage";
 import { TrocarSenhaPage } from "./auth/TrocarSenhaPage";
+import { TrocarSenhaModal } from "./auth/TrocarSenhaModal";
 import { ClientesPage } from "./components/ClientesPage";
 import { ClienteDashboardPage } from "./components/ClienteDashboardPage";
 import { GruposEconPage } from "./components/GruposEconPage";
@@ -119,6 +120,7 @@ function App() {
   const [pageTitle, setPageTitle] = useState<string | null>(null);
   const [logoEscuroUrl, setLogoEscuroUrl] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [trocarSenhaOpen, setTrocarSenhaOpen] = useState(false);
   const isMobile = useIsMobile();
 
   useEffect(() => {
@@ -183,9 +185,14 @@ function App() {
         footer={
           <div className="sidebar-user">
             <span className="sidebar-user-nome">{usuario.nome}</span>
-            <button className="sidebar-user-logout" onClick={logout}>
-              Sair
-            </button>
+            <div style={{ display: "flex", gap: "0.5rem" }}>
+              <button className="sidebar-user-logout" onClick={() => setTrocarSenhaOpen(true)}>
+                Trocar senha
+              </button>
+              <button className="sidebar-user-logout" onClick={logout}>
+                Sair
+              </button>
+            </div>
           </div>
         }
       />
@@ -240,6 +247,7 @@ function App() {
         </main>
       </div>
     </div>
+    {trocarSenhaOpen && <TrocarSenhaModal onClose={() => setTrocarSenhaOpen(false)} />}
   );
 }
 

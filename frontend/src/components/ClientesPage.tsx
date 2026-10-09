@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../api/client";
-import type { Cliente, GrupoEcon } from "../api/types";
+import type { Cliente, GrupoEcon, Produto, Url } from "../api/types";
 import { ClienteForm, valuesToPayload, type ClienteFormValues } from "./ClienteForm";
 import { StatCards } from "./StatCards";
 import { DataGrid, type DataGridColumn, type DataGridFilter } from "./DataGrid";
@@ -17,6 +17,8 @@ export function ClientesPage({ onOpenCliente }: ClientesPageProps) {
   const { podeInserir, podeEditar, podeExcluir } = usePermissao("clientes");
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [grupos, setGrupos] = useState<GrupoEcon[]>([]);
+  const [produtos, setProdutos] = useState<Produto[]>([]);
+  const [urls, setUrls] = useState<Url[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -35,12 +37,16 @@ export function ClientesPage({ onOpenCliente }: ClientesPageProps) {
     setLoading(true);
     setLoadError(null);
     try {
-      const [clientesRes, gruposRes] = await Promise.all([
+      const [clientesRes, gruposRes, produtosRes, urlsRes] = await Promise.all([
         api.list<Cliente>("clientes", { limit: 20000 }),
         api.list<GrupoEcon>("grupos_econ", { limit: 20000 }),
+        api.list<Produto>("produtos", { limit: 20000 }),
+        api.list<Url>("urls", { limit: 20000 }),
       ]);
       setClientes(clientesRes.data);
       setGrupos(gruposRes.data);
+      setProdutos(produtosRes.data);
+      setUrls(urlsRes.data);
     } catch (err) {
       setLoadError((err as Error).message);
     } finally {
@@ -61,6 +67,56 @@ export function ClientesPage({ onOpenCliente }: ClientesPageProps) {
   function grupoNome(c: Cliente): string {
     return c.grp_id != null ? grupoNomeById.get(c.grp_id) ?? "" : "";
   }
+
+  const produtoNomeById = useMemo(() => {
+    const map = new Map<number, string>();
+    produtos.forEach((p) => map.set(p.produto_id, p.produto_nome));
+    return map;
+  }, [produtos]);
+
+  const produtoSuiteById = useMemo(() => {
+    const map = new Map<number, string>();
+    produtos.forEach((p) => map.set(p.produto_id, p.produto_suite ?? ""));
+    return map;
+  }, [produtos]);
+
+  // cliente_id -> Set de nomes de produto / suíte (via URLs cadastradas)
+  const clienteProdutos = useMemo(() => {
+    const map = new Map<number, Set<string>>();
+    urls.forEach((u) => {
+      if (u.produto_id == null) return;
+      const nome = produtoNomeById.get(u.produto_id);
+      if (!nome) return;
+      const s = map.get(u.cliente_id) ?? new Set<string>();
+      s.add(nome);
+      map.set(u.cliente_id, s);
+    });
+    return map;
+  }, [urls, produtoNomeById]);
+
+  const clienteSuites = useMemo(() => {
+    const map = new Map<number, Set<string>>();
+    urls.forEach((u) => {
+      if (u.produto_id == null) return;
+      const suite = produtoSuiteById.get(u.produto_id);
+      if (!suite) return;
+      const s = map.get(u.cliente_id) ?? new Set<string>();
+      s.add(suite);
+      map.set(u.cliente_id, s);
+    });
+    return map;
+  }, [urls, produtoSuiteById]);
+
+  // Listas distintas de opções pra popular os dropdowns (independente do filtro ativo)
+  const todosProdutos = useMemo(
+    () => [...new Set(urls.map((u) => (u.produto_id != null ? produtoNomeById.get(u.produto_id) : undefined)).filter(Boolean) as string[])].sort(),
+    [urls, produtoNomeById]
+  );
+
+  const todasSuites = useMemo(
+    () => [...new Set(urls.map((u) => (u.produto_id != null ? produtoSuiteById.get(u.produto_id) : undefined)).filter(Boolean) as string[])].sort(),
+    [urls, produtoSuiteById]
+  );
 
   async function handleDelete(cliente: Cliente) {
     if (!confirm(`Excluir o cliente "${cliente.cliente_nome}" (#${cliente.cliente_id})?`)) return;
@@ -123,8 +179,22 @@ export function ClientesPage({ onOpenCliente }: ClientesPageProps) {
     () => [
       { id: "cliente_status", label: "Status", value: (c) => c.cliente_status },
       { id: "grupo", label: "Grupo econômico", value: grupoNome },
+      {
+        id: "produto",
+        label: "Produto",
+        value: (c) => [...(clienteProdutos.get(c.cliente_id) ?? [])].join("|"),
+        options: todosProdutos,
+        match: (c, active) => clienteProdutos.get(c.cliente_id)?.has(active) ?? false,
+      },
+      {
+        id: "suite",
+        label: "Suíte",
+        value: (c) => [...(clienteSuites.get(c.cliente_id) ?? [])].join("|"),
+        options: todasSuites,
+        match: (c, active) => clienteSuites.get(c.cliente_id)?.has(active) ?? false,
+      },
     ],
-    [grupoNomeById]
+    [grupoNomeById, clienteProdutos, clienteSuites, todosProdutos, todasSuites]
   );
 
   return (

@@ -41,6 +41,9 @@ export interface DataGridFilter<T> {
    * -- usado quando o filtro precisa oferecer uma opção que pode não aparecer no recorte de
    * dados carregado agora (ex.: mês do cart_mes sem nenhum evento ainda). */
   options?: string[];
+  /** Sobrescreve a comparação padrão `value(row) === active` -- necessário quando uma linha pode
+   * corresponder a múltiplos valores do filtro (ex.: cliente com vários produtos). */
+  match?: (row: T, active: string) => boolean;
 }
 
 /** Checkbox por linha + "selecionar todas" (considerando só as linhas visíveis após busca/filtro).
@@ -195,7 +198,7 @@ export function DataGrid<T>({
       if (term && !searchValueRef.current(row).toLowerCase().includes(term)) return false;
       for (const f of filters) {
         const active = filterValues[f.id];
-        if (active && f.value(row) !== active) return false;
+        if (active && !(f.match ? f.match(row, active) : f.value(row) === active)) return false;
       }
       return true;
     });
@@ -210,7 +213,7 @@ export function DataGrid<T>({
         if (term && !searchValueRef.current(row).toLowerCase().includes(term)) return false;
         for (const f of filters) {
           const active = effective[f.id];
-          if (active && f.value(row) !== active) return false;
+          if (active && !(f.match ? f.match(row, active) : f.value(row) === active)) return false;
         }
         return true;
       }).length;
