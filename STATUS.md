@@ -1,6 +1,36 @@
 # WEBCRM - Status do Projeto
 
-> Documento de retomada. Última atualização: **2026-08-31** - **Importar Consumo** novo (Admin >
+> Documento de retomada. Última atualização: **2026-10-09** - **Fix Faturamento: clientes
+> só-franquia**: registros âncora em `faturamento` eram criados apenas para clientes que
+> apareciam no arquivo de consumo importado. Clientes com franquia mas sem transações (ex.:
+> Axia Capital, R$540/mês) tinham `precos_cliente` duplicado corretamente mas ficavam fora da
+> tela de Faturamento, exibindo R$0,00. Correção em `importarConsumo.ts`: após duplicar
+> `precos_cliente`, âncoras de faturamento agora são criadas para TODOS os clientes com entrada
+> no mês, não só os que têm `consumo_ana`. Correção pontual para 2026/09 (411 registros
+> inseridos via `sql-2026-10-09-faturamento-franquia-only/02_corrigir.sql`). Script PS1 de
+> backfill de URLs do OneDrive removido do repo (era temporário, já cumpriu o papel). **Testado
+> em produção.**
+>
+> Contexto anterior: 2026-10-08 - **Migração Google Drive →
+> OneDrive/SharePoint**: todas as URLs em `carteira.cart_url_plan_analitica` migradas para
+> SharePoint (`sinqiacloud-my.sharepoint.com/personal/carlos_asribeiro_evertecinc_com_br/
+> Documents/_PUBLICO/CARTEIRA/...`). Script PowerShell `backend/scripts/onedrive-update-urls.ps1`
+> lê o OneDrive sincronizado localmente e gera SQL com `UPDATE ... WHERE
+> cart_nome_plan_analitica LIKE '...'` (sem precisar exportar o banco). 5 URLs residuais
+> tratadas manualmente: 2 tinham `cart_data_base` NULL (backfill de data feito diretamente),
+> 1 sem planilha analítica zerada (`NULL`), 2 atualizadas com URL fornecida pelo usuário.
+> Verificação final: `SELECT COUNT(*) FROM carteira WHERE cart_url_plan_analitica LIKE
+> '%google%'` = 0. **Importação de carteira reformulada**: substituiu upload de `.txt`/`.csv`
+> por seletor de pasta (`<input webkitdirectory>`) -- usuário aponta a pasta do mês no
+> Explorer e as URLs do SharePoint são construídas automaticamente. Inteligência: detecta se
+> selecionou a pasta do mês (`YYYY_MM`) ou uma subpasta (`Analitico`) e ajusta o caminho
+> relativo. URL base persiste em `localStorage`. **Build info no rodapé**: hash do commit +
+> data de publicação exibidos na sidebar (abaixo de "Administração") e no rodapé do Admin,
+> injetados em build time via `vite.config.ts` (`__COMMIT_HASH__`, `__BUILD_DATE__`). Commits:
+> `30171b8` folder picker + script PS, `259ed79` build info, `99950a0` reposição, `c0625e3`
+> instrução pasta, `05b82a5` smart folder detection. **Testado e em produção.**
+>
+> Contexto anterior: 2026-08-31 - **Importar Consumo** novo (Admin >
 > Financeiro, botão ao lado de Importar Carteira): sobe um GRUPO de arquivos xlsx/csv no mesmo
 > layout (`ID_Produto;CNPJ;Data;quantidade;Detalhamento`) e faz três coisas juntas pro mês
 > escolhido -- grava em `consumo_ana` (ID_Produto é direto o `produto_id`, CNPJ casa por
