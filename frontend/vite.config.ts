@@ -6,7 +6,8 @@ const commitHash = (() => {
   try { return execSync('git rev-parse --short HEAD').toString().trim() } catch { return 'local' }
 })()
 const _now = new Date()
-const buildDate = `${_now.toLocaleDateString('pt-BR')} - ${_now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`
+const _opts = { timeZone: 'America/Sao_Paulo', hour: '2-digit' as const, minute: '2-digit' as const }
+const buildDate = `${_now.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })} - ${_now.toLocaleTimeString('pt-BR', _opts)}`
 
 // https://vite.dev/config/
 export default defineConfig({
