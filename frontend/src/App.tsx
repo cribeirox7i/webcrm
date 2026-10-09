@@ -173,6 +173,7 @@ function App() {
   const bloqueadaNoMobile = isMobile && !MOBILE_READY_TABS.has(tab);
 
   return (
+    <>
     <div className="app-shell">
       <Sidebar
         items={navItems}
@@ -248,6 +249,7 @@ function App() {
       </div>
     </div>
     {trocarSenhaOpen && <TrocarSenhaModal onClose={() => setTrocarSenhaOpen(false)} />}
+    </>
   );
 }
 
