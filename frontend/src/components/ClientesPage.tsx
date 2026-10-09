@@ -37,16 +37,20 @@ export function ClientesPage({ onOpenCliente }: ClientesPageProps) {
     setLoading(true);
     setLoadError(null);
     try {
-      const [clientesRes, gruposRes, produtosRes, urlsRes] = await Promise.all([
+      const [clientesRes, gruposRes] = await Promise.all([
         api.list<Cliente>("clientes", { limit: 20000 }),
         api.list<GrupoEcon>("grupos_econ", { limit: 20000 }),
-        api.list<Produto>("produtos", { limit: 20000 }),
-        api.list<Url>("urls", { limit: 20000 }),
       ]);
       setClientes(clientesRes.data);
       setGrupos(gruposRes.data);
-      setProdutos(produtosRes.data);
-      setUrls(urlsRes.data);
+      // urls e produtos carregados à parte -- se o usuário não tiver permissão de URLs
+      // (403), só os filtros de Produto/Suíte ficam vazios; o resto da página não é afetado.
+      const [produtosRes, urlsRes] = await Promise.allSettled([
+        api.list<Produto>("produtos", { limit: 20000 }),
+        api.list<Url>("urls", { limit: 20000 }),
+      ]);
+      if (produtosRes.status === "fulfilled") setProdutos(produtosRes.value.data);
+      if (urlsRes.status === "fulfilled") setUrls(urlsRes.value.data);
     } catch (err) {
       setLoadError((err as Error).message);
     } finally {

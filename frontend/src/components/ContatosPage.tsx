@@ -32,16 +32,18 @@ export function ContatosPage() {
     setLoading(true);
     setLoadError(null);
     try {
-      const [contatosRes, clientesRes, produtosRes, urlsRes] = await Promise.all([
+      const [contatosRes, clientesRes] = await Promise.all([
         api.list<Contato>("contatos", { limit: 20000 }),
         api.list<Cliente>("clientes", { limit: 20000 }),
-        api.list<Produto>("produtos", { limit: 20000 }),
-        api.list<Url>("urls", { limit: 20000 }),
       ]);
       setContatos(contatosRes.data);
       setClientes(clientesRes.data);
-      setProdutos(produtosRes.data);
-      setUrls(urlsRes.data);
+      const [produtosRes, urlsRes] = await Promise.allSettled([
+        api.list<Produto>("produtos", { limit: 20000 }),
+        api.list<Url>("urls", { limit: 20000 }),
+      ]);
+      if (produtosRes.status === "fulfilled") setProdutos(produtosRes.value.data);
+      if (urlsRes.status === "fulfilled") setUrls(urlsRes.value.data);
     } catch (err) {
       setLoadError((err as Error).message);
     } finally {
