@@ -182,14 +182,15 @@ function App() {
         logoUrl={logoEscuroUrl}
         mobileOpen={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
-        buildInfo={<span className="sidebar-build">{__COMMIT_HASH__} · {__BUILD_DATE__}</span>}
+        buildInfo={<span className="sidebar-build">{__COMMIT_HASH__} - {__BUILD_DATE__}</span>}
         footer={
           <div className="sidebar-user">
             <span className="sidebar-user-nome">{usuario.nome}</span>
-            <div style={{ display: "flex", gap: "0.5rem" }}>
+            <div className="sidebar-user-actions">
               <button className="sidebar-user-logout" onClick={() => setTrocarSenhaOpen(true)}>
                 Trocar senha
               </button>
+              <span className="sidebar-user-sep">|</span>
               <button className="sidebar-user-logout" onClick={logout}>
                 Sair
               </button>

@@ -5,7 +5,8 @@ import react from '@vitejs/plugin-react'
 const commitHash = (() => {
   try { return execSync('git rev-parse --short HEAD').toString().trim() } catch { return 'local' }
 })()
-const buildDate = new Date().toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })
+const _now = new Date()
+const buildDate = `${_now.toLocaleDateString('pt-BR')} - ${_now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`
 
 // https://vite.dev/config/
 export default defineConfig({

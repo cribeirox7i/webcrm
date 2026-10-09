@@ -181,7 +181,6 @@ export function ClientesPage({ onOpenCliente }: ClientesPageProps) {
 
   const filters: DataGridFilter<Cliente>[] = useMemo(
     () => [
-      { id: "cliente_status", label: "Status", value: (c) => c.cliente_status },
       { id: "grupo", label: "Grupo econômico", value: grupoNome },
       {
         id: "produto",
