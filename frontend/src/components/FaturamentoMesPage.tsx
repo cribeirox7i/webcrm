@@ -164,20 +164,6 @@ export function FaturamentoMesPage({ cartMesId, cartAnoMes, onBack }: Faturament
   async function handleExportarRelatorio(f: FaturamentoDetalhe) {
     const tipo = tipoValor(f);
     const linhasPc = precosMesAtual.filter((p) => p.cliente_id === f.cliente_id);
-    const linhas = linhasPc
-      .map((p) => {
-        const produto = produtoById.get(p.produto_id);
-        const liq = p.pc_mes_atu_vlr_final_liq ?? 0;
-        const brt = p.pc_mes_atu_vlr_final_brt ?? 0;
-        return {
-          produto: produto?.produto_nome ?? "",
-          detalhe: produto?.produto_detalhe ?? "",
-          qtd: p.pc_mes_atu_qtd_consumo,
-          valorUnit: vlrUnitPorPcId.get(p.pc_id) ?? null,
-          valorAFaturar: tipo === "BRUTO" ? brt : liq,
-        };
-      })
-      .filter((l) => l.valorAFaturar > 0);
     // NÃO soma `linhas` (cada uma é o valor líquido/bruto calculado por produto individual,
     // sem o pool de franquia por grupo) -- usa o total já agrupado por produto_grupo que
     // `faturamento_detalhe` calcula (mesmo valor mostrado no StatCard e no CSV Protheus),
@@ -189,6 +175,34 @@ export function FaturamentoMesPage({ cartMesId, cartAnoMes, onBack }: Faturament
       cart_mes_id: cartMesId,
       limit: 20000,
     });
+
+    // Conta registros (linhas) e transações (soma de consumo_qtd) por produto_id para o resumo.
+    const qtdPorProdutoId = new Map<number, { registros: number; transacoes: number }>();
+    for (const a of analiticoRes.data) {
+      const prev = qtdPorProdutoId.get(a.produto_id) ?? { registros: 0, transacoes: 0 };
+      qtdPorProdutoId.set(a.produto_id, {
+        registros: prev.registros + 1,
+        transacoes: prev.transacoes + (a.consumo_qtd ?? 0),
+      });
+    }
+
+    const linhas = linhasPc
+      .map((p) => {
+        const produto = produtoById.get(p.produto_id);
+        const liq = p.pc_mes_atu_vlr_final_liq ?? 0;
+        const brt = p.pc_mes_atu_vlr_final_brt ?? 0;
+        const qtdInfo = qtdPorProdutoId.get(p.produto_id) ?? { registros: 0, transacoes: 0 };
+        return {
+          produto: produto?.produto_nome ?? "",
+          detalhe: produto?.produto_detalhe ?? "",
+          qtdRegistros: qtdInfo.registros,
+          qtdTransacoes: qtdInfo.transacoes,
+          valorUnit: vlrUnitPorPcId.get(p.pc_id) ?? null,
+          valorAFaturar: tipo === "BRUTO" ? brt : liq,
+        };
+      })
+      .filter((l) => l.valorAFaturar > 0);
+
     const analitico = analiticoRes.data.map((a) => ({
       produto: produtoComDetalhe(a.produto_id),
       data: formatDate(a.consumo_data),

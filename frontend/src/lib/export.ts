@@ -173,7 +173,8 @@ interface RelatorioConsumoInfo {
 interface RelatorioConsumoLinha {
   produto: string;
   detalhe: string;
-  qtd: number;
+  qtdRegistros: number;
+  qtdTransacoes: number;
   // null quando a linha não tem valor unitário próprio cadastrado (ex. franquia cobrindo tudo
   // sem excedente) -- exibido em branco na tabela em vez de "R$ 0,00" enganoso.
   valorUnit: number | null;
@@ -233,38 +234,64 @@ export async function exportRelatorioConsumoPdf(
   doc.text(info.cnpj, 14, y);
   y += 6;
 
+  const totalRegistros = linhas.reduce((s, l) => s + l.qtdRegistros, 0);
+  const totalTransacoes = linhas.reduce((s, l) => s + l.qtdTransacoes, 0);
+
   autoTable(doc, {
     startY: y,
-    head: [["Produto", "Detalhe do Consumo", "Quantidade", "Valor Unitário", "Valor a Faturar"]],
+    head: [["Produto", "Detalhe do Consumo", "Valor Unitário", "Quantidade de Registros", "Quantidade de Transações", "Valor a Faturar"]],
     body: [
       ...linhas.map((l) => [
         l.produto,
         l.detalhe,
-        String(l.qtd),
         l.valorUnit != null ? formatMoneyBr(l.valorUnit) : "",
+        String(l.qtdRegistros),
+        String(l.qtdTransacoes),
         formatMoneyBr(l.valorAFaturar),
       ]),
-      ["", "", "", "TOTAL", formatMoneyBr(totalAFaturar)],
+      ["", "", "TOTAL", String(totalRegistros), String(totalTransacoes), formatMoneyBr(totalAFaturar)],
     ],
     styles: { fontSize: 8, cellPadding: 2 },
     headStyles: { fillColor: ACCENT_RGB },
-    columnStyles: { 1: { cellWidth: 60 } },
+    columnStyles: {
+      1: { cellWidth: 55 },
+      2: { halign: "right" },
+      3: { halign: "right" },
+      4: { halign: "right" },
+      5: { halign: "right" },
+    },
   });
 
-  // ---- página analítica ----
-  doc.addPage();
-  const y2 = await addSmallHeaderLogo(doc);
-  autoTable(doc, {
-    startY: y2,
-    head: [["Produto", "Data", "Qtd", "Detalhe"]],
-    body: analitico.map((a) => [a.produto, a.data, a.qtd.toLocaleString("pt-BR"), a.detalhe]),
-    styles: { fontSize: 7, cellPadding: 2 },
-    headStyles: { fillColor: ACCENT_RGB },
-    // Produto mais estreito (texto curto, "NOME / DETALHE") e Data com largura fixa suficiente
-    // pra nunca quebrar em 2 linhas (antes a coluna encolhia demais, sobrando espaço só pro
-    // Detalhe/Identificador, que é o texto realmente longo dessa tabela).
-    columnStyles: { 0: { cellWidth: 32 }, 1: { cellWidth: 20 }, 2: { cellWidth: 12 } },
-  });
+  // ---- páginas analíticas -- uma por produto, com quebra de página entre eles ----
+  const produtosOrdem = [...new Set(analitico.map((a) => a.produto))];
+  for (const produtoKey of produtosOrdem) {
+    const rows = analitico.filter((a) => a.produto === produtoKey);
+    const totalQtdProduto = rows.reduce((s, r) => s + r.qtd, 0);
+    const totalRegProduto = rows.length;
+
+    doc.addPage();
+    const yAna = await addSmallHeaderLogo(doc);
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9);
+    doc.text(produtoKey, 14, yAna);
+
+    autoTable(doc, {
+      startY: yAna + 5,
+      head: [["Data", "Quantidade", "Detalhe"]],
+      body: rows.map((a) => [a.data, a.qtd.toLocaleString("pt-BR"), a.detalhe]),
+      foot: [[
+        "TOTAL",
+        totalQtdProduto.toLocaleString("pt-BR"),
+        `${totalRegProduto} registros`,
+      ]],
+      showFoot: "lastPage",
+      styles: { fontSize: 7, cellPadding: 2 },
+      headStyles: { fillColor: ACCENT_RGB },
+      footStyles: { fillColor: [240, 240, 240], fontStyle: "bold", fontSize: 8 },
+      columnStyles: { 0: { cellWidth: 20 }, 1: { cellWidth: 24, halign: "right" } },
+    });
+  }
 
   addPageNumbers(doc);
   doc.save(`${filename}.pdf`);
