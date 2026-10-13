@@ -254,11 +254,16 @@ export async function exportRelatorioConsumoPdf(
     styles: { fontSize: 8, cellPadding: 2 },
     headStyles: { fillColor: ACCENT_RGB },
     columnStyles: {
-      1: { cellWidth: 55 },
+      1: { cellWidth: 32 },
       2: { halign: "right" },
       3: { halign: "right" },
       4: { halign: "right" },
       5: { halign: "right" },
+    },
+    didParseCell: (data) => {
+      if (data.section === "head" && data.column.index >= 2) {
+        data.cell.styles.halign = "right";
+      }
     },
   });
 
@@ -288,8 +293,16 @@ export async function exportRelatorioConsumoPdf(
       showFoot: "lastPage",
       styles: { fontSize: 7, cellPadding: 2 },
       headStyles: { fillColor: ACCENT_RGB },
-      footStyles: { fillColor: [240, 240, 240], fontStyle: "bold", fontSize: 8 },
+      footStyles: { fillColor: [240, 240, 240], fontStyle: "bold", fontSize: 8, textColor: [0, 0, 0] },
       columnStyles: { 0: { cellWidth: 20 }, 1: { cellWidth: 24, halign: "right" } },
+      didParseCell: (data) => {
+        if (data.section === "head" && data.column.index === 1) {
+          data.cell.styles.halign = "right";
+        }
+        if (data.section === "foot") {
+          data.cell.styles.halign = data.column.index === 1 ? "right" : "left";
+        }
+      },
     });
   }
 
