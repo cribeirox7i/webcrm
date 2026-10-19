@@ -47,6 +47,9 @@ export interface DataGridFilter<T> {
   /** Dropdown com checkboxes em vez de select simples. Valores ativos ficam em filterValues[id]
    * como string separada por "|". Requer `options` ou deriva das opções existentes. */
   multiSelect?: boolean;
+  /** Filtro que participa do cálculo (filtered/countWith) mas não renderiza dropdown na toolbar --
+   * usado quando StatCards controlam o filtro externamente e o dropdown seria redundante. */
+  hidden?: boolean;
 }
 
 /** Checkbox por linha + "selecionar todas" (considerando só as linhas visíveis após busca/filtro).
@@ -478,6 +481,7 @@ export function DataGrid<T>({
                 onChange={(e) => setSearch(e.target.value)}
               />
               {filters.map((f) => {
+                if (f.hidden) return null;
                 const active = filterValues[f.id] ?? "";
                 if (f.multiSelect) {
                   const selected = active ? active.split("|") : [];
