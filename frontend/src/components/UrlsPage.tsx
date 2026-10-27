@@ -208,6 +208,7 @@ export function UrlsPage() {
       { id: "produto", label: "Produto", value: produtoNome },
       { id: "suite", label: "Suíte", value: produtoSuite },
       { id: "servidor", label: "Servidor", value: servidorNome },
+      { id: "url_status", label: "Status", value: (u) => u.url_status ?? "", hidden: true },
     ],
     [produtoNomeById, produtoSuiteById, servidorNomeById]
   );
